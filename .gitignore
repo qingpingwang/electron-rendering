@@ -1,0 +1,23 @@
+# 依赖
+node_modules/
+
+# 构建产物
+build/
+*.node
+
+# macOS
+.DS_Store
+
+# 编辑器/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 日志
+npm-debug.log*
+yarn-error.log*
+
+# 环境变量
+.env
+.env.local
