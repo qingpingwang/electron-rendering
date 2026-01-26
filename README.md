@@ -2,6 +2,8 @@
 
 Electron + C++ Native Addon 视频播放器，使用 FFmpeg 解码 + OpenGL 渲染。
 
+![截图](test/image.png)
+
 ## 特性
 
 - **FFmpeg 解码**：支持 MP4 等常见视频格式
