@@ -1,0 +1,38 @@
+{
+    "canvas_config": {
+        "width": 1088,
+        "height": 1920,
+        "ratio": "16:9"
+    },
+    "tracks": [
+        {
+            "id": "track_video_0",
+            "type": "video",
+            "segments": [
+                {
+                    "id": "segment_0",
+                    "material_id": "material_video_0",
+                    "target_timerange": {
+                        "start": 0,
+                        "duration": 5000
+                    },
+                    "source_timerange": {
+                        "start": 0,
+                        "duration": 5000
+                    }
+                }
+            ]
+        }
+    ],
+    "materials": {
+        "videos": [
+            {
+                "id": "material_video_0",
+                "path": "./test/test.mp4",
+                "width": 1088,
+                "height": 1920,
+                "duration": 5000
+            }
+        ]
+    }
+}
