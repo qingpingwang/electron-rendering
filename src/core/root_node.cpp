@@ -2,6 +2,7 @@
 #include <nlohmann/json.hpp>
 #include <unordered_map>
 #include <cstring>
+#include <algorithm>
 
 using json = nlohmann::json;
 
@@ -74,7 +75,7 @@ namespace vp
     void RootNode::startPrepareNextFrame(int64_t next_time_ms)
     {
         // 超出时长不准备
-        if (next_time_ms >= duration_ms_)
+        if (next_time_ms > duration_ms_)
             return;
 
         // 已经在缓存中不准备
@@ -84,16 +85,23 @@ namespace vp
         // 取消并等待上一次完成
         cancelPrepare();
 
-        // 重置取消标志，启动新线程
+        // 立即设置缓存时间（标记正在准备）
+        {
+            std::lock_guard<std::mutex> lock(cache_mutex_);
+            cache_time_ms_ = next_time_ms;
+        }
+
+        // 启动新线程
         cancel_flag_ = false;
         preparing_ = true;
         prepare_thread_ = std::thread([this, next_time_ms]()
                                       {
             bool success = renderFrame(next_time_ms, cache_data_.data());
-            if (success)
+            if (!success)
             {
+                // 渲染失败，重置缓存时间
                 std::lock_guard<std::mutex> lock(cache_mutex_);
-                cache_time_ms_ = next_time_ms;
+                cache_time_ms_ = -1;
             }
             preparing_ = false; });
     }
@@ -212,7 +220,7 @@ namespace vp
 
     void RootNode::setCurrentTime(int64_t time_ms)
     {
-        current_time_ms_ = time_ms;
+        current_time_ms_ = std::clamp(time_ms, int64_t(0), duration_ms_);
     }
 
     bool RootNode::draw(uint8_t *buffer, size_t buffer_size)
@@ -224,21 +232,23 @@ namespace vp
         if (buffer_size < required)
             return false;
 
-        // 检查缓存
+        // 检查缓存（包括正在准备的）
         if (isCacheHit(current_time_ms_))
         {
-            // 命中：等待准备完成，然后拷贝缓存
+            // 命中：等待准备完成，拷贝缓存
             if (prepare_thread_.joinable())
                 prepare_thread_.join();
             std::lock_guard<std::mutex> lock(cache_mutex_);
             std::memcpy(buffer, cache_data_.data(), required);
+            fprintf(stderr, "[RootNode] cache hit, time=%lldms\n", current_time_ms_);
         }
         else
         {
-            // 未命中：先取消异步任务，再直接渲染
+            // 未命中：取消异步任务，直接渲染
             cancelPrepare();
-            cancel_flag_ = false; // 当前帧不能被取消
+            cancel_flag_ = false;
             renderFrame(current_time_ms_, buffer);
+            fprintf(stderr, "[RootNode] cache miss, time=%lldms\n", current_time_ms_);
         }
 
         // 启动异步准备下一帧
