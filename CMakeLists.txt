@@ -13,14 +13,6 @@ endif()
 
 # ========== 依赖 ==========
 
-# nlohmann/json (header-only)
-include(FetchContent)
-FetchContent_Declare(
-    json
-    URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
-)
-FetchContent_MakeAvailable(json)
-
 # Node.js / N-API
 execute_process(
     COMMAND node -p "require('node-addon-api').include"
@@ -51,7 +43,13 @@ set(SOURCES
     src/addon.cpp
     src/core/root_node.cpp
     src/decoder/video_decoder.cpp
-    src/render/gl_renderer.cpp
+    src/render/gl_types.cpp
+    src/render/gl_functions.cpp
+    src/render/shader.cpp
+    src/stb_image/stb_image_impl.cpp
+    src/stb_image/stb_image_write_impl.cpp
+    src/material/material.cpp
+    src/layer/layer.cpp
     src/layer/video_layer.cpp
 )
 
@@ -81,13 +79,16 @@ if(APPLE)
     find_library(OPENGL_LIB OpenGL REQUIRED)
     find_library(COCOA_LIB Cocoa REQUIRED)
     find_library(CF_LIB CoreFoundation REQUIRED)
+    find_library(COREVIDEO_LIB CoreVideo REQUIRED)
+    find_library(IOSURFACE_LIB IOSurface REQUIRED)
     
     target_link_libraries(${PROJECT_NAME} PRIVATE
         ${OPENGL_LIB}
         ${COCOA_LIB}
         ${CF_LIB}
+        ${COREVIDEO_LIB}
+        ${IOSURFACE_LIB}
         ${FFMPEG_LIBRARIES}
-        nlohmann_json::nlohmann_json
     )
     target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIRS})
     
@@ -99,7 +100,6 @@ elseif(UNIX)
     target_link_libraries(${PROJECT_NAME} PRIVATE
         OpenGL::GL
         ${FFMPEG_LIBRARIES}
-        nlohmann_json::nlohmann_json
     )
     target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIRS})
 endif()

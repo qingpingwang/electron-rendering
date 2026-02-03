@@ -2,71 +2,123 @@
 
 #include "../layer/layer.h"
 #include "../layer/video_layer.h"
-#include "../render/gl_renderer.h"
-#include <vector>
+#include "../material/material.h"
+#include "../render/gl_functions.h"
+#include "../render/shader.h"
+#include <algorithm>
+#include <atomic>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
-#include <mutex>
-#include <atomic>
+#include <unordered_map>
+#include <vector>
 
-namespace vp
-{
+namespace vp {
 
-    class RootNode
-    {
-    public:
-        RootNode();
-        ~RootNode();
+// Canvas 配置结构体
+struct CanvasConfig {
+    int width = 0;
+    int height = 0;
+    std::string ratio;
+};
 
-        RootNode(const RootNode &) = delete;
-        RootNode &operator=(const RootNode &) = delete;
+class RootNode {
+public:
+    RootNode();
+    ~RootNode();
 
-        bool init();
-        void cleanup();
+    RootNode(const RootNode &) = delete;
+    RootNode &operator=(const RootNode &) = delete;
 
-        bool loadFromJson(const std::string &json_str);
-        void unload();
+    bool init();
+    void cleanup();
 
-        void setCurrentTime(int64_t time_ms);
-        bool draw(uint8_t *buffer, size_t buffer_size);
+    bool loadFromJson(const std::string &json_str);
+    void unload();
 
-        int getWidth() const { return width_; }
-        int getHeight() const { return height_; }
-        int64_t getDurationMs() const { return duration_ms_; }
-        double getFrameRate() const { return frame_rate_; }
-        bool isLoaded() const { return !layers_.empty(); }
-        std::string getGPUInfo() const;
+    void setCurrentTime(int64_t time_ms);
+    bool draw(uint8_t *buffer, size_t buffer_size);
 
-    private:
-        // 渲染一帧
-        bool renderFrame(int64_t time_ms, uint8_t *out_buffer);
-        // 启动异步准备下一帧
-        void startPrepareNextFrame(int64_t next_time_ms);
-        // 取消并等待异步准备完成（兼容未启动情况）
-        void cancelPrepare();
-        // 缓存是否命中
-        bool isCacheHit(int64_t time_ms) const;
-        int64_t getHalfFrameMs() const;
+    int getWidth() const {
+        return canvas_.width;
+    }
+    int getHeight() const {
+        return canvas_.height;
+    }
+    int64_t getDurationMs() const {
+        return duration_ms_;
+    }
+    double getFrameRate() const {
+        return frame_rate_;
+    }
+    const std::string& getId() const {
+        return id_;
+    }
+    const CanvasConfig& getCanvas() const {
+        return canvas_;
+    }
+    bool isLoaded() const {
+        return !layers_.empty();
+    }
+    std::string getGPUInfo() const;
 
-        std::unique_ptr<GLRenderer> renderer_;
-        std::vector<std::unique_ptr<Layer>> layers_;
+    // 获取共享渲染资源
+    gl::Shader *getShader() const {
+        return shader_.get();
+    }
+    const gl::QuadMesh *getQuad() const {
+        return &quad_;
+    }
+    int64_t getCurrentTime() const {
+        return current_time_ms_;
+    }
 
-        int width_ = 0;
-        int height_ = 0;
-        int64_t duration_ms_ = 0;
-        double frame_rate_ = 0.0;
-        int64_t current_time_ms_ = 0;
+    // 获取素材指针
+    Material *getMaterial(const std::string &material_id) const;
 
-        // 帧缓存
-        std::vector<uint8_t> cache_data_;
-        int64_t cache_time_ms_ = -1;
-        std::mutex cache_mutex_;
+private:
+    // 渲染一帧
+    bool renderFrame(int64_t time_ms, uint8_t *out_buffer);
+    // 翻转绘制：将 render_fbo_ 绘制到 flip_fbo_
+    bool flipRender();
+    // 异步准备
+    void startPrepareNextFrame(int64_t next_time_ms);
+    void cancelPrepare();
+    // 缓存
+    bool isCacheHit(int64_t time_ms) const;
+    int64_t getHalfFrameMs() const;
 
-        // 异步准备线程（单次）
-        std::thread prepare_thread_;
-        std::atomic<bool> preparing_{false};
-        std::atomic<bool> cancel_flag_{false};
-    };
+    // OpenGL 资源
+    gl::GLContext gl_ctx_;
+    gl::FBO render_fbo_;
+    gl::FBO flip_fbo_;  // 翻转 FBO
+    std::unique_ptr<gl::Shader> shader_;
+    gl::QuadMesh quad_;
+
+    // 图层
+    std::vector<std::unique_ptr<Layer>> layers_;
+
+    // 素材管理
+    std::unordered_map<std::string, std::unique_ptr<Material>> materials_; // material_id -> Material
+
+    // 项目配置
+    std::string id_;
+    CanvasConfig canvas_;
+    int64_t duration_ms_ = 0;
+    double frame_rate_ = 0.0;
+    int64_t current_time_ms_ = 0;
+
+    // 帧缓存
+    std::vector<uint8_t> cache_data_;
+    int64_t cache_time_ms_ = -1;
+    mutable std::mutex cache_mutex_;
+
+    // 异步线程
+    std::thread prepare_thread_;
+    std::atomic<bool> preparing_{false};
+    std::atomic<bool> cancel_flag_{false};
+};
 
 } // namespace vp

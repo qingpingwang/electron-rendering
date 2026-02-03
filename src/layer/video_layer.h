@@ -1,39 +1,42 @@
 #pragma once
 
-#include "layer.h"
 #include "../decoder/video_decoder.h"
+#include "../render/gl_types.h"
+#include "layer.h"
 #include <memory>
 
-namespace vp
-{
+namespace vp {
 
-    // 视频图层
-    class VideoLayer : public Layer
-    {
-    public:
-        VideoLayer(const std::string &name = "video");
-        ~VideoLayer() override;
+// 视频图层
+class VideoLayer : public Layer {
+public:
+    VideoLayer(RootNode *root);
+    ~VideoLayer() override;
 
-        bool load(const std::string &path);
-        void unload();
+    bool load(const nlohmann::json &segment_json) override;
+    bool draw() override;
 
-        void setCurrentTime(int64_t time_ms) override;
-        void draw(GLRenderer &renderer) override;
+    double getFrameRate() const;
+    bool isLoaded() const;
 
-        // 解码指定时间的帧，存储到 out_frame（用于异步预解码）
-        bool decodeFrame(int64_t time_ms, VideoFrame &out_frame);
+private:
+    // 计算当前应该显示的帧时间（带线性插值对齐到帧边界）
+    int64_t calculateFrameTime() const;
+    std::unique_ptr<VideoDecoder> decoder_ = nullptr;
+    VideoFrame current_frame_;
+    int video_width_ = 0;
+    int video_height_ = 0;
+    int64_t video_duration_ms_ = 0;
 
-        // 使用给定的帧数据绘制（用于缓存命中时）
-        void drawWithFrame(GLRenderer &renderer, const VideoFrame &frame);
-        // 使用给定的 RGBA 数据绘制
-        void drawWithData(GLRenderer &renderer, const uint8_t *data, int width, int height);
+    // 源视频时间范围（从源视频的哪个位置开始解码）
+    int64_t source_start_ms_ = 0;    // 源视频的开始时间
+    int64_t source_duration_ms_ = 0; // 从源视频解码的时长
 
-        double getFrameRate() const;
-        bool isLoaded() const;
-
-    private:
-        std::unique_ptr<VideoDecoder> decoder_;
-        VideoFrame current_frame_;
-    };
+    // 渲染资源
+    gl::Texture texture_ = gl::Texture{}; // 自己的纹理
+    
+    // 纹理缓存优化：记录已上传的帧PTS，避免重复上传相同数据
+    int64_t uploaded_pts_ = -1;
+};
 
 } // namespace vp

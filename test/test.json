@@ -4,6 +4,9 @@
         "height": 1920,
         "ratio": "16:9"
     },
+    "duration": 6000,
+    "fps": 30,
+    "id": "test",
     "tracks": [
         {
             "id": "track_video_0",

@@ -1,39 +1,47 @@
 #pragma once
 
-#include <string>
+#include "../nlohmann/json.hpp"
 #include <cstdint>
+#include <string>
 
-namespace vp
-{
+namespace vp {
 
-    class GLRenderer;
+class RootNode;
+class Material;
 
-    // 图层基类
-    class Layer
-    {
-    public:
-        Layer(const std::string &name = "") : name_(name) {}
-        virtual ~Layer() = default;
+// 图层基类
+class Layer {
+public:
+    Layer(RootNode *root);
+    virtual ~Layer() = default;
 
-        Layer(const Layer &) = delete;
-        Layer &operator=(const Layer &) = delete;
+    Layer(const Layer &) = delete;
+    Layer &operator=(const Layer &) = delete;
 
-        // 设置当前时间并更新状态
-        virtual void setCurrentTime(int64_t time_ms) = 0;
+    // 从 JSON 加载图层基础配置（解析通用属性）
+    virtual bool load(const nlohmann::json &segment_json);
 
-        // 绘制到渲染器
-        virtual void draw(GLRenderer &renderer) = 0;
+    // 绘制图层（由子类实现具体绘制逻辑）
+    virtual bool draw() = 0;
 
-        const std::string &getName() const { return name_; }
-        int getWidth() const { return width_; }
-        int getHeight() const { return height_; }
-        int64_t getDurationMs() const { return duration_ms_; }
+    const std::string &getName() const;
+    int getWidth() const;
+    int getHeight() const;
+    int64_t getDurationMs() const;
 
-    protected:
-        std::string name_;
-        int width_ = 0;
-        int height_ = 0;
-        int64_t duration_ms_ = 0;
-    };
+    int64_t getStartTime() const;
+    int64_t getEndTime() const;
+    bool isActive() const; // 判断当前时间是否在图层的时间范围内
+
+protected:
+    RootNode *root_ = nullptr;
+    Material *material_ = nullptr; // 图层使用的素材
+    std::string name_;
+    int width_ = 0;
+    int height_ = 0;
+    int64_t duration_ms_ = 0;
+    int64_t start_time_ms_ = 0;
+    int64_t end_time_ms_ = 0;
+};
 
 } // namespace vp

@@ -209,6 +209,7 @@
         
         <div class="info-bar">
             <span id="video-info">尺寸: - | 帧率: -</span>
+            <span id="project-id">项目: -</span>
             <span id="gpu-info">GPU: -</span>
         </div>
     </div>
@@ -431,9 +432,10 @@
                 player.currentTime = 0;
                 
                 document.getElementById('file-info').textContent = `已加载`;
+                document.getElementById('project-id').textContent = info.id ? `项目: ${info.id}` : '项目: -';
                 document.getElementById('gpu-info').textContent = `GPU: ${info.gpu}`;
                 
-                log(`✓ 加载成功 (${(t1-t0).toFixed(1)}ms) | ${info.width}×${info.height} | ${info.frameRate.toFixed(2)}fps | ${formatTime(info.durationMs)}`, 'ok');
+                log(`✓ 加载成功 (${(t1-t0).toFixed(1)}ms) | ID: ${info.id || '-'} | ${info.width}×${info.height} | ${info.frameRate.toFixed(2)}fps | ${formatTime(info.durationMs)}`, 'ok');
                 
                 render();
                 updateUI();
