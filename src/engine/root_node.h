@@ -5,6 +5,7 @@
 #include "../material/material.h"
 #include "../gl/functions.h"
 #include "../gl/shader.h"
+#include "../gl/fbo_pool.h"
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
@@ -41,39 +42,25 @@ public:
     void setCurrentTime(int64_t time_ms);
     bool draw(uint8_t *buffer, size_t buffer_size);
 
-    int getWidth() const {
-        return canvas_.width;
-    }
-    int getHeight() const {
-        return canvas_.height;
-    }
-    int64_t getDurationMs() const {
-        return duration_ms_;
-    }
-    double getFrameRate() const {
-        return frame_rate_;
-    }
-    const std::string& getId() const {
-        return id_;
-    }
-    const CanvasConfig& getCanvas() const {
-        return canvas_;
-    }
-    bool isLoaded() const {
-        return !layers_.empty();
-    }
+    int getWidth() const;
+    int getHeight() const;
+    int64_t getDurationMs() const;
+    double getFrameRate() const;
+    const std::string &getId() const;
+    const CanvasConfig &getCanvas() const;
+    bool isLoaded() const;
     std::string getGPUInfo() const;
 
     // 获取共享渲染资源
-    gl::Shader *getShader() const {
-        return shader_.get();
-    }
-    const gl::QuadMesh *getQuad() const {
-        return &quad_;
-    }
-    int64_t getCurrentTime() const {
-        return current_time_ms_;
-    }
+    gl::Shader *getShader() const;
+    const gl::QuadMesh *getQuad() const;
+    int64_t getCurrentTime() const;
+
+    // 获取 FBO 缓存池
+    gl::FBOPool *getFBOPool();
+
+    // 获取渲染目标 FBO
+    const gl::FBO &getRenderFBO() const;
 
     // 获取素材指针
     Material *getMaterial(const std::string &material_id) const;
@@ -81,8 +68,6 @@ public:
 private:
     // 渲染一帧
     bool renderFrame(int64_t time_ms, uint8_t *out_buffer);
-    // 翻转绘制：将 render_fbo_ 绘制到 flip_fbo_
-    bool flipRender();
     // 异步准备
     void startPrepareNextFrame(int64_t next_time_ms);
     void cancelPrepare();
@@ -92,8 +77,8 @@ private:
 
     // OpenGL 资源
     gl::GLContext gl_ctx_;
-    gl::FBO render_fbo_;
-    gl::FBO flip_fbo_;  // 翻转 FBO
+    gl::FBOPool fbo_pool_;       // FBO 缓存池
+    gl::FBO render_fbo_;         // 主渲染 FBO（从池中获取，不释放）
     std::unique_ptr<gl::Shader> shader_;
     gl::QuadMesh quad_;
 

@@ -62,20 +62,7 @@ bool VideoLayer::load(const json &segment_json) {
     return true;
 }
 
-bool VideoLayer::draw() {
-    // 检查是否在时间范围内
-    if (!isActive())
-        return true;
-
-    // 检查资源
-    if (!root_ || !decoder_ || !decoder_->isOpen() || !texture_.isValid())
-        return false;
-
-    gl::Shader *shader = root_->getShader();
-    const gl::QuadMesh *quad = root_->getQuad();
-    if (!shader || !quad)
-        return false;
-
+bool VideoLayer::renderContent(const gl::FBO &fbo) {
     int64_t frame_time = calculateFrameTime();
     if (frame_time < 0)
         return true;
@@ -83,7 +70,7 @@ bool VideoLayer::draw() {
     // 解码当前时间的帧（decoder内部会处理帧复用）
     if (!decoder_->decodeFrameAt(frame_time, current_frame_))
         return true;
-    
+
     // 检查当前帧是否有效
     if (!current_frame_.valid || !current_frame_.data)
         return true;
@@ -95,21 +82,8 @@ bool VideoLayer::draw() {
         uploaded_pts_ = current_frame_.pts_ms;
     }
 
-    // 绘制
-    shader->use();
-    if (!gl::bindTexture(texture_, 0)) {
-        shader->unuse();
-        return false;
-    }
-    shader->setInt("uTex", 0);
-    if (!gl::drawQuad(*quad)) {
-        gl::unbindTexture(0);
-        shader->unuse();
-        return false;
-    }
-    gl::unbindTexture(0);
-    shader->unuse();
-
+    // 使用通用函数绘制到目标 FBO
+    gl::drawTextureQuad(fbo, texture_, root_->getShader(), 0, "uTex", root_->getQuad());
     return true;
 }
 

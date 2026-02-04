@@ -1,4 +1,5 @@
 #include "functions.h"
+#include "shader.h"
 #include <stb_image/stb_image.h>
 
 namespace vp {
@@ -6,10 +7,10 @@ namespace gl {
 
 // 全屏四边形顶点数据（UV Y 轴已翻转以适配 Canvas）
 static const float QUAD_VERTICES[] = {
-    -1.0f,  1.0f,  0.0f, 1.0f,  // 左上: pos(-1, 1), UV(0, 1)
-     1.0f,  1.0f,  1.0f, 1.0f,  // 右上: pos( 1, 1), UV(1, 1)
-    -1.0f, -1.0f,  0.0f, 0.0f,  // 左下: pos(-1,-1), UV(0, 0)
-     1.0f, -1.0f,  1.0f, 0.0f,  // 右下: pos( 1,-1), UV(1, 0)
+    -1.0f, 1.0f, 0.0f, 1.0f,  // 左上: pos(-1, 1), UV(0, 1)
+    1.0f, 1.0f, 1.0f, 1.0f,   // 右上: pos( 1, 1), UV(1, 1)
+    -1.0f, -1.0f, 0.0f, 0.0f, // 左下: pos(-1,-1), UV(0, 0)
+    1.0f, -1.0f, 1.0f, 0.0f,  // 右下: pos( 1,-1), UV(1, 0)
 };
 
 // ========== 上下文 ==========
@@ -140,18 +141,16 @@ Texture createTextureFromFile(const char *path, bool flip_y) {
     return tex;
 }
 
-bool bindTexture(const Texture &tex, int unit, GLenum target) {
+void bindTexture(const Texture &tex, int unit, GLenum target) {
     if (!tex.isValid())
-        return false;
+        return;
     glActiveTexture(GL_TEXTURE0 + unit);
     glBindTexture(target, tex.id);
-    return true;
 }
 
-bool unbindTexture(int unit, GLenum target) {
+void unbindTexture(int unit, GLenum target) {
     glActiveTexture(GL_TEXTURE0 + unit);
     glBindTexture(target, 0);
-    return true;
 }
 
 void destroyTexture(Texture &tex) {
@@ -194,17 +193,15 @@ FBO createFBO(int width, int height, GLenum internal_format, GLenum format, GLen
     return fbo;
 }
 
-bool bindFBO(const FBO &fbo) {
+void bindFBO(const FBO &fbo) {
     if (!fbo.isValid())
-        return false;
+        return;
     glBindFramebuffer(GL_FRAMEBUFFER, fbo.fbo);
     glViewport(0, 0, fbo.width, fbo.height);
-    return true;
 }
 
-bool unbindFBO() {
+void unbindFBO() {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    return true;
 }
 
 void destroyFBO(FBO &fbo) {
@@ -260,13 +257,27 @@ void cleanColor(float r, float g, float b, float a) {
     glClear(GL_COLOR_BUFFER_BIT);
 }
 
-bool drawQuad(const QuadMesh &mesh) {
+void drawQuad(const QuadMesh &mesh) {
     if (!mesh.isValid())
-        return false;
+        return;
     glBindVertexArray(mesh.vao);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindVertexArray(0);
-    return true;
+}
+
+void drawTextureQuad(const FBO &fbo, const Texture &texture, Shader *shader, int unit,
+                     const char *uniform_name, const QuadMesh *quad) {
+    if (!fbo.isValid() || !texture.isValid() || !shader || !quad)
+        return;
+
+    bindFBO(fbo);
+    shader->use();
+    bindTexture(texture, unit);
+    shader->setInt(uniform_name, unit);
+    drawQuad(*quad);
+    unbindTexture(unit);
+    shader->unuse();
+    unbindFBO();
 }
 
 bool readPixels(const FBO &fbo, uint8_t *out_buffer, int buffer_size) {

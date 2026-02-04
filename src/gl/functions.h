@@ -7,6 +7,9 @@
 namespace vp {
 namespace gl {
 
+// 前向声明
+class Shader;
+
 // ========== 上下文管理 ==========
 
 // 初始化 OpenGL 上下文
@@ -34,10 +37,10 @@ Texture createTextureFromFile(const char *path, bool flip_y = true);
 bool updateTexture(Texture &tex, const uint8_t *data, int width, int height);
 
 // 绑定纹理到指定纹理单元
-bool bindTexture(const Texture &tex, int unit = 0, GLenum target = GL_TEXTURE_2D);
+void bindTexture(const Texture &tex, int unit = 0, GLenum target = GL_TEXTURE_2D);
 
 // 解绑纹理
-bool unbindTexture(int unit = 0, GLenum target = GL_TEXTURE_2D);
+void unbindTexture(int unit = 0, GLenum target = GL_TEXTURE_2D);
 
 // 销毁纹理
 void destroyTexture(Texture &tex);
@@ -49,10 +52,10 @@ FBO createFBO(int width, int height, GLenum internal_format = GL_RGBA8, GLenum f
               GLenum type = GL_UNSIGNED_BYTE);
 
 // 绑定 FBO
-bool bindFBO(const FBO &fbo);
+void bindFBO(const FBO &fbo);
 
 // 解绑 FBO
-bool unbindFBO();
+void unbindFBO();
 
 // 销毁 FBO
 void destroyFBO(FBO &fbo);
@@ -71,7 +74,12 @@ void destroyQuadMesh(QuadMesh &mesh);
 void cleanColor(float r = 0.0f, float g = 0.0f, float b = 0.0f, float a = 1.0f);
 
 // 绘制全屏四边形（已绑定 FBO 和纹理的情况下）
-bool drawQuad(const QuadMesh &mesh);
+void drawQuad(const QuadMesh &mesh);
+
+// 通用纹理绘制函数（高级封装）
+// 完整流程：bind FBO → shader use → bind texture → set uniform → draw quad → unbind texture → shader unuse → unbind FBO
+void drawTextureQuad(const FBO &fbo, const Texture &texture, Shader *shader, int unit,
+                     const char *uniform_name, const QuadMesh *quad);
 
 // 从 FBO 读取像素
 bool readPixels(const FBO &fbo, uint8_t *out_buffer, int buffer_size);

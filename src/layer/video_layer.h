@@ -14,10 +14,12 @@ public:
     ~VideoLayer() override;
 
     bool load(const nlohmann::json &segment_json) override;
-    bool draw() override;
 
     double getFrameRate() const;
     bool isLoaded() const;
+
+protected:
+    bool renderContent(const gl::FBO &fbo) override;
 
 private:
     // 计算当前应该显示的帧时间（带线性插值对齐到帧边界）
@@ -34,7 +36,7 @@ private:
 
     // 渲染资源
     gl::Texture texture_ = gl::Texture{}; // 自己的纹理
-    
+
     // 纹理缓存优化：记录已上传的帧PTS，避免重复上传相同数据
     int64_t uploaded_pts_ = -1;
 };

@@ -46,6 +46,7 @@ set(SOURCES
     src/gl/types.cpp
     src/gl/functions.cpp
     src/gl/shader.cpp
+    src/gl/fbo_pool.cpp
     third_party/stb_image/stb_image_impl.cpp
     third_party/stb_image/stb_image_write_impl.cpp
     src/material/material.cpp

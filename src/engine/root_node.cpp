@@ -33,8 +33,10 @@ void RootNode::cleanup() {
 
     gl::destroyQuadMesh(quad_);
     shader_.reset();
-    gl::destroyFBO(flip_fbo_);
-    gl::destroyFBO(render_fbo_);
+    
+    // 清空 FBO 池（会自动清理所有 FBO，包括 render_fbo_）
+    fbo_pool_.clear();
+    
     gl::destroyContext(gl_ctx_);
 }
 
@@ -59,8 +61,7 @@ bool RootNode::renderFrame(int64_t time_ms, uint8_t *out_buffer) {
     gl::makeCurrent(gl_ctx_);
 
     // 渲染所有图层到 render_fbo_
-    if (!gl::bindFBO(render_fbo_))
-        return false;
+    gl::bindFBO(render_fbo_);
     gl::cleanColor();
 
     for (auto &layer : layers_) {
@@ -71,44 +72,13 @@ bool RootNode::renderFrame(int64_t time_ms, uint8_t *out_buffer) {
         }
     }
 
-    if (!gl::unbindFBO())
-        return false;
+    gl::unbindFBO();
 
     if (cancel_flag_)
         return false;
 
     // 读取像素数据
     if (!gl::readPixels(render_fbo_, out_buffer, static_cast<int>(canvas_.width * canvas_.height * 4)))
-        return false;
-
-    return true;
-}
-
-bool RootNode::flipRender() {
-    // 翻转到 flip_fbo_
-    if (!gl::bindFBO(flip_fbo_))
-        return false;
-    gl::cleanColor();
-
-    shader_->use();
-    gl::Texture render_tex{render_fbo_.texture, render_fbo_.width, render_fbo_.height,
-                           render_fbo_.internal_format, render_fbo_.format, render_fbo_.type};
-    if (!gl::bindTexture(render_tex, 0)) {
-        shader_->unuse();
-        gl::unbindFBO();
-        return false;
-    }
-    shader_->setInt("uTex", 0);
-    if (!gl::drawQuad(quad_)) {
-        gl::unbindTexture(0);
-        shader_->unuse();
-        gl::unbindFBO();
-        return false;
-    }
-    gl::unbindTexture(0);
-    shader_->unuse();
-
-    if (!gl::unbindFBO())
         return false;
 
     return true;
@@ -220,15 +190,15 @@ bool RootNode::loadFromJson(const std::string &json_str) {
         // 创建 OpenGL 资源
         gl::makeCurrent(gl_ctx_);
 
-        render_fbo_ = gl::createFBO(canvas_.width, canvas_.height);
-        flip_fbo_ = gl::createFBO(canvas_.width, canvas_.height);
+        // 从 FBO 池获取主渲染 FBO（不释放，生命周期与 RootNode 一致）
+        render_fbo_ = fbo_pool_.acquire(canvas_.width, canvas_.height);
 
         // 创建着色器
         shader_ = std::make_unique<gl::Shader>(commonVertStr, commonFragStr);
 
         quad_ = gl::createQuadMesh();
 
-        if (!render_fbo_.isValid() || !flip_fbo_.isValid() || !shader_->isValid() || !quad_.isValid()) {
+        if (!render_fbo_.isValid() || !shader_->isValid() || !quad_.isValid()) {
             unload();
             return false;
         }
@@ -254,8 +224,12 @@ void RootNode::unload() {
 
     gl::destroyQuadMesh(quad_);
     shader_.reset();
-    gl::destroyFBO(flip_fbo_);
-    gl::destroyFBO(render_fbo_);
+    
+    // render_fbo_ 由 FBO Pool 管理，归还到池中
+    if (render_fbo_.isValid()) {
+        fbo_pool_.release(render_fbo_);
+        render_fbo_ = gl::FBO(); // 重置为无效
+    }
 }
 
 // ========== 外部接口 ==========
@@ -293,8 +267,58 @@ bool RootNode::draw(uint8_t *buffer, size_t buffer_size) {
     return true;
 }
 
+// ========== Getter 方法 ==========
+
+int RootNode::getWidth() const {
+    return canvas_.width;
+}
+
+int RootNode::getHeight() const {
+    return canvas_.height;
+}
+
+int64_t RootNode::getDurationMs() const {
+    return duration_ms_;
+}
+
+double RootNode::getFrameRate() const {
+    return frame_rate_;
+}
+
+const std::string &RootNode::getId() const {
+    return id_;
+}
+
+const CanvasConfig &RootNode::getCanvas() const {
+    return canvas_;
+}
+
+bool RootNode::isLoaded() const {
+    return !layers_.empty();
+}
+
 std::string RootNode::getGPUInfo() const {
     return gl::getGPUInfo(gl_ctx_);
+}
+
+gl::Shader *RootNode::getShader() const {
+    return shader_.get();
+}
+
+const gl::QuadMesh *RootNode::getQuad() const {
+    return &quad_;
+}
+
+int64_t RootNode::getCurrentTime() const {
+    return current_time_ms_;
+}
+
+gl::FBOPool *RootNode::getFBOPool() {
+    return &fbo_pool_;
+}
+
+const gl::FBO &RootNode::getRenderFBO() const {
+    return render_fbo_;
 }
 
 Material *RootNode::getMaterial(const std::string &material_id) const {
