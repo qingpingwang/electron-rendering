@@ -1,4 +1,4 @@
-#include "gl_types.h"
+#include "types.h"
 
 namespace vp {
 namespace gl {

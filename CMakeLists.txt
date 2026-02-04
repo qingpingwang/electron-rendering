@@ -41,13 +41,13 @@ pkg_check_modules(FFMPEG REQUIRED
 
 set(SOURCES
     src/addon.cpp
-    src/core/root_node.cpp
+    src/engine/root_node.cpp
     src/decoder/video_decoder.cpp
-    src/render/gl_types.cpp
-    src/render/gl_functions.cpp
-    src/render/shader.cpp
-    src/stb_image/stb_image_impl.cpp
-    src/stb_image/stb_image_write_impl.cpp
+    src/gl/types.cpp
+    src/gl/functions.cpp
+    src/gl/shader.cpp
+    third_party/stb_image/stb_image_impl.cpp
+    third_party/stb_image/stb_image_write_impl.cpp
     src/material/material.cpp
     src/layer/layer.cpp
     src/layer/video_layer.cpp
@@ -68,6 +68,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${NODE_API_HEADERS_DIR}
     ${FFMPEG_INCLUDE_DIRS}
     ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/third_party
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE

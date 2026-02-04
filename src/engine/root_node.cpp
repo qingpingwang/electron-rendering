@@ -9,11 +9,11 @@ using json = nlohmann::json;
 namespace vp {
 
 static const char commonVertStr[] = {
-#include "../resource/vert/common.vert"
+#include "../gl/shaders/common.vert"
 };
 
 static const char commonFragStr[] = {
-#include "../resource/frag/common.frag"
+#include "../gl/shaders/common.frag"
 };
 
 RootNode::RootNode() {

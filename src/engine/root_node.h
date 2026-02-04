@@ -3,8 +3,8 @@
 #include "../layer/layer.h"
 #include "../layer/video_layer.h"
 #include "../material/material.h"
-#include "../render/gl_functions.h"
-#include "../render/shader.h"
+#include "../gl/functions.h"
+#include "../gl/shader.h"
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>

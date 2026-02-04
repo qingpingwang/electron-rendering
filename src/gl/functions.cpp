@@ -1,5 +1,5 @@
-#include "gl_functions.h"
-#include "../stb_image/stb_image.h"
+#include "functions.h"
+#include <stb_image/stb_image.h>
 
 namespace vp {
 namespace gl {

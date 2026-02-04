@@ -1,8 +1,8 @@
 #include "video_layer.h"
-#include "../core/root_node.h"
-#include "../nlohmann/json.hpp"
-#include "../render/gl_functions.h"
-#include "../render/shader.h"
+#include "../engine/root_node.h"
+#include <nlohmann/json.hpp>
+#include "../gl/functions.h"
+#include "../gl/shader.h"
 
 using json = nlohmann::json;
 

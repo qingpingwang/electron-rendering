@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../decoder/video_decoder.h"
-#include "../render/gl_types.h"
+#include "../gl/types.h"
 #include "layer.h"
 #include <memory>
 

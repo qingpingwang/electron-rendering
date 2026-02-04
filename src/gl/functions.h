@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gl_types.h"
+#include "types.h"
 #include <cstdint>
 #include <string>
 

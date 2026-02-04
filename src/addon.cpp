@@ -1,5 +1,5 @@
 #include <napi.h>
-#include "core/root_node.h"
+#include "engine/root_node.h"
 #include <memory>
 
 static std::unique_ptr<vp::RootNode> g_root;
