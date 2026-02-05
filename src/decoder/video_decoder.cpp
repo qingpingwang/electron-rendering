@@ -21,9 +21,17 @@ VideoDecoder::~VideoDecoder() {
 bool VideoDecoder::open(const std::string &path) {
     close();
 
-    if (avformat_open_input(&format_ctx_, path.c_str(), nullptr, nullptr) < 0) {
+    path_ = path;
+
+    // WebM: 启用 Alpha 通道解封装
+    AVDictionary *format_opts = nullptr;
+    av_dict_set(&format_opts, "enable_drefs", "1", 0);
+
+    if (avformat_open_input(&format_ctx_, path_.c_str(), nullptr, &format_opts) < 0) {
+        av_dict_free(&format_opts);
         return false;
     }
+    av_dict_free(&format_opts);
 
     if (avformat_find_stream_info(format_ctx_, nullptr) < 0) {
         close();
@@ -46,11 +54,22 @@ bool VideoDecoder::open(const std::string &path) {
     AVStream *stream = format_ctx_->streams[video_stream_idx_];
     AVCodecParameters *codecpar = stream->codecpar;
 
-    // 使用标准解码器 + VideoToolbox硬件加速
-    const AVCodec *codec = avcodec_find_decoder(codecpar->codec_id);
+    // 检查是否有 Alpha 通道（VP9 WebM）
+    has_alpha_ = false;
+    AVDictionaryEntry *alpha_tag = av_dict_get(stream->metadata, "alpha_mode", nullptr, 0);
+    if (alpha_tag && std::string(alpha_tag->value) == "1") {
+        has_alpha_ = true;
+    }
+
+    // 如果是 VP9 with alpha，强制使用 libvpx-vp9 解码器
+    const AVCodec *codec = nullptr;
+    if (codecpar->codec_id == AV_CODEC_ID_VP9 && has_alpha_) {
+        codec = avcodec_find_decoder_by_name("libvpx-vp9");
+    }
+
+    // 否则使用默认解码器
     if (!codec) {
-        close();
-        return false;
+        codec = avcodec_find_decoder(codecpar->codec_id);
     }
 
     if (!codec) {
@@ -64,12 +83,21 @@ bool VideoDecoder::open(const std::string &path) {
         return false;
     }
 
-    // 使用纯CPU解码（不启用硬件加速）
+    // VP9: 启用 Alpha 解码
+    AVDictionary *opts = nullptr;
+    if (codecpar->codec_id == AV_CODEC_ID_VP9) {
+        // 请求输出 YUVA420P 格式（包含 alpha 通道）
+        codec_ctx_->request_sample_fmt = AV_SAMPLE_FMT_NONE;
+        // 强制解码 alpha 通道
+        av_dict_set(&opts, "apply_cropping", "0", 0);
+    }
 
-    if (avcodec_open2(codec_ctx_, codec, nullptr) < 0) {
+    if (avcodec_open2(codec_ctx_, codec, &opts) < 0) {
+        av_dict_free(&opts);
         close();
         return false;
     }
+    av_dict_free(&opts);
 
     width_ = codec_ctx_->width;
     height_ = codec_ctx_->height;
@@ -90,14 +118,29 @@ bool VideoDecoder::open(const std::string &path) {
     }
 
     // 创建格式转换上下文
+    // 如果有 alpha，尝试使用 yuva420p 作为源格式
+    AVPixelFormat src_fmt = has_alpha_ ? AV_PIX_FMT_YUVA420P : codec_ctx_->pix_fmt;
+
     sws_ctx_ = sws_getContext(
-        width_, height_, codec_ctx_->pix_fmt,
+        width_, height_, src_fmt,
         width_, height_, AV_PIX_FMT_RGBA,
         SWS_BILINEAR, nullptr, nullptr, nullptr);
     if (!sws_ctx_) {
         close();
         return false;
     }
+
+    // 根据解码器报告的色彩范围设置转换参数
+    // 注意：实际数据是 limited range (16-235)
+    int src_range = (codec_ctx_->color_range == AVCOL_RANGE_JPEG) ? 1 : 0;
+    int dst_range = 1; // RGBA 总是 full range
+
+    // 使用 BT.709 色彩空间（现代视频标准）
+    const int *inv_table = sws_getCoefficients(SWS_CS_ITU709);
+    sws_setColorspaceDetails(sws_ctx_,
+                             inv_table, src_range,
+                             inv_table, dst_range,
+                             0, 1 << 16, 1 << 16);
 
     // 分配 RGBA 缓冲区
     int buffer_size = av_image_get_buffer_size(AV_PIX_FMT_RGBA, width_, height_, 1);
@@ -110,6 +153,10 @@ bool VideoDecoder::open(const std::string &path) {
 
     last_decoded_ms_ = -1;
     return true;
+}
+
+bool VideoDecoder::hasAlpha() const {
+    return has_alpha_;
 }
 
 void VideoDecoder::close() {
@@ -220,7 +267,24 @@ bool VideoDecoder::decodeNextFrame(VideoFrame &out) {
 }
 
 void VideoDecoder::convertToRGBA(AVFrame *frame, VideoFrame &out) {
-    // CPU解码：直接YUV转RGBA
+    // 检查实际的 frame 格式
+    AVPixelFormat actual_fmt = (AVPixelFormat)frame->format;
+    bool frame_has_alpha = (actual_fmt == AV_PIX_FMT_YUVA420P || actual_fmt == AV_PIX_FMT_YUVA420P10LE || actual_fmt == AV_PIX_FMT_YUVA420P10BE);
+
+    // 如果 sws_context 的格式与实际 frame 格式不匹配，重新创建
+    if (has_alpha_ && !frame_has_alpha) {
+        // 元数据说有 alpha，但实际解码没有 alpha（FFmpeg bug）
+        // 使用实际格式重新创建 sws_context
+        sws_freeContext(sws_ctx_);
+        sws_ctx_ = sws_getContext(
+            width_, height_, actual_fmt,
+            width_, height_, AV_PIX_FMT_RGBA,
+            SWS_BILINEAR, nullptr, nullptr, nullptr);
+
+        has_alpha_ = false; // 更新标记
+    }
+
+    // CPU解码：YUV(A)转RGBA
     sws_scale(
         sws_ctx_,
         frame->data, frame->linesize,

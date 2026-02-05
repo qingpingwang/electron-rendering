@@ -14,10 +14,6 @@ RenderResource::RenderResource(RootNode *root) :
 }
 
 RenderResource::~RenderResource() {
-    // 释放所有 pass 的 FBO
-    for (auto &pass : render_passes_) {
-        pass->releaseFBO();
-    }
 }
 
 bool RenderResource::loadFromFolder(const std::string &folder_path) {
@@ -166,26 +162,49 @@ gl::FBO RenderResource::render(const std::vector<gl::FBO> &inputs, int64_t time_
     for (auto &texture : textures_) {
         texture->play(time_ms);
     }
-    // todo pass释放逻辑
+    std::vector<gl::FBO> outputs;
+    outputs.reserve(render_passes_.size());
     for (size_t i = 0; i < render_passes_.size(); ++i) {
         // 纹理输入
         std::vector<TextureInput> tex_inputs;
+        // 当前 pass 之前的 pass 的输出作为纹理输入
         for (size_t j = 0; j < i; j++) {
             const auto *input_tex_def = render_passes_[j]->getAsInputTexDefFor(i);
             if (input_tex_def) {
-                tex_inputs.emplace_back(TextureInput{input_tex_def->name, input_tex_def->pipe, render_passes_[j]->getOutputFBO().texture});
+                tex_inputs.emplace_back(TextureInput{input_tex_def->name, input_tex_def->pipe, outputs[j].texture});
+                continue;
+            }
+
+            // 如果 outputs[j] 对后续所有 pass 都无影响，提前释放
+            bool needed_by_later = false;
+            for (size_t k = i + 1; k < render_passes_.size(); k++) {
+                if (render_passes_[k]->getAsInputTexDefFor(j)) {
+                    needed_by_later = true;
+                    break;
+                }
+            }
+            if (!needed_by_later && outputs[j].isValid()) {
+                root_->getFBOPool()->release(outputs[j]);
             }
         }
         // 外部纹理输入
         for (auto &texture : textures_) {
-            if (!texture->affectsPass(i)) {
+            int pipe = texture->getPipeForPass(i);
+            if (pipe < 0) {
                 continue;
             }
-            tex_inputs.emplace_back(TextureInput{texture->getName(), texture->getPipe(), texture->getTextureId()});
+            tex_inputs.emplace_back(TextureInput{texture->getName(), pipe, texture->getTextureId()});
         }
-        render_passes_[i]->execute(inputs, uniforms, tex_inputs);
+        outputs.emplace_back(render_passes_[i]->execute(inputs, uniforms, tex_inputs));
     }
-    return gl::FBO{};
+    // 释放除最后一个之外的 FBO
+    for (size_t i = 0; i < outputs.size() - 1; ++i) {
+        if (!outputs[i].isValid()) {
+            continue;
+        }
+        root_->getFBOPool()->release(outputs[i]);
+    }
+    return outputs.back();
 }
 
 const std::string &RenderResource::getName() const {

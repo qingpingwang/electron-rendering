@@ -41,18 +41,18 @@ struct TestStats {
 TestStats g_stats;
 
 #define TEST(name) void test_##name()
-#define RUN_TEST(name)                                                                             \
-    do {                                                                                           \
-        std::cout << "\n[TEST] " << #name << std::endl;                                           \
-        test_##name();                                                                             \
+#define RUN_TEST(name)                                  \
+    do {                                                \
+        std::cout << "\n[TEST] " << #name << std::endl; \
+        test_##name();                                  \
     } while (0)
-#define ASSERT(cond, msg)                                                                          \
-    do {                                                                                           \
-        if (cond) {                                                                                \
-            g_stats.pass(msg);                                                                     \
-        } else {                                                                                   \
-            g_stats.fail(msg, "assertion failed");                                                 \
-        }                                                                                          \
+#define ASSERT(cond, msg)                          \
+    do {                                           \
+        if (cond) {                                \
+            g_stats.pass(msg);                     \
+        } else {                                   \
+            g_stats.fail(msg, "assertion failed"); \
+        }                                          \
     } while (0)
 
 // ========== 测试用例 ==========
@@ -128,6 +128,10 @@ TEST(multiple_same_size) {
     ASSERT(pool.getUsedCount() == 3, "All 3 in use");
     ASSERT(fbo1.fbo != fbo2.fbo && fbo2.fbo != fbo3.fbo, "3 unique FBO IDs");
 
+    // 保存 ID（因为 release 会重置 FBO）
+    GLuint id1 = fbo1.fbo;
+    GLuint id2 = fbo2.fbo;
+
     // 归还后复用
     pool.release(fbo1);
     pool.release(fbo2);
@@ -136,7 +140,7 @@ TEST(multiple_same_size) {
     FBO fbo5 = pool.acquire(1920, 1080);
 
     ASSERT(pool.getTotalCount() == 3, "Reused, total still 3");
-    ASSERT((fbo4.fbo == fbo1.fbo || fbo4.fbo == fbo2.fbo), "FBO4 reuses fbo1 or fbo2");
+    ASSERT((fbo4.fbo == id1 || fbo4.fbo == id2), "FBO4 reuses fbo1 or fbo2");
 
     pool.clear();
 }
@@ -146,16 +150,22 @@ TEST(idempotent_release) {
     FBOPool pool;
 
     FBO fbo = pool.acquire(1920, 1080);
+    GLuint fbo_id = fbo.fbo;
+    
     pool.release(fbo);
-
     ASSERT(pool.getIdleCount() == 1, "Idle = 1 after 1st release");
+    ASSERT(!fbo.isValid(), "FBO invalidated after release");
 
-    // 重复归还
+    // 重复归还（fbo 已经无效，应该安全忽略）
     pool.release(fbo);
-    ASSERT(pool.getIdleCount() == 1, "Idle still 1 after 2nd release (idempotent)");
+    ASSERT(pool.getIdleCount() == 1, "Idle still 1 after 2nd release (no-op)");
 
     pool.release(fbo);
-    ASSERT(pool.getIdleCount() == 1, "Idle still 1 after 3rd release (idempotent)");
+    ASSERT(pool.getIdleCount() == 1, "Idle still 1 after 3rd release (no-op)");
+    
+    // 验证原 FBO 仍在池中
+    FBO fbo2 = pool.acquire(1920, 1080);
+    ASSERT(fbo2.fbo == fbo_id, "Original FBO reused");
 
     pool.clear();
 }
@@ -353,6 +363,30 @@ TEST(invalid_fbo_release) {
     ASSERT(pool.getTotalCount() == 0, "Releasing invalid FBO doesn't affect pool");
 }
 
+// 测试16: 孤立 FBO 销毁（pool clear 后 release）
+TEST(orphaned_fbo_destroy) {
+    FBOPool pool;
+
+    FBO fbo = pool.acquire(1920, 1080);
+    GLuint fbo_id = fbo.fbo;
+    
+    ASSERT(fbo.isValid(), "FBO acquired");
+    ASSERT(pool.getTotalCount() == 1, "Pool has 1 FBO");
+
+    // 清空 pool（但我们还持有 FBO 引用）
+    pool.clear();
+    ASSERT(pool.getTotalCount() == 0, "Pool cleared");
+
+    // 此时 fbo 仍然有效（OpenGL 资源未销毁）
+    ASSERT(fbo.isValid(), "FBO still valid after pool clear");
+    ASSERT(fbo.fbo == fbo_id, "FBO ID unchanged");
+
+    // 释放这个孤立的 FBO（应该销毁 OpenGL 资源并重置引用）
+    pool.release(fbo);
+    ASSERT(!fbo.isValid(), "Orphaned FBO destroyed and invalidated");
+    ASSERT(pool.getTotalCount() == 0, "Pool still empty");
+}
+
 // ========== 主函数 ==========
 
 int main() {
@@ -386,6 +420,7 @@ int main() {
     RUN_TEST(performance);
     RUN_TEST(mixed_access_pattern);
     RUN_TEST(invalid_fbo_release);
+    RUN_TEST(orphaned_fbo_destroy);
 
     // 输出统计
     g_stats.summary();

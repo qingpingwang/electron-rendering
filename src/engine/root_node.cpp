@@ -33,10 +33,10 @@ void RootNode::cleanup() {
 
     gl::destroyQuadMesh(quad_);
     shader_.reset();
-    
+
     // 清空 FBO 池（会自动清理所有 FBO，包括 render_fbo_）
     fbo_pool_.clear();
-    
+
     gl::destroyContext(gl_ctx_);
 }
 
@@ -139,12 +139,34 @@ bool RootNode::loadFromJson(const std::string &json_str) {
         }
 
         // 加载素材
-        materials_.clear();
-        if (config.contains("materials") && config["materials"].contains("videos")) {
-            for (const auto &mat : config["materials"]["videos"]) {
-                auto material = std::make_unique<VideoMaterial>();
-                if (material->load(mat)) {
-                    materials_[material->getId()] = std::move(material);
+        for (int i = 0; i < MATERIAL_TYPE_COUNT; i++) {
+            materials_[i].clear();
+        }
+
+        if (config.contains("materials")) {
+            const auto &materials_json = config["materials"];
+
+            // 加载视频素材
+            if (materials_json.contains("videos")) {
+                const auto &videos = materials_json["videos"];
+                materials_[MATERIAL_TYPE_VIDEO].reserve(videos.size());
+                for (const auto &mat : videos) {
+                    auto material = std::make_unique<VideoMaterial>();
+                    if (material->load(mat)) {
+                        materials_[MATERIAL_TYPE_VIDEO].emplace_back(std::move(material));
+                    }
+                }
+            }
+
+            // 加载特效素材
+            if (materials_json.contains("effects")) {
+                const auto &effects = materials_json["effects"];
+                materials_[MATERIAL_TYPE_EFFECT].reserve(effects.size());
+                for (const auto &mat : effects) {
+                    auto material = std::make_unique<EffectMaterial>();
+                    if (material->load(mat)) {
+                        materials_[MATERIAL_TYPE_EFFECT].emplace_back(std::move(material));
+                    }
                 }
             }
         }
@@ -160,25 +182,8 @@ bool RootNode::loadFromJson(const std::string &json_str) {
             for (const auto &segment : track["segments"]) {
                 auto layer = std::make_unique<VideoLayer>(this);
                 if (!layer->load(segment))
-                    continue;
-
-                // 如果未配置画布尺寸，从第一个图层获取
-                if (canvas_.width == 0 || canvas_.height == 0) {
-                    canvas_.width = layer->getWidth();
-                    canvas_.height = layer->getHeight();
-                }
-
-                // 如果未配置帧率，从第一个图层获取
-                if (frame_rate_ == 0.0) {
-                    frame_rate_ = layer->getFrameRate();
-                }
-
-                // 如果未配置时长，自动计算所有图层的最大结束时间
-                if (duration_ms_ == 0 && layer->getEndTime() > duration_ms_) {
-                    duration_ms_ = layer->getEndTime();
-                }
-
-                layers_.push_back(std::move(layer));
+                    return false;
+                layers_.emplace_back(std::move(layer));
             }
         }
 
@@ -224,11 +229,10 @@ void RootNode::unload() {
 
     gl::destroyQuadMesh(quad_);
     shader_.reset();
-    
+
     // render_fbo_ 由 FBO Pool 管理，归还到池中
     if (render_fbo_.isValid()) {
         fbo_pool_.release(render_fbo_);
-        render_fbo_ = gl::FBO(); // 重置为无效
     }
 }
 
@@ -321,11 +325,17 @@ const gl::FBO &RootNode::getRenderFBO() const {
     return render_fbo_;
 }
 
-Material *RootNode::getMaterial(const std::string &material_id) const {
-    auto it = materials_.find(material_id);
-    if (it != materials_.end())
-        return it->second.get();
-    return nullptr;
+Material *RootNode::getMaterial(MaterialType type, const std::string &material_id) const {
+    const auto &materials = getMaterialsByType(type);
+    auto it = std::find_if(materials.begin(), materials.end(),
+                           [&material_id](const std::unique_ptr<Material> &mat) {
+                               return mat->getId() == material_id;
+                           });
+    return it != materials.end() ? it->get() : nullptr;
+}
+
+const std::vector<std::unique_ptr<Material>> &RootNode::getMaterialsByType(MaterialType type) const {
+    return materials_[type];
 }
 
 } // namespace vp

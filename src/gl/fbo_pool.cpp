@@ -18,9 +18,7 @@ FBOPool::~FBOPool() {
 
 std::string FBOPool::makeKey(int width, int height, GLenum internal_format, GLenum format,
                              GLenum type) const {
-    return std::to_string(width) + "_" + std::to_string(height) + "_" +
-           std::to_string(internal_format) + "_" + std::to_string(format) + "_" +
-           std::to_string(type);
+    return std::to_string(width) + "_" + std::to_string(height) + "_" + std::to_string(internal_format) + "_" + std::to_string(format) + "_" + std::to_string(type);
 }
 
 FBO FBOPool::acquire(int width, int height, GLenum internal_format, GLenum format, GLenum type) {
@@ -76,8 +74,12 @@ void FBOPool::release(FBO &fbo) {
     std::string key = makeKey(fbo.width, fbo.height, fbo.internal_format, fbo.format, fbo.type);
 
     auto it = caches_.find(key);
-    if (it == caches_.end())
+    if (it == caches_.end()) {
+        // FBO 不在缓存中（可能是 pool 被清空后的孤立资源），手动销毁防止泄漏
+        destroyFBO(fbo);
+        fbo = FBO{};
         return;
+    }
 
     FBOCache &cache = it->second;
 
@@ -91,6 +93,9 @@ void FBOPool::release(FBO &fbo) {
         entry_it->used = false;
         entry_it->idle_time = 0;
     }
+
+    // 重置调用者的 FBO（避免悬空引用）
+    fbo = FBO{};
 }
 
 void FBOPool::clear() {
@@ -126,7 +131,7 @@ size_t FBOPool::getIdleCount() const {
 // ========== FBOCache 实现 ==========
 
 FBO FBOPool::FBOCache::acquire(int width, int height, GLenum internal_format, GLenum format,
-                                GLenum type, int max_idle_time) {
+                               GLenum type, int max_idle_time) {
     // 查找未使用的 FBO
     auto it = std::find_if(entries.begin(), entries.end(),
                            [](const FBOEntry &entry) { return !entry.used; });
@@ -194,5 +199,5 @@ void FBOPool::FBOEntry::destroy() {
     }
 }
 
-} // namespace gl
-} // namespace vp
+}
+} // namespace vp::gl

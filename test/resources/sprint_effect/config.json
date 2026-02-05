@@ -16,7 +16,9 @@
     "texture": [
         {
             "name": "mask",
-            "pipe": 1,
+            "pipe": [
+                1
+            ],
             "url": "textures/mask.webm",
             "repeatMode": 2,
             "renderPassIndex": [

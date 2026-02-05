@@ -18,6 +18,13 @@
 
 namespace vp {
 
+// 素材类型索引（固定数组下标）
+enum MaterialType {
+    MATERIAL_TYPE_VIDEO = 0,
+    MATERIAL_TYPE_EFFECT = 1,
+    MATERIAL_TYPE_COUNT = 2 // 总数
+};
+
 // Canvas 配置结构体
 struct CanvasConfig {
     int width = 0;
@@ -62,8 +69,11 @@ public:
     // 获取渲染目标 FBO
     const gl::FBO &getRenderFBO() const;
 
-    // 获取素材指针
-    Material *getMaterial(const std::string &material_id) const;
+    // 获取素材指针（按类型和 ID 查找）
+    Material *getMaterial(MaterialType type, const std::string &material_id) const;
+
+    // 按类型获取素材列表（直接数组访问，零开销）
+    const std::vector<std::unique_ptr<Material>> &getMaterialsByType(MaterialType type) const;
 
 private:
     // 渲染一帧
@@ -77,16 +87,16 @@ private:
 
     // OpenGL 资源
     gl::GLContext gl_ctx_;
-    gl::FBOPool fbo_pool_;       // FBO 缓存池
-    gl::FBO render_fbo_;         // 主渲染 FBO（从池中获取，不释放）
+    gl::FBOPool fbo_pool_; // FBO 缓存池
+    gl::FBO render_fbo_;   // 主渲染 FBO（从池中获取，不释放）
     std::unique_ptr<gl::Shader> shader_;
     gl::QuadMesh quad_;
 
     // 图层
     std::vector<std::unique_ptr<Layer>> layers_;
 
-    // 素材管理
-    std::unordered_map<std::string, std::unique_ptr<Material>> materials_; // material_id -> Material
+    // 素材管理（固定数组，按类型索引）
+    std::vector<std::unique_ptr<Material>> materials_[MATERIAL_TYPE_COUNT];
 
     // 项目配置
     std::string id_;

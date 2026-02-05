@@ -1,10 +1,9 @@
 #version 330 core
 
-uniform sampler2D inputTexture;
+uniform sampler2D inputTexture0;
 uniform sampler2D mask;
 
-uniform float time;
-uniform vec2 direction;
+uniform float uTime;
 
 in vec2 texCoord;
 out vec4 FragColor;
@@ -21,7 +20,7 @@ vec2 getDirection() {
   directions[3] = vec2(1.0, -1.0);
   directions[4] = vec2(0.0, 0.0);
 
-  int id = int(floor(getFps() * time / 1000.0));
+  int id = int(floor(getFps() * uTime / 1000.0));
   id = id % 10 + 1;
   if (id > 5) {
     id = 10 - id;
@@ -34,7 +33,7 @@ vec2 getDirection() {
 void main()
 {
     vec2 dt = getDirection();
-    vec4 srcColor = texture(inputTexture, texCoord + dt);
+    vec4 srcColor = texture(inputTexture0, texCoord + dt);
     vec4 maskColor = texture(mask, texCoord);
     vec3 resultColor = mix(srcColor.rgb, maskColor.rgb, maskColor.a);
     FragColor = vec4(resultColor, 1.0);

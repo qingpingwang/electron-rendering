@@ -38,10 +38,6 @@ target_link_libraries(fbo_pool_test PRIVATE
     ${COMMON_LIBRARIES}
 )
 
-set_target_properties(fbo_pool_test PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/fbo_pool_test"
-)
-
 # ==================== 测试 2: Resource Loader 测试 ====================
 add_executable(resource_loader_test
     resource_loader/main.cpp
@@ -53,8 +49,26 @@ target_link_libraries(resource_loader_test PRIVATE
     ${COMMON_LIBRARIES}
 )
 
-set_target_properties(resource_loader_test PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resource_loader"
+# ==================== 测试 3: Decoder 测试 ====================
+add_executable(decoder_test
+    decoder_test/main.cpp
+    $<TARGET_OBJECTS:video_player_core>
+)
+
+target_link_libraries(decoder_test PRIVATE
+    video_player_core
+    ${COMMON_LIBRARIES}
+)
+
+# ==================== 测试 4: Video Render 测试 ====================
+add_executable(video_render_test
+    video_render_test/main.cpp
+    $<TARGET_OBJECTS:video_player_core>
+)
+
+target_link_libraries(video_render_test PRIVATE
+    video_player_core
+    ${COMMON_LIBRARIES}
 )
 
 # ==================== 自定义目标：运行所有测试 ====================
@@ -62,12 +76,17 @@ add_custom_target(run_tests
     COMMAND echo "=========================================="
     COMMAND echo "Running FBO Pool Test..."
     COMMAND echo "=========================================="
-    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/fbo_pool_test/fbo_pool_test || true
+    COMMAND fbo_pool_test || true
     COMMAND echo ""
     COMMAND echo "=========================================="
     COMMAND echo "Running Resource Loader Test..."
     COMMAND echo "=========================================="
-    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/resource_loader/resource_loader_test ${CMAKE_SOURCE_DIR}/test/resources/ || true
-    DEPENDS fbo_pool_test resource_loader_test
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMAND resource_loader_test ${CMAKE_SOURCE_DIR}/test || true
+    COMMAND echo ""
+    COMMAND echo "=========================================="
+    COMMAND echo "Running Video Render Test..."
+    COMMAND echo "=========================================="
+    COMMAND video_render_test || true
+    DEPENDS fbo_pool_test resource_loader_test video_render_test
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/test
 )

@@ -44,4 +44,31 @@ private:
     int64_t duration_ = 0;
 };
 
+// 特效素材（配置层）
+// 存储特效的元信息，实际执行由 Effect 类负责
+class EffectMaterial : public Material {
+public:
+    EffectMaterial() = default;
+    ~EffectMaterial() override = default;
+
+    bool load(const nlohmann::json &material_json) override;
+
+    // 获取特效类型（"resource", "builtin", "lut" 等）
+    const std::string &getType() const;
+
+    // 获取资源路径（对于 resource 类型）
+    const std::string &getResourcePath() const;
+
+    // 获取特效名称（对于 builtin 类型）
+    const std::string &getEffectName() const;
+
+    // 获取额外配置（扩展字段）
+    const nlohmann::json &getConfig() const;
+
+private:
+    std::string type_;        // 特效类型
+    std::string effect_name_; // 内置特效名称（builtin 类型）
+    nlohmann::json config_;   // 额外配置参数
+};
+
 } // namespace vp

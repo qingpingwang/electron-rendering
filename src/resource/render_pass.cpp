@@ -12,7 +12,6 @@ RenderPass::RenderPass(RootNode *root, int pass_index) :
 }
 
 RenderPass::~RenderPass() {
-    releaseFBO();
 }
 
 bool RenderPass::load(const nlohmann::json &config, const std::string &base_path) {
@@ -110,17 +109,8 @@ gl::FBO RenderPass::execute(const std::vector<gl::FBO> &inputs,
     int fbo_width = static_cast<int>(inputs[0].width * fbo_size_ratio_);
     int fbo_height = static_cast<int>(inputs[0].height * fbo_size_ratio_);
 
-    // 从池获取 FBO（复用或新建）
-    if (!output_fbo_.isValid() || output_fbo_.width != fbo_width || output_fbo_.height != fbo_height) {
-        // 先释放旧的
-        if (output_fbo_.isValid()) {
-            root_->getFBOPool()->release(output_fbo_);
-        }
-        // 获取新的
-        output_fbo_ = root_->getFBOPool()->acquire(fbo_width, fbo_height);
-    }
-
-    if (!output_fbo_.isValid())
+    gl::FBO output_fbo = root_->getFBOPool()->acquire(fbo_width, fbo_height);
+    if (!output_fbo.isValid())
         return gl::FBO{};
 
     // 设置uniform变量
@@ -133,6 +123,7 @@ gl::FBO RenderPass::execute(const std::vector<gl::FBO> &inputs,
         }
     }
 
+    shader_->use();
     // 绑定所有输入纹理（inputTexture0, inputTexture1, ...）
     for (size_t i = 0; i < inputs.size(); ++i) {
         const auto &input_fbo = inputs[i];
@@ -153,30 +144,18 @@ gl::FBO RenderPass::execute(const std::vector<gl::FBO> &inputs,
     }
 
     // 绑定输出 FBO
-    gl::bindFBO(output_fbo_);
+    gl::bindFBO(output_fbo);
     gl::cleanColor(0, 0, 0, 0);
-    shader_->use();
     // 绘制全屏 quad
     gl::drawQuad(*root_->getQuad());
     // 解绑
     shader_->unuse();
     gl::unbindFBO();
-    return output_fbo_;
-}
-
-const gl::FBO &RenderPass::getOutputFBO() const {
-    return output_fbo_;
+    return output_fbo;
 }
 
 gl::Shader *RenderPass::getShader() const {
     return shader_.get();
-}
-
-void RenderPass::releaseFBO() {
-    if (output_fbo_.isValid() && root_) {
-        root_->getFBOPool()->release(output_fbo_);
-        output_fbo_ = gl::FBO{};
-    }
 }
 
 float RenderPass::getFBOSizeRatio() const {

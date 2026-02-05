@@ -30,8 +30,6 @@ public:
     bool draw();
 
     const std::string &getName() const;
-    int getWidth() const;
-    int getHeight() const;
     int64_t getDurationMs() const;
 
     int64_t getStartTime() const;
@@ -48,11 +46,13 @@ protected:
     // 注意：返回的 FBO 由特效内部管理，Layer 不负责释放
     gl::FBO applyEffects(const gl::FBO &input);
 
+    // 检查是否有活跃的特效
+    bool hasActiveEffects() const;
+
     RootNode *root_ = nullptr;
-    Material *material_ = nullptr; // 图层使用的素材
+    Material *material_ = nullptr;             // 图层使用的素材
+    std::vector<Material *> effect_materials_; // 图层使用的特效素材
     std::string name_;
-    int width_ = 0;
-    int height_ = 0;
     int64_t duration_ms_ = 0;
     int64_t start_time_ms_ = 0;
     int64_t end_time_ms_ = 0;

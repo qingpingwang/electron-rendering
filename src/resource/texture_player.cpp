@@ -23,15 +23,15 @@ TexturePlayer::~TexturePlayer() {
 bool TexturePlayer::load(const nlohmann::json &config, const std::string &base_path) {
     name_ = config.value("name", "");
     repeat_mode_ = config.value("repeatMode", 0);
-    pipe_ = config.value("pipe", 0);
 
-    // 加载 renderPassIndex
-    if (config.contains("renderPassIndex")) {
-        const auto &idx_array = config["renderPassIndex"];
-        render_pass_indices_.reserve(idx_array.size());
-        for (const auto &idx : idx_array) {
-            render_pass_indices_.emplace_back(idx.get<int>());
-        }
+    const auto &pipe_array = config.value("pipe", std::vector<int>{});
+    const auto &pass_array = config.value("renderPassIndex", std::vector<int>{});
+    if (pipe_array.size() != pass_array.size()) {
+        return false;
+    }
+    render_pass_indices_.reserve(pipe_array.size());
+    for (size_t i = 0; i < pipe_array.size(); i++) {
+        render_pass_indices_.emplace_back(std::make_tuple(pipe_array[i], pass_array[i]));
     }
 
     std::string url = config.value("url", "");

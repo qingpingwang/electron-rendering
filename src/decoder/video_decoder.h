@@ -15,7 +15,7 @@ namespace vp {
 
 // 解码后的视频帧
 struct VideoFrame {
-    uint8_t *data = nullptr;  // CPU内存中的RGBA数据
+    uint8_t *data = nullptr; // CPU内存中的RGBA数据
     int width = 0;
     int height = 0;
     int64_t pts_ms = 0;
@@ -43,6 +43,8 @@ public:
     double getFrameRate() const;
     bool isOpen() const;
 
+    bool hasAlpha() const;
+
 private:
     bool decodeNextFrame(VideoFrame &out);
     void convertToRGBA(AVFrame *frame, VideoFrame &out);
@@ -65,6 +67,8 @@ private:
 
     uint8_t *rgba_buffer_ = nullptr;
     int64_t last_decoded_ms_ = -1;
+    std::string path_;
+    bool has_alpha_ = false; // 是否包含 Alpha 通道
 };
 
 } // namespace vp

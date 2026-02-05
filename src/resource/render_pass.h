@@ -37,9 +37,6 @@ public:
                     const std::vector<std::unique_ptr<UniformParam>> &uniforms,
                     const std::vector<TextureInput> &tex_inputs);
 
-    // 获取输出 FBO
-    const gl::FBO &getOutputFBO() const;
-
     // 获取 shader（用于外部直接更新 uniform）
     gl::Shader *getShader() const;
 
@@ -53,10 +50,6 @@ public:
     // 获取作为指定 pass 输入的纹理定义（找不到返回 nullptr）
     const InputTexDef *getAsInputTexDefFor(int pass_index) const;
 
-    // 释放 FBO（归还到池）
-    void releaseFBO();
-
-    // 获取 FBO 大小比例
     float getFBOSizeRatio() const;
 
     // 获取 asInputTexIndex 列表（用于 RenderResource 构建依赖关系）
@@ -65,7 +58,6 @@ public:
 private:
     RootNode *root_;
     std::unique_ptr<gl::Shader> shader_;
-    gl::FBO output_fbo_;
     float fbo_size_ratio_;                       // FBO 大小比例（相对于原始输入）
     int pass_index_;                             // 当前 pass 索引
     std::vector<InputTexDef> as_input_tex_list_; // 当前 pass 的输出作为其他 pass 输入的定义

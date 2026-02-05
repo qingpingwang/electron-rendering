@@ -35,15 +35,17 @@ public:
     int getHeight() const {
         return height_;
     }
-    int getPipe() const {
-        return pipe_;
-    }
-    const std::vector<int> &getRenderPassIndices() const {
+
+    const std::vector<std::tuple<int, int>> &getRenderPassIndices() const {
         return render_pass_indices_;
     }
 
-    bool affectsPass(int pass_index) const {
-        return std::find(render_pass_indices_.begin(), render_pass_indices_.end(), pass_index) != render_pass_indices_.end();
+    int getPipeForPass(int pass_index) const {
+        auto it = std::find_if(render_pass_indices_.begin(), render_pass_indices_.end(),
+                               [pass_index](const std::tuple<int, int> &item) {
+                                   return std::get<1>(item) == pass_index;
+                               });
+        return (it != render_pass_indices_.end()) ? std::get<0>(*it) : -1;
     }
 
     GLuint getTextureId() const {
@@ -56,10 +58,9 @@ protected:
     std::string file_path_;
     int width_ = 0;
     int height_ = 0;
-    int repeat_mode_ = 0; // 0=停止, 2=循环
-    int pipe_ = 0;
-    std::vector<int> render_pass_indices_; // 该纹理会被哪些 pass 使用
-    gl::Texture texture_;                  // 纹理对象（所有派生类共用）
+    int repeat_mode_ = 0;                                   // 0=停止, 2=循环
+    std::vector<std::tuple<int, int>> render_pass_indices_; // 该纹理会被哪些 pass 使用,pipe 和 pass 索引
+    gl::Texture texture_;                                   // 纹理对象（所有派生类共用）
 };
 
 // 图片纹理播放器（支持静态图和 GIF）

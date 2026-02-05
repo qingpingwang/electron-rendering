@@ -22,7 +22,10 @@
                     "source_timerange": {
                         "start": 0,
                         "duration": 5000
-                    }
+                    },
+                    "extra_material_refs": [
+                        "effect_0"
+                    ]
                 }
             ]
         }
@@ -35,6 +38,13 @@
                 "width": 1088,
                 "height": 1920,
                 "duration": 5000
+            }
+        ],
+        "effects": [
+            {
+                "id": "effect_0",
+                "type": "resource",
+                "resource_path": "./test/resources/sprint_effect"
             }
         ]
     }
