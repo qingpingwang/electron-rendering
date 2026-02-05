@@ -121,8 +121,11 @@ gl::FBO Layer::applyEffects(const gl::FBO &input) {
     gl::FBO current = input;
 
     // 依次应用特效链
-    // 每个特效自己管理输出 FBO，Layer 不负责创建/释放
     for (auto &effect : effects_) {
+        // 释放上一个 FBO
+        if (current.isValid() && current.fbo != input.fbo) {
+            root_->getFBOPool()->release(current);
+        }
         gl::FBO output = effect->apply(current, root_->getCurrentTime());
         if (!output.isValid()) {
             // 特效失败，返回无效 FBO

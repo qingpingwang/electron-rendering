@@ -1,0 +1,29 @@
+{
+    "name": "冲刺",
+    "desc": "冲刺特效，带抖动和蒙版混合",
+    "format": "effect",
+    "id": "effect_sprint",
+    "suggestionDuration": 3000,
+    "renderPass": [
+        {
+            "fboSize": 1.0,
+            "shader": {
+                "vert": "shaders/pass0.vert",
+                "frag": "shaders/pass0.frag"
+            }
+        }
+    ],
+    "texture": [
+        {
+            "name": "mask",
+            "pipe": 1,
+            "url": "textures/mask.webm",
+            "repeatMode": 2,
+            "renderPassIndex": [
+                0
+            ]
+        }
+    ],
+    "uniform": [],
+    "animation": []
+}

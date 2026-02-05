@@ -48,7 +48,11 @@ public:
     // 获取 uniform 位置
     GLint getUniformLocation(const std::string &name) const;
 
+    // 获取错误信息
+    std::string getError() const { return last_error_; }
+
 private:
+    std::string last_error_;
     void checkCompileErrors(GLuint shader, const std::string &type);
 };
 

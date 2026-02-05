@@ -1,0 +1,32 @@
+{
+    "name": "简单亮度调节",
+    "desc": "单pass亮度调节效果",
+    "format": "effect",
+    "id": "effect_brightness",
+    "suggestionDuration": 1000,
+    "renderPass": [
+        {
+            "fboSize": 1.0,
+            "shader": {
+                "vert": "shaders/simple.vert",
+                "frag": "shaders/simple.frag"
+            }
+        }
+    ],
+    "uniform": [
+        {
+            "name": "亮度",
+            "description": "调节图像亮度",
+            "type": "float",
+            "uniformTarget": "brightness",
+            "defaultValue": 1.0,
+            "range": [
+                0.0,
+                2.0
+            ],
+            "renderPassIndex": [
+                0
+            ]
+        }
+    ]
+}

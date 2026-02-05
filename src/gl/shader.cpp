@@ -125,15 +125,13 @@ void Shader::checkCompileErrors(GLuint shader, const std::string &type) {
         glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
         if (!success) {
             glGetShaderInfoLog(shader, 1024, nullptr, info_log);
-            std::cerr << "ERROR::SHADER_COMPILATION_ERROR [" << type << "]\n"
-                      << info_log << std::endl;
+            last_error_ += "ERROR::SHADER_COMPILATION_ERROR [" + type + "]\n" + std::string(info_log) + "\n";
         }
     } else {
         glGetProgramiv(shader, GL_LINK_STATUS, &success);
         if (!success) {
             glGetProgramInfoLog(shader, 1024, nullptr, info_log);
-            std::cerr << "ERROR::PROGRAM_LINKING_ERROR\n"
-                      << info_log << std::endl;
+            last_error_ += "ERROR::PROGRAM_LINKING_ERROR\n" + std::string(info_log) + "\n";
         }
     }
 }

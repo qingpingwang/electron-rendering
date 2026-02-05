@@ -1,0 +1,75 @@
+{
+    "name": "高斯模糊",
+    "desc": "双pass高斯模糊效果（水平+垂直）",
+    "format": "effect",
+    "id": "effect_gaussian_blur",
+    "suggestionDuration": 1000,
+    "renderPass": [
+        {
+            "fboSize": 0.5,
+            "shader": {
+                "vert": "shaders/blur.vert",
+                "frag": "shaders/blur_h.frag"
+            },
+            "asInputTexIndex": [
+                {
+                    "name": "blurredH",
+                    "pipe": 1,
+                    "renderPassIndex": 0
+                }
+            ]
+        },
+        {
+            "fboSize": 1.0,
+            "shader": {
+                "vert": "shaders/blur.vert",
+                "frag": "shaders/blur_v.frag"
+            }
+        }
+    ],
+    "uniform": [
+        {
+            "name": "模糊半径",
+            "description": "控制模糊程度",
+            "type": "float",
+            "uniformTarget": "blurRadius",
+            "defaultValue": 5.0,
+            "range": [
+                1.0,
+                20.0
+            ],
+            "renderPassIndex": [
+                0,
+                1
+            ]
+        }
+    ],
+    "animation": [
+        {
+            "name": "blurAnim",
+            "strength": 1.0,
+            "speed": 1.0,
+            "repeatMode": 2,
+            "interpolationType": "linear",
+            "channelNum": 1,
+            "animationInfo": [
+                {
+                    "data": [
+                        0.0
+                    ],
+                    "time": 0
+                },
+                {
+                    "data": [
+                        1.0
+                    ],
+                    "time": 1000
+                }
+            ],
+            "renderPassIndex": [
+                0,
+                1
+            ]
+        }
+    ]
+}

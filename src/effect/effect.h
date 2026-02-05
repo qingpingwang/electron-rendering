@@ -8,6 +8,8 @@
 namespace vp {
 
 // 前向声明
+class RootNode;
+
 namespace gl {
 class Shader;
 struct QuadMesh;
@@ -17,7 +19,7 @@ struct QuadMesh;
 // 输入 FBO，输出到另一个 FBO
 class Effect {
 public:
-    Effect() = default;
+    Effect(RootNode *root) : root_(root) {}
     virtual ~Effect() = default;
 
     Effect(const Effect &) = delete;
@@ -41,6 +43,7 @@ public:
     virtual const char *getType() const = 0;
 
 protected:
+    RootNode *root_ = nullptr; // 访问 FBOPool、Shader、Quad 等共享资源
     std::string name_;
 };
 

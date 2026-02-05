@@ -1,0 +1,85 @@
+{
+    "name": "内部Uniform测试",
+    "desc": "测试 renderPass 级别的内部 uniform（不对外暴露）",
+    "format": "effect",
+    "id": "effect_internal_uniform_test",
+    "suggestionDuration": 1000,
+    "renderPass": [
+        {
+            "fboSize": 1.0,
+            "shader": {
+                "vert": "shaders/pass0.vert",
+                "frag": "shaders/pass0.frag"
+            },
+            "uniform": [
+                {
+                    "uniformTarget": "saturation",
+                    "type": "float",
+                    "value": 1.5,
+                    "comment": "内部固定饱和度"
+                },
+                {
+                    "uniformTarget": "tint",
+                    "type": "vec3",
+                    "value": [
+                        1.0,
+                        0.9,
+                        0.8
+                    ],
+                    "comment": "内部固定色调（暖色）"
+                }
+            ]
+        },
+        {
+            "fboSize": 1.0,
+            "shader": {
+                "vert": "shaders/pass1.vert",
+                "frag": "shaders/pass1.frag"
+            },
+            "asInputTexIndex": [
+                {
+                    "name": "pass0Tex",
+                    "pipe": 1,
+                    "renderPassIndex": 0
+                }
+            ],
+            "uniform": [
+                {
+                    "uniformTarget": "vignetteStrength",
+                    "type": "float",
+                    "value": 0.3,
+                    "comment": "内部固定暗角强度"
+                },
+                {
+                    "uniformTarget": "vignetteColor",
+                    "type": "vec3",
+                    "value": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "comment": "内部固定暗角颜色"
+                }
+            ]
+        }
+    ],
+    "uniform": [
+        {
+            "name": "亮度",
+            "description": "外部可调参数：整体亮度",
+            "type": "float",
+            "uniformTarget": "brightness",
+            "defaultValue": 1.0,
+            "range": [
+                0.0,
+                2.0
+            ],
+            "renderPassIndex": [
+                0,
+                1
+            ]
+        }
+    ],
+    "animation": [],
+    "texture": []
+}

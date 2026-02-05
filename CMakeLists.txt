@@ -6,6 +6,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# 设置默认构建类型（如果未指定）
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build type (Debug or Release)" FORCE)
+endif()
+
 if(APPLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15")
     add_definitions(-DGL_SILENCE_DEPRECATION)
@@ -39,24 +44,56 @@ pkg_check_modules(FFMPEG REQUIRED
 
 # ========== 源文件 ==========
 
-set(SOURCES
-    src/addon.cpp
-    src/engine/root_node.cpp
-    src/decoder/video_decoder.cpp
-    src/gl/types.cpp
-    src/gl/functions.cpp
-    src/gl/shader.cpp
-    src/gl/fbo_pool.cpp
-    third_party/stb_image/stb_image_impl.cpp
-    third_party/stb_image/stb_image_write_impl.cpp
-    src/material/material.cpp
-    src/layer/layer.cpp
-    src/layer/video_layer.cpp
+# 使用递归扫描自动收集源文件（使用 CMake 内置变量）
+# CONFIGURE_DEPENDS: 每次构建时检测文件变化（CMake 3.12+）
+file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/src/*.cpp"
 )
 
-# ========== 构建 ==========
+# 第三方库源文件（自动扫描 third_party 下所有 .cpp）
+file(GLOB_RECURSE THIRD_PARTY_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/third_party/**/*.cpp"
+)
 
-add_library(${PROJECT_NAME} SHARED ${SOURCES})
+# 排除 addon.cpp（仅用于 Node.js 绑定）和备份文件
+list(FILTER CORE_SOURCES EXCLUDE REGEX ".*/addon\\.cpp$")
+list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_backup.*")
+list(FILTER CORE_SOURCES EXCLUDE REGEX ".*\\.bak$")
+
+# ========== 核心库（OBJECT 库，编译一次，多处使用）==========
+
+# 创建 OBJECT 库：核心渲染引擎
+add_library(video_player_core OBJECT
+    ${CORE_SOURCES}
+    ${THIRD_PARTY_SOURCES}
+)
+
+# 核心库的编译配置
+target_include_directories(video_player_core PUBLIC
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/third_party
+    ${FFMPEG_INCLUDE_DIRS}
+)
+
+target_compile_definitions(video_player_core PUBLIC
+    $<$<PLATFORM_ID:Darwin>:GL_SILENCE_DEPRECATION>
+)
+
+target_compile_options(video_player_core PRIVATE 
+    -Wall -Wextra -Wno-unused-parameter
+)
+
+# 第三方库禁用所有警告
+set_source_files_properties(${THIRD_PARTY_SOURCES} PROPERTIES
+    COMPILE_FLAGS "-w"
+)
+
+# ========== Node.js 插件（主目标）==========
+
+add_library(${PROJECT_NAME} SHARED
+    src/addon.cpp
+    $<TARGET_OBJECTS:video_player_core>
+)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     PREFIX ""
@@ -67,15 +104,15 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${NODE_ADDON_API_DIR}
     ${NODE_API_HEADERS_DIR}
-    ${FFMPEG_INCLUDE_DIRS}
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/third_party
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     NAPI_VERSION=8
     NAPI_DISABLE_CPP_EXCEPTIONS
 )
+
+# 链接核心库（继承其配置）
+target_link_libraries(${PROJECT_NAME} PRIVATE video_player_core)
 
 if(APPLE)
     find_library(OPENGL_LIB OpenGL REQUIRED)
@@ -107,3 +144,12 @@ elseif(UNIX)
 endif()
 
 target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wno-unused-parameter)
+
+# ========== 测试 ==========
+
+# 测试子目录（可选，默认包含，适合开发）
+option(BUILD_TESTS "Build test cases" ON)
+
+if(BUILD_TESTS)
+    add_subdirectory(test)
+endif()

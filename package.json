@@ -4,7 +4,7 @@
   "description": "Electron + C++ Native Addon 视频播放器 (FFmpeg + OpenGL)",
   "main": "main.js",
   "scripts": {
-    "build": "cmake -B build -S . && cmake --build build --config Release",
+    "build": "cmake -B build -S . -DBUILD_TESTS=OFF && cmake --build build --config Release",
     "rebuild": "rm -rf build && npm run build",
     "start": "electron .",
     "postinstall": "npm run build"

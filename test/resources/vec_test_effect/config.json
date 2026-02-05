@@ -1,0 +1,76 @@
+{
+    "name": "向量参数测试",
+    "desc": "测试 float/vec2/vec3/vec4 统一支持",
+    "format": "effect",
+    "id": "effect_vec_test",
+    "suggestionDuration": 1000,
+    "renderPass": [
+        {
+            "fboSize": 1.0,
+            "shader": {
+                "vert": "shaders/test.vert",
+                "frag": "shaders/test.frag"
+            }
+        }
+    ],
+    "uniform": [
+        {
+            "name": "亮度",
+            "description": "标量参数 (float = vec1)",
+            "type": "float",
+            "uniformTarget": "brightness",
+            "defaultValue": 1.0,
+            "range": [
+                0.0,
+                2.0
+            ],
+            "renderPassIndex": [
+                0
+            ]
+        },
+        {
+            "name": "偏移",
+            "description": "二维向量参数",
+            "type": "vec2",
+            "uniformTarget": "offset",
+            "defaultValue": [
+                0.0,
+                0.0
+            ],
+            "renderPassIndex": [
+                0
+            ]
+        },
+        {
+            "name": "颜色调整",
+            "description": "三维向量参数 (RGB)",
+            "type": "vec3",
+            "uniformTarget": "colorAdjust",
+            "defaultValue": [
+                1.0,
+                1.0,
+                1.0
+            ],
+            "renderPassIndex": [
+                0
+            ]
+        },
+        {
+            "name": "边框颜色",
+            "description": "四维向量参数 (RGBA)",
+            "type": "vec4",
+            "uniformTarget": "borderColor",
+            "defaultValue": [
+                1.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "renderPassIndex": [
+                0
+            ]
+        }
+    ],
+    "animation": [],
+    "texture": []
+}
