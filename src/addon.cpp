@@ -1,8 +1,41 @@
 #include <napi.h>
 #include "engine/root_node.h"
+#include "decoder/video_decoder.h"
 #include <memory>
 
 static std::unique_ptr<vp::RootNode> g_root;
+
+// 获取视频信息（不加载整个渲染管线）
+Napi::Value GetVideoInfo(const Napi::CallbackInfo &info) {
+    Napi::Env env = info.Env();
+
+    if (info.Length() < 1 || !info[0].IsString()) {
+        Napi::TypeError::New(env, "需要视频文件路径").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+
+    std::string video_path = info[0].As<Napi::String>().Utf8Value();
+    
+    // 创建临时解码器获取信息
+    vp::VideoDecoder decoder;
+    if (!decoder.open(video_path)) {
+        Napi::Object result = Napi::Object::New(env);
+        result.Set("success", Napi::Boolean::New(env, false));
+        result.Set("error", Napi::String::New(env, "无法打开视频文件"));
+        return result;
+    }
+
+    // 返回视频信息
+    Napi::Object result = Napi::Object::New(env);
+    result.Set("success", Napi::Boolean::New(env, true));
+    result.Set("width", Napi::Number::New(env, decoder.getWidth()));
+    result.Set("height", Napi::Number::New(env, decoder.getHeight()));
+    result.Set("durationMs", Napi::Number::New(env, decoder.getDurationMs()));
+    result.Set("frameRate", Napi::Number::New(env, decoder.getFrameRate()));
+    result.Set("hasAlpha", Napi::Boolean::New(env, decoder.hasAlpha()));
+    
+    return result;
+}
 
 // 初始化
 Napi::Value Init(const Napi::CallbackInfo &info) {
@@ -120,6 +153,7 @@ Napi::Value Cleanup(const Napi::CallbackInfo &info) {
 
 Napi::Object InitModule(Napi::Env env, Napi::Object exports) {
     exports.Set("init", Napi::Function::New(env, Init));
+    exports.Set("getVideoInfo", Napi::Function::New(env, GetVideoInfo));
     exports.Set("load", Napi::Function::New(env, Load));
     exports.Set("unload", Napi::Function::New(env, Unload));
     exports.Set("setCurrentTime", Napi::Function::New(env, SetCurrentTime));

@@ -419,8 +419,9 @@
                 log(`加载配置: ${config.tracks?.length || 0} 轨道`, 'info');
                 
                 const t0 = performance.now();
-                if (!player.addon.load(jsonStr)) {
-                    throw new Error('C++ 加载失败');
+                const result = player.addon.load(jsonStr);
+                if (!result.success) {
+                    throw new Error(`C++ 加载失败: ${result.error}`);
                 }
                 const t1 = performance.now();
                 
@@ -472,14 +473,31 @@
             
             if (!filePath) return;
             
-            log(`选择文件: ${path.basename(filePath)}`, 'info');
+            // 获取视频信息
+            const videoInfo = player.addon.getVideoInfo(filePath);
+            if (!videoInfo.success) {
+                log(`加载失败: ${videoInfo.error || '未知错误'}`, 'error');
+                return;
+            }
             
+            log(`${path.basename(filePath)} (${videoInfo.width}x${videoInfo.height})`, 'info');
+            
+            // 使用视频实际尺寸创建配置
             const config = {
+                id: "video_" + Date.now(),
+                duration: videoInfo.durationMs,
+                fps: videoInfo.frameRate,
+                canvas_config: {
+                    width: videoInfo.width,
+                    height: videoInfo.height,
+                    ratio: `${videoInfo.width}:${videoInfo.height}`
+                },
                 tracks: [{
                     type: "video",
                     segments: [{
                         material_id: "mat_0",
-                        target_timerange: { start: 0, duration: 999999999 }
+                        target_timerange: { start: 0, duration: videoInfo.durationMs },
+                        source_timerange: { start: 0, duration: videoInfo.durationMs }
                     }]
                 }],
                 materials: {
