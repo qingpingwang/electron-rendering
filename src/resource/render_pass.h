@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../core/loadable.h"
 #include "../gl/shader.h"
 #include "../gl/types.h"
 #include "uniform_param.h"
@@ -21,13 +22,13 @@ struct TextureInput {
 };
 
 // 单个渲染通道
-class RenderPass {
+class RenderPass : public Loadable {
 public:
     RenderPass(RootNode *root, int pass_index);
     ~RenderPass();
 
     // 从 JSON 加载配置
-    bool load(const nlohmann::json &config, const std::string &base_path);
+    bool load(const nlohmann::json &config, const std::string &base_path) override;
 
     // 执行渲染
     // inputs: 输入 FBO 数组（支持多输入，用于转场效果）

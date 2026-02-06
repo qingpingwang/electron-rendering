@@ -119,7 +119,7 @@ void RootNode::cancelPrepare() {
 
 // ========== 加载 ==========
 
-bool RootNode::loadFromJson(const std::string &json_str) {
+std::string RootNode::loadFromJson(const std::string &json_str) {
     unload();
 
     try {
@@ -131,12 +131,13 @@ bool RootNode::loadFromJson(const std::string &json_str) {
         frame_rate_ = config.value("fps", 30.0);
 
         // 加载 Canvas 配置
-        if (config.contains("canvas_config")) {
-            auto &canvas_json = config["canvas_config"];
-            canvas_.width = canvas_json.value("width", 0);
-            canvas_.height = canvas_json.value("height", 0);
-            canvas_.ratio = canvas_json.value("ratio", "");
+        if (!config.contains("canvas_config")) {
+            return "canvas_config is required";
         }
+        auto &canvas_json = config["canvas_config"];
+        canvas_.width = canvas_json.value("width", 0);
+        canvas_.height = canvas_json.value("height", 0);
+        canvas_.ratio = canvas_json.value("ratio", "");
 
         // 加载素材
         for (int i = 0; i < MATERIAL_TYPE_COUNT; i++) {
@@ -152,9 +153,10 @@ bool RootNode::loadFromJson(const std::string &json_str) {
                 materials_[MATERIAL_TYPE_VIDEO].reserve(videos.size());
                 for (const auto &mat : videos) {
                     auto material = std::make_unique<VideoMaterial>();
-                    if (material->load(mat)) {
-                        materials_[MATERIAL_TYPE_VIDEO].emplace_back(std::move(material));
+                    if (!material->load(mat)) {
+                        return "load video material failed: " + material->getErrorMessage();
                     }
+                    materials_[MATERIAL_TYPE_VIDEO].emplace_back(std::move(material));
                 }
             }
 
@@ -164,15 +166,16 @@ bool RootNode::loadFromJson(const std::string &json_str) {
                 materials_[MATERIAL_TYPE_EFFECT].reserve(effects.size());
                 for (const auto &mat : effects) {
                     auto material = std::make_unique<EffectMaterial>();
-                    if (material->load(mat)) {
-                        materials_[MATERIAL_TYPE_EFFECT].emplace_back(std::move(material));
+                    if (!material->load(mat)) {
+                        return "load effect material failed: " + material->getErrorMessage();
                     }
+                    materials_[MATERIAL_TYPE_EFFECT].emplace_back(std::move(material));
                 }
             }
         }
 
         if (!config.contains("tracks") || !config["tracks"].is_array())
-            return false;
+            return "tracks is required";
 
         // 创建图层
         for (const auto &track : config["tracks"]) {
@@ -182,14 +185,14 @@ bool RootNode::loadFromJson(const std::string &json_str) {
             for (const auto &segment : track["segments"]) {
                 auto layer = std::make_unique<VideoLayer>(this);
                 if (!layer->load(segment))
-                    return false;
+                    return "load layer failed: " + layer->getErrorMessage();
                 layers_.emplace_back(std::move(layer));
             }
         }
 
         if (layers_.empty() || canvas_.width == 0 || canvas_.height == 0) {
             unload();
-            return false;
+            return "layers are empty";
         }
 
         // 创建 OpenGL 资源
@@ -205,14 +208,14 @@ bool RootNode::loadFromJson(const std::string &json_str) {
 
         if (!render_fbo_.isValid() || !shader_->isValid() || !quad_.isValid()) {
             unload();
-            return false;
+            return "create OpenGL resources failed";
         }
 
         cache_data_.resize(static_cast<size_t>(canvas_.width) * canvas_.height * 4);
-        return true;
+        return "";
     } catch (...) {
         unload();
-        return false;
+        return "load from json failed";
     }
 }
 

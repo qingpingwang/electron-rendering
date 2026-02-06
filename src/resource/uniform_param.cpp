@@ -24,10 +24,14 @@ UniformParam::UniformParam(std::string name, UniformType type, std::vector<float
 UniformParam::~UniformParam() {
 }
 
-bool UniformParam::load(const nlohmann::json &config) {
+bool UniformParam::load(const nlohmann::json &config, const std::string &base_path) {
     // 加载基本信息（使用 value 提供默认值）
     name_ = config.value("name", "");
     uniform_target_ = config.value("uniformTarget", "");
+    if (uniform_target_.empty() || name_.empty()) {
+        setError("name and uniform target are required");
+        return false;
+    }
 
     // 加载影响的 pass 列表
     if (config.contains("renderPassIndex")) {
@@ -76,11 +80,15 @@ bool UniformParam::load(const nlohmann::json &config) {
     } else if (type_str == "animation") {
         type_ = UniformType::Animation;
         animation_name_ = config.value("animationName", "");
-        if (uniform_target_.empty()) {
-            uniform_target_ = config.value("uniformTarget", "");
+        if (animation_name_.empty()) {
+            setError(name_ + ": animation name is required");
+            return false;
         }
     } else if (type_str == "texture") {
         type_ = UniformType::Texture;
+    } else {
+        setError(name_ + ": invalid uniform type: " + type_str);
+        return false;
     }
 
     return true;

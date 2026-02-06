@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../core/loadable.h"
 #include <nlohmann/json.hpp>
 #include <cstdint>
 #include <string>
@@ -7,7 +8,7 @@
 namespace vp {
 
 // 素材基类
-class Material {
+class Material : public Loadable {
 public:
     Material() = default;
     virtual ~Material() = default;
@@ -16,7 +17,7 @@ public:
     Material &operator=(const Material &) = delete;
 
     // 从 JSON 加载素材配置
-    virtual bool load(const nlohmann::json &material_json) = 0;
+    bool load(const nlohmann::json &config, const std::string &base_path = "") override = 0;
 
     const std::string &getId() const;
     const std::string &getPath() const;
@@ -32,7 +33,7 @@ public:
     VideoMaterial() = default;
     ~VideoMaterial() override = default;
 
-    bool load(const nlohmann::json &material_json) override;
+    bool load(const nlohmann::json &config, const std::string &base_path = "") override;
 
     int getWidth() const;
     int getHeight() const;
@@ -51,7 +52,7 @@ public:
     EffectMaterial() = default;
     ~EffectMaterial() override = default;
 
-    bool load(const nlohmann::json &material_json) override;
+    bool load(const nlohmann::json &config, const std::string &base_path = "") override;
 
     // 获取特效类型（"resource", "builtin", "lut" 等）
     const std::string &getType() const;

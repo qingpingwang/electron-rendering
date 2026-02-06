@@ -43,7 +43,7 @@ public:
     bool init();
     void cleanup();
 
-    bool loadFromJson(const std::string &json_str);
+    std::string loadFromJson(const std::string &json_str);
     void unload();
 
     void setCurrentTime(int64_t time_ms);

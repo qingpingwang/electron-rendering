@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../core/loadable.h"
 #include "../gl/types.h"
 #include <nlohmann/json.hpp>
 #include <memory>
@@ -18,7 +19,7 @@ struct QuadMesh;
 
 // 特效基类 - 处理器模式
 // 输入 FBO，输出到另一个 FBO
-class Effect {
+class Effect : public Loadable {
 public:
     Effect(RootNode *root);
     virtual ~Effect();
@@ -27,7 +28,7 @@ public:
     Effect &operator=(const Effect &) = delete;
 
     // 从 JSON 加载特效配置
-    virtual bool load(const nlohmann::json &config) = 0;
+    bool load(const nlohmann::json &config, const std::string &base_path = "") override = 0;
 
     // 应用特效：输入 FBO → 返回输出 FBO
     // input: 输入 FBO（纹理）
@@ -63,7 +64,7 @@ public:
     ~ResourceEffect() override;
 
     // 从 JSON 加载（支持 "resourcePath" 字段）
-    bool load(const nlohmann::json &config) override;
+    bool load(const nlohmann::json &config, const std::string &base_path = "") override;
 
     // 从文件夹路径直接加载
     bool loadFromFolder(const std::string &folder_path);

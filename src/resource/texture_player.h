@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../core/loadable.h"
 #include "../gl/types.h"
 #include <nlohmann/json.hpp>
 #include <cstdint>
@@ -14,13 +15,13 @@ class RootNode;
 class VideoDecoder;
 
 // 纹理播放器基类
-class TexturePlayer {
+class TexturePlayer : public Loadable {
 public:
     TexturePlayer(RootNode *root);
     virtual ~TexturePlayer();
 
     // 从配置加载
-    virtual bool load(const nlohmann::json &config, const std::string &base_path);
+    bool load(const nlohmann::json &config, const std::string &base_path) override;
 
     // 播放（获取指定时间的纹理）
     virtual gl::Texture play(int64_t time_ms) = 0;

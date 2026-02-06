@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../core/loadable.h"
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
@@ -13,13 +14,13 @@ class Shader;
 
 // 资源动画系统
 // 支持关键帧插值、repeatMode、speed/strength
-class ResourceAnimation {
+class ResourceAnimation : public Loadable {
 public:
     ResourceAnimation();
     ~ResourceAnimation();
 
     // 从 JSON 加载
-    bool load(const nlohmann::json &config);
+    bool load(const nlohmann::json &config, const std::string &base_path = "") override;
 
     // 获取指定时间、指定通道的值
     float getValueAt(int64_t time_ms, int channel) const;

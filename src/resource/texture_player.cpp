@@ -21,12 +21,14 @@ TexturePlayer::~TexturePlayer() {
 }
 
 bool TexturePlayer::load(const nlohmann::json &config, const std::string &base_path) {
+    clearError();
     name_ = config.value("name", "");
     repeat_mode_ = config.value("repeatMode", 0);
 
     const auto &pipe_array = config.value("pipe", std::vector<int>{});
     const auto &pass_array = config.value("renderPassIndex", std::vector<int>{});
     if (pipe_array.size() != pass_array.size()) {
+        setError("pipe and renderPassIndex must have the same size");
         return false;
     }
     render_pass_indices_.reserve(pipe_array.size());
@@ -36,6 +38,7 @@ bool TexturePlayer::load(const nlohmann::json &config, const std::string &base_p
 
     std::string url = config.value("url", "");
     if (url.empty()) {
+        setError("url is required");
         return false;
     }
 
@@ -44,6 +47,7 @@ bool TexturePlayer::load(const nlohmann::json &config, const std::string &base_p
 
     // 检查文件是否存在
     if (!fs::exists(file_path_)) {
+        setError("file not found: " + file_path_);
         return false;
     }
 
@@ -84,6 +88,7 @@ bool ImageTexture::loadStaticImage() {
     unsigned char *data = stbi_load(file_path_.c_str(), &width, &height, &channels, STBI_rgb_alpha);
 
     if (!data) {
+        setError("load static image failed: " + file_path_);
         return false;
     }
 
@@ -107,6 +112,7 @@ bool ImageTexture::loadGif() {
     // 读取 GIF 文件到内存
     std::ifstream file(file_path_, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
+        setError("open gif file failed: " + file_path_);
         return false;
     }
 
@@ -115,6 +121,7 @@ bool ImageTexture::loadGif() {
 
     std::vector<unsigned char> buffer(size);
     if (!file.read(reinterpret_cast<char *>(buffer.data()), size)) {
+        setError("read gif file failed: " + file_path_);
         return false;
     }
 
@@ -127,7 +134,9 @@ bool ImageTexture::loadGif() {
         &delays, &width, &height, &frames, &channels, STBI_rgb_alpha);
 
     if (!data || frames == 0) {
-        if (delays) free(delays);
+        if (delays)
+            free(delays);
+        setError("load gif failed: " + file_path_);
         return false;
     }
 
@@ -166,7 +175,8 @@ bool ImageTexture::loadGif() {
 
     // 释放 stb_image 数据
     stbi_image_free(data);
-    if (delays) free(delays);
+    if (delays)
+        free(delays);
 
     return true;
 }
@@ -174,11 +184,13 @@ bool ImageTexture::loadGif() {
 gl::Texture ImageTexture::play(int64_t time_ms) {
     // 卫语句：纹理未创建
     if (texture_.id == 0) {
+        setError("texture not created");
         return gl::Texture{};
     }
 
     // 卫语句：静态图，直接返回（无需更新）
     if (frame_data_.empty() || fps_ <= 0.0f) {
+        setError("static image or gif is empty");
         return texture_;
     }
 
@@ -229,6 +241,7 @@ bool VideoTexture::load(const nlohmann::json &config, const std::string &base_pa
     // 创建解码器
     decoder_ = std::make_unique<VideoDecoder>();
     if (!decoder_->open(file_path_)) {
+        setError("open video file failed: " + file_path_);
         return false;
     }
 
@@ -245,6 +258,7 @@ bool VideoTexture::load(const nlohmann::json &config, const std::string &base_pa
 
 gl::Texture VideoTexture::play(int64_t time_ms) {
     if (!decoder_ || texture_.id == 0) {
+        setError("decoder or texture not created");
         return gl::Texture{};
     }
 
@@ -276,6 +290,7 @@ gl::Texture VideoTexture::play(int64_t time_ms) {
     // 解码帧
     VideoFrame frame;
     if (!decoder_->decodeFrameAt(sampling_time, frame) || !frame.valid) {
+        setError("decode frame failed: " + file_path_);
         return texture_;
     }
 

@@ -13,7 +13,7 @@ public:
     VideoLayer(RootNode *root);
     ~VideoLayer() override;
 
-    bool load(const nlohmann::json &segment_json) override;
+    bool load(const nlohmann::json &config, const std::string &base_path = "") override;
 
     double getFrameRate() const;
     bool isLoaded() const;

@@ -12,7 +12,8 @@ ResourceAnimation::ResourceAnimation() :
 ResourceAnimation::~ResourceAnimation() {
 }
 
-bool ResourceAnimation::load(const nlohmann::json &config) {
+bool ResourceAnimation::load(const nlohmann::json &config, const std::string &base_path) {
+    clearError();
     // 加载基本信息（使用 value 提供默认值）
     name_ = config.value("name", "");
     channel_num_ = config.value("channelNum", 1);

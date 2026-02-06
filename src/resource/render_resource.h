@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../core/loadable.h"
 #include "../gl/types.h"
 #include "animation.h"
 #include "render_pass.h"
@@ -18,10 +19,13 @@ namespace vp {
 class RootNode;
 
 // 用于加载和执行多 pass 渲染效果
-class RenderResource {
+class RenderResource : public Loadable {
 public:
     RenderResource(RootNode *root);
     ~RenderResource();
+
+    // 实现 Loadable::load - config 应该包含 {"path": "folder_path"}
+    bool load(const nlohmann::json &config, const std::string &base_path = "") override;
 
     // 从文件夹加载资源
     bool loadFromFolder(const std::string &folder_path);

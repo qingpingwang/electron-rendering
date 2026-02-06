@@ -19,45 +19,53 @@ VideoLayer::~VideoLayer() {
     gl::destroyTexture(texture_);
 }
 
-bool VideoLayer::load(const json &segment_json) {
-    if (!root_)
+bool VideoLayer::load(const json &config, const std::string &base_path) {
+    if (!root_) {
+        setError("root node is null");
         return false;
+    }
 
     // 调用基类解析通用属性（包括获取 material_ 指针）
-    if (!Layer::load(segment_json))
+    if (!Layer::load(config, base_path))
         return false;
 
     // 检查素材指针
-    if (!material_)
+    if (!material_) {
+        setError("material is null");
         return false;
+    }
 
     // 获取视频路径
     const std::string &video_path = material_->getPath();
-    if (video_path.empty())
+    if (video_path.empty()) {
+        setError("video path is empty");
         return false;
+    }
 
     // 打开视频文件
-    if (!decoder_->open(video_path))
+    if (!decoder_->open(video_path)) {
+        setError("open video file failed: " + video_path);
         return false;
+    }
 
     video_width_ = decoder_->getWidth();
     video_height_ = decoder_->getHeight();
     video_duration_ms_ = decoder_->getDurationMs();
 
-    // 解析源视频时间范围
-    if (segment_json.contains("source_timerange")) {
-        source_start_ms_ = segment_json["source_timerange"].value("start", 0);
-        source_duration_ms_ = segment_json["source_timerange"].value("duration", video_duration_ms_);
-    } else {
-        // 如果没有指定，默认使用整个视频
-        source_start_ms_ = 0;
-        source_duration_ms_ = video_duration_ms_;
+    // 解析源视频时间范围，必须有
+    if (!config.contains("source_timerange")) {
+        setError("source_timerange is required");
+        return false;
     }
+    source_start_ms_ = config["source_timerange"].value("start", 0);
+    source_duration_ms_ = config["source_timerange"].value("duration", video_duration_ms_);
 
     // 创建纹理
     texture_ = gl::createTexture(video_width_, video_height_);
-    if (!texture_.isValid())
+    if (!texture_.isValid()) {
+        setError("create texture failed");
         return false;
+    }
 
     return true;
 }

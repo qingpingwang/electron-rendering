@@ -15,11 +15,13 @@ RenderPass::~RenderPass() {
 }
 
 bool RenderPass::load(const nlohmann::json &config, const std::string &base_path) {
+    clearError();
     // 1. 加载 FBO 大小比例（默认 1.0）
     fbo_size_ratio_ = config.value("fboSize", 1.0f);
 
     // 2. 加载 shader（必须，同时处理内部 uniform）
     if (!config.contains("shader")) {
+        setError("shader is required");
         return false;
     }
     if (!loadShader(config, base_path)) {
@@ -45,11 +47,13 @@ bool RenderPass::load(const nlohmann::json &config, const std::string &base_path
 
 bool RenderPass::loadShader(const nlohmann::json &config, const std::string &base_path) {
     if (!config.contains("shader")) {
+        setError("shader is required");
         return false;
     }
 
     const auto &shader_config = config["shader"];
     if (!shader_config.contains("vert") || !shader_config.contains("frag")) {
+        setError("vert and frag are required");
         return false;
     }
 
@@ -70,6 +74,7 @@ bool RenderPass::loadShader(const nlohmann::json &config, const std::string &bas
     std::string frag_source = read_file(frag_path);
 
     if (vert_source.empty() || frag_source.empty()) {
+        setError("vert or frag is empty");
         return false;
     }
 
@@ -78,11 +83,12 @@ bool RenderPass::loadShader(const nlohmann::json &config, const std::string &bas
 
     // 检查编译错误
     if (!shader_->getError().empty()) {
-        // 有错误但不打印，外部可通过 getError() 获取
+        setError(shader_->getError());
         return false;
     }
 
     if (!shader_->isValid()) {
+        setError("shader is invalid");
         return false;
     }
 

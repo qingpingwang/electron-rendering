@@ -33,9 +33,10 @@ ResourceEffect::ResourceEffect(RootNode *root) :
 
 ResourceEffect::~ResourceEffect() = default;
 
-bool ResourceEffect::load(const nlohmann::json &config) {
+bool ResourceEffect::load(const nlohmann::json &config, const std::string &base_path) {
     // 从 JSON 加载资源路径
     if (!config.contains("resourcePath")) {
+        setError("resourcePath is required");
         return false;
     }
 
@@ -45,11 +46,13 @@ bool ResourceEffect::load(const nlohmann::json &config) {
 
 bool ResourceEffect::loadFromFolder(const std::string &folder_path) {
     if (!resource_) {
+        setError("render resource not initialized");
         return false;
     }
 
     // 直接加载 RenderResource
     if (!resource_->loadFromFolder(folder_path)) {
+        setError("load resource failed: " + resource_->getErrorMessage());
         return false;
     }
 

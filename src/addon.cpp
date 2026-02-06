@@ -28,7 +28,15 @@ Napi::Value Load(const Napi::CallbackInfo &info) {
     }
 
     std::string json_str = info[0].As<Napi::String>().Utf8Value();
-    return Napi::Boolean::New(env, g_root->loadFromJson(json_str));
+    std::string error = g_root->loadFromJson(json_str);
+    
+    // 返回结果对象 { success: bool, error?: string }
+    Napi::Object result = Napi::Object::New(env);
+    result.Set("success", Napi::Boolean::New(env, error.empty()));
+    if (!error.empty()) {
+        result.Set("error", Napi::String::New(env, error));
+    }
+    return result;
 }
 
 // 卸载

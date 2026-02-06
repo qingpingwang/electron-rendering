@@ -94,8 +94,9 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    if (!root.loadFromJson(json_str)) {
-        std::cerr << "Failed to load RootNode from JSON" << std::endl;
+    std::string error_message = root.loadFromJson(json_str);
+    if (!error_message.empty()) {
+        std::cerr << "Failed to load RootNode from JSON: " << error_message << std::endl;
         return 1;
     }
 

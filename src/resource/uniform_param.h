@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../core/loadable.h"
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
@@ -22,7 +23,7 @@ enum class UniformType {
 };
 
 // Uniform 参数
-class UniformParam {
+class UniformParam : public Loadable {
 public:
     UniformParam();
 
@@ -36,7 +37,7 @@ public:
 
     ~UniformParam();
 
-    bool load(const nlohmann::json &config);
+    bool load(const nlohmann::json &config, const std::string &base_path = "") override;
 
     UniformType getType() const;
     const std::string &getName() const;          // 外部名称

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../core/loadable.h"
 #include "../effect/effect.h"
 #include "../gl/types.h"
 #include <nlohmann/json.hpp>
@@ -14,7 +15,7 @@ class RootNode;
 class Material;
 
 // 图层基类
-class Layer {
+class Layer : public Loadable {
 public:
     Layer(RootNode *root);
     virtual ~Layer() = default;
@@ -23,7 +24,7 @@ public:
     Layer &operator=(const Layer &) = delete;
 
     // 从 JSON 加载图层基础配置（解析通用属性）
-    virtual bool load(const nlohmann::json &segment_json);
+    bool load(const nlohmann::json &config, const std::string &base_path = "") override;
 
     // 绘制图层到 render_fbo_（基类实现，模板方法）
     // 流程：检查特效 → 选择目标 FBO → renderContent() → 应用特效 → blit 到 render_fbo_

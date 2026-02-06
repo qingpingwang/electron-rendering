@@ -1,6 +1,7 @@
 #include "layer.h"
 #include "../engine/root_node.h"
 #include "../effect/effect.h"
+#include "../resource/render_resource.h"
 
 using json = nlohmann::json;
 
@@ -10,27 +11,34 @@ Layer::Layer(RootNode *root) :
     root_(root) {
 }
 
-bool Layer::load(const json &segment_json) {
-    if (!root_)
+bool Layer::load(const json &config, const std::string &base_path) {
+    clearError();
+    if (!root_) {
+        setError("root node is null");
         return false;
+    }
 
     // 解析基础属性
-    name_ = segment_json.value("id", "layer");
+    name_ = config.value("id", "layer");
 
     // 解析时间范围
-    if (segment_json.contains("target_timerange")) {
-        start_time_ms_ = segment_json["target_timerange"].value("start", 0);
-        int64_t duration = segment_json["target_timerange"].value("duration", 0);
-        end_time_ms_ = start_time_ms_ + duration;
+    if (!config.contains("target_timerange")) {
+        setError("target_timerange is required");
+        return false;
     }
+    start_time_ms_ = config["target_timerange"].value("start", 0);
+    int64_t duration = config["target_timerange"].value("duration", 0);
+    end_time_ms_ = start_time_ms_ + duration;
 
     // 获取素材指针
-    std::string material_id = segment_json.value("material_id", "");
-    if (!material_id.empty()) {
-        material_ = root_->getMaterial(MATERIAL_TYPE_VIDEO, material_id);
+    std::string material_id = config.value("material_id", "");
+    if (material_id.empty()) {
+        setError("material_id is required");
+        return false;
     }
+    material_ = root_->getMaterial(MATERIAL_TYPE_VIDEO, material_id);
 
-    std::vector<std::string> effect_ids = segment_json.value("extra_material_refs", std::vector<std::string>{});
+    std::vector<std::string> effect_ids = config.value("extra_material_refs", std::vector<std::string>{});
     effect_materials_.reserve(effect_ids.size());
     for (const auto &effect_id : effect_ids) {
         effect_materials_.emplace_back(root_->getMaterial(MATERIAL_TYPE_EFFECT, effect_id));
@@ -40,10 +48,13 @@ bool Layer::load(const json &segment_json) {
     effects_.reserve(effect_materials_.size());
     for (const auto &effect_material : effect_materials_) {
         std::unique_ptr<ResourceEffect> resource_effect = std::make_unique<ResourceEffect>(root_);
-        resource_effect->loadFromFolder(static_cast<EffectMaterial *>(effect_material)->getResourcePath());
+        std::string resource_path = static_cast<EffectMaterial *>(effect_material)->getResourcePath();
+        if (!resource_effect->loadFromFolder(resource_path)) {
+            setError("load effect[" + resource_path + "] failed: " + resource_effect->getRenderResource()->getErrorMessage());
+            return false;
+        }
         effects_.emplace_back(std::move(resource_effect));
     }
-
     return true;
 }
 
@@ -106,12 +117,14 @@ bool Layer::draw() {
 
     // 渲染内容到临时 FBO
     if (!renderContent(temp_fbo)) {
+        setError("render content failed");
         root_->getFBOPool()->release(temp_fbo);
         return false;
     }
 
     gl::FBO final_effect_output = applyEffects(temp_fbo);
     if (!final_effect_output.isValid()) {
+        setError("apply effects failed");
         root_->getFBOPool()->release(temp_fbo);
         return false;
     }

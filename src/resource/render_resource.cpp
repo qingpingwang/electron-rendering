@@ -16,6 +16,21 @@ RenderResource::RenderResource(RootNode *root) :
 RenderResource::~RenderResource() {
 }
 
+bool RenderResource::load(const nlohmann::json &config, const std::string &base_path) {
+    std::string folder_path = config.value("path", "");
+    if (folder_path.empty()) {
+        setError("path is required");
+        return false;
+    }
+    
+    // 如果有 base_path，拼接路径
+    if (!base_path.empty()) {
+        folder_path = base_path + "/" + folder_path;
+    }
+    
+    return loadFromFolder(folder_path);
+}
+
 bool RenderResource::loadFromFolder(const std::string &folder_path) {
     base_path_ = folder_path;
 
@@ -28,6 +43,7 @@ bool RenderResource::loadConfig(const std::string &config_path) {
     // 读取 JSON 文件
     std::ifstream file(config_path);
     if (!file.is_open()) {
+        setError("config file not found: " + config_path);
         return false;
     }
 
@@ -35,29 +51,29 @@ bool RenderResource::loadConfig(const std::string &config_path) {
     try {
         file >> config;
     } catch (...) {
+        setError("load config failed: " + config_path);
         return false;
     }
 
     // 加载基本信息（使用 value 提供默认值）
     name_ = config.value("name", "");
     id_ = config.value("id", "");
+
+    if (name_.empty() || id_.empty()) {
+        setError("name and id are required");
+        return false;
+    }
+
     desc_ = config.value("desc", "");
     format_ = config.value("format", "effect");
     resource_duration_ms_ = config.value("suggestionDuration", 1000LL);
     // 加载各个组件
-    if (!loadRenderPasses(config)) {
-        return false;
-    }
-
-    loadAnimations(config);
-    loadUniforms(config);
-    loadTextures(config);
-
-    return true;
+    return loadRenderPasses(config) && loadAnimations(config) && loadUniforms(config) && loadTextures(config);
 }
 
 bool RenderResource::loadRenderPasses(const nlohmann::json &config) {
     if (!config.contains("renderPass")) {
+        setError("renderPass is required");
         return false;
     }
 
@@ -69,12 +85,18 @@ bool RenderResource::loadRenderPasses(const nlohmann::json &config) {
         const auto &pass_config = pass_array[i];
         auto pass = std::make_unique<RenderPass>(root_, i);
         if (!pass->load(pass_config, base_path_)) {
+            setError("renderPass[" + std::to_string(i) + "] load failed: " + pass->getErrorMessage());
             return false;
         }
         render_passes_.emplace_back(std::move(pass));
     }
 
-    return !render_passes_.empty();
+    if (render_passes_.empty()) {
+        setError("render resource get zero render passes");
+        return false;
+    }
+
+    return true;
 }
 
 bool RenderResource::loadAnimations(const nlohmann::json &config) {
@@ -85,9 +107,10 @@ bool RenderResource::loadAnimations(const nlohmann::json &config) {
     const auto &anim_array = config["animation"];
     animations_.reserve(anim_array.size());
 
-    for (const auto &anim_config : anim_array) {
+    for (size_t i = 0; i < anim_array.size(); ++i) {
         auto anim = std::make_unique<ResourceAnimation>();
-        if (!anim->load(anim_config)) {
+        if (!anim->load(anim_array[i])) {
+            setError("animation[" + std::to_string(i) + "] load failed: " + anim->getErrorMessage());
             return false;
         }
         animations_.emplace_back(std::move(anim));
@@ -104,9 +127,11 @@ bool RenderResource::loadUniforms(const nlohmann::json &config) {
     const auto &uniform_array = config["uniform"];
     uniforms_.reserve(uniform_array.size());
 
-    for (const auto &uniform_config : uniform_array) {
+    for (size_t i = 0; i < uniform_array.size(); ++i) {
+        const auto &uniform_config = uniform_array[i];
         auto uniform = std::make_unique<UniformParam>();
         if (!uniform->load(uniform_config)) {
+            setError("uniform[" + std::to_string(i) + "] load failed: " + uniform->getErrorMessage());
             return false;
         }
         updateUniformToShaders(uniform.get());
@@ -122,7 +147,8 @@ bool RenderResource::loadTextures(const nlohmann::json &config) {
     }
 
     const auto &texture_array = config["texture"];
-    for (const auto &tex_config : texture_array) {
+    for (size_t i = 0; i < texture_array.size(); ++i) {
+        const auto &tex_config = texture_array[i];
         // 检测类型（通过文件扩展名）
         std::string url = tex_config.value("url", "");
         std::string ext = fs::path(url).extension().string();
@@ -136,6 +162,7 @@ bool RenderResource::loadTextures(const nlohmann::json &config) {
         std::unique_ptr<TexturePlayer> player = is_video ? static_cast<std::unique_ptr<TexturePlayer>>(std::make_unique<VideoTexture>(root_)) : static_cast<std::unique_ptr<TexturePlayer>>(std::make_unique<ImageTexture>(root_));
 
         if (!player->load(tex_config, base_path_)) {
+            setError("texture[" + std::to_string(i) + "] load failed: " + player->getErrorMessage());
             return false;
         }
         textures_.emplace_back(std::move(player));
@@ -146,6 +173,7 @@ bool RenderResource::loadTextures(const nlohmann::json &config) {
 
 gl::FBO RenderResource::render(const std::vector<gl::FBO> &inputs, int64_t time_ms) {
     if (render_passes_.empty() || !root_ || inputs.empty()) {
+        setError("render resource is not valid");
         return gl::FBO{};
     }
 
@@ -239,6 +267,7 @@ bool RenderResource::setFloatParam(const std::string &name, float value) {
         updateUniformToShaders(uniform.get());
         return true;
     }
+    setError("set float param failed: " + name);
     return false;
 }
 
@@ -257,6 +286,7 @@ bool RenderResource::setVecParam(const std::string &name, const std::vector<floa
         updateUniformToShaders(uniform.get());
         return true;
     }
+    setError("set vec param failed: " + name);
     return false;
 }
 
@@ -270,6 +300,7 @@ bool RenderResource::setBoolParam(const std::string &name, bool value) {
         updateUniformToShaders(uniform.get());
         return true;
     }
+    setError("set bool param failed: " + name);
     return false;
 }
 
