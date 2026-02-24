@@ -36,7 +36,7 @@ bool Layer::load(const json &config, const std::string &base_path) {
         setError("material_id is required");
         return false;
     }
-    material_ = root_->getMaterial(MATERIAL_TYPE_VIDEO, material_id);
+    material_ = root_->getMaterial(getMaterialType(), material_id);
 
     std::vector<std::string> effect_ids = config.value("extra_material_refs", std::vector<std::string>{});
     effect_materials_.reserve(effect_ids.size());

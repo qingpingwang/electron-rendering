@@ -42,6 +42,16 @@ pkg_check_modules(FFMPEG REQUIRED
     libswscale
 )
 
+# ========== 三方库 ==========
+
+# Skia 2D Graphics Library（预编译静态库）
+set(SKIA_ROOT ${CMAKE_SOURCE_DIR}/third_party/skia)
+set(SKIA_LIB ${SKIA_ROOT}/out/Release/libskia.a)
+
+if(NOT EXISTS ${SKIA_LIB})
+    message(WARNING "⚠️ Skia 未编译 (${SKIA_LIB})，TextLayer 将不可用")
+endif()
+
 # ========== 源文件 ==========
 
 # 使用递归扫描自动收集源文件（使用 CMake 内置变量）
@@ -60,6 +70,9 @@ list(FILTER CORE_SOURCES EXCLUDE REGEX ".*/addon\\.cpp$")
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_backup.*")
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*\\.bak$")
 
+# 排除 Skia 源码（已预编译为静态库）
+list(FILTER THIRD_PARTY_SOURCES EXCLUDE REGEX ".*/skia/.*")
+
 # ========== 核心库（OBJECT 库，编译一次，多处使用）==========
 
 # 创建 OBJECT 库：核心渲染引擎
@@ -73,10 +86,13 @@ target_include_directories(video_player_core PUBLIC
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/third_party
     ${FFMPEG_INCLUDE_DIRS}
+    ${SKIA_ROOT}
 )
 
 target_compile_definitions(video_player_core PUBLIC
     $<$<PLATFORM_ID:Darwin>:GL_SILENCE_DEPRECATION>
+    SK_GL
+    SK_RELEASE
 )
 
 target_compile_options(video_player_core PRIVATE 
@@ -120,6 +136,8 @@ if(APPLE)
     find_library(CF_LIB CoreFoundation REQUIRED)
     find_library(COREVIDEO_LIB CoreVideo REQUIRED)
     find_library(IOSURFACE_LIB IOSurface REQUIRED)
+    find_library(CORE_GRAPHICS_LIB CoreGraphics REQUIRED)
+    find_library(CORE_TEXT_LIB CoreText REQUIRED)
     
     target_link_libraries(${PROJECT_NAME} PRIVATE
         ${OPENGL_LIB}
@@ -127,8 +145,15 @@ if(APPLE)
         ${CF_LIB}
         ${COREVIDEO_LIB}
         ${IOSURFACE_LIB}
+        ${CORE_GRAPHICS_LIB}
+        ${CORE_TEXT_LIB}
         ${FFMPEG_LIBRARIES}
     )
+
+    # Skia 静态库
+    if(EXISTS ${SKIA_LIB})
+        target_link_libraries(${PROJECT_NAME} PRIVATE ${SKIA_LIB})
+    endif()
     target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIRS})
     
     set_target_properties(${PROJECT_NAME} PROPERTIES

@@ -22,12 +22,12 @@ bool RenderResource::load(const nlohmann::json &config, const std::string &base_
         setError("path is required");
         return false;
     }
-    
+
     // 如果有 base_path，拼接路径
     if (!base_path.empty()) {
         folder_path = base_path + "/" + folder_path;
     }
-    
+
     return loadFromFolder(folder_path);
 }
 

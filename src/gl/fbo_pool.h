@@ -64,5 +64,5 @@ private:
     std::map<std::string, FBOCache> caches_;
 };
 
-} // namespace gl
-} // namespace vp
+}
+} // namespace vp::gl

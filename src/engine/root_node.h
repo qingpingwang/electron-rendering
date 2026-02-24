@@ -1,29 +1,23 @@
 #pragma once
 
-#include "../layer/layer.h"
-#include "../layer/video_layer.h"
 #include "../material/material.h"
 #include "../gl/functions.h"
-#include "../gl/shader.h"
 #include "../gl/fbo_pool.h"
-#include <algorithm>
 #include <atomic>
-#include <condition_variable>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
-#include <unordered_map>
 #include <vector>
+
+class GrDirectContext;
+
+namespace gl { class Shader; }
 
 namespace vp {
 
-// 素材类型索引（固定数组下标）
-enum MaterialType {
-    MATERIAL_TYPE_VIDEO = 0,
-    MATERIAL_TYPE_EFFECT = 1,
-    MATERIAL_TYPE_COUNT = 2 // 总数
-};
+class Layer;
 
 // Canvas 配置结构体
 struct CanvasConfig {
@@ -63,6 +57,9 @@ public:
     const gl::QuadMesh *getQuad() const;
     int64_t getCurrentTime() const;
 
+    // Skia 上下文（文字渲染用，共享 CGL 上下文）
+    GrDirectContext *getSkiaContext() const;
+
     // 获取 FBO 缓存池
     gl::FBOPool *getFBOPool();
 
@@ -91,6 +88,9 @@ private:
     gl::FBO render_fbo_;   // 主渲染 FBO（从池中获取，不释放）
     std::unique_ptr<gl::Shader> shader_;
     gl::QuadMesh quad_;
+
+    // Skia（文字渲染，共享 CGL 上下文）
+    GrDirectContext *skia_context_ = nullptr;
 
     // 图层
     std::vector<std::unique_ptr<Layer>> layers_;

@@ -102,4 +102,96 @@ const nlohmann::json &EffectMaterial::getConfig() const {
     return config_;
 }
 
+// ========== TextMaterial 实现 ==========
+
+static bool parseStyleRun(const json &style, TextStyleRun &run) {
+    if (!style.contains("range") || !style["range"].is_array() || style["range"].size() < 2)
+        return false;
+
+    run.range_start = style["range"][0].get<int>();
+    run.range_end = style["range"][1].get<int>();
+    run.font_size = style.value("size", 24.0f);
+
+    if (style.contains("font")) {
+        run.font_id = style["font"].value("id", "");
+        run.font_path = style["font"].value("path", "");
+    }
+
+    if (style.contains("fill")) {
+        const auto &fill = style["fill"];
+        float fill_alpha = fill.value("alpha", 1.0f);
+
+        if (fill.contains("content") && fill["content"].contains("solid")) {
+            const auto &solid = fill["content"]["solid"];
+            float solid_alpha = solid.value("alpha", 1.0f);
+            run.alpha = fill_alpha * solid_alpha;
+
+            if (solid.contains("color") && solid["color"].is_array()) {
+                const auto &c = solid["color"];
+                if (c.size() > 0) run.color_r = c[0].get<float>();
+                if (c.size() > 1) run.color_g = c[1].get<float>();
+                if (c.size() > 2) run.color_b = c[2].get<float>();
+            }
+        }
+    }
+
+    return true;
+}
+
+bool TextMaterial::load(const json &config, const std::string &base_path) {
+    id_ = config.value("id", "");
+    if (id_.empty()) {
+        setError("text material: id is required");
+        return false;
+    }
+
+    alignment_ = static_cast<TextAlignment>(config.value("alignment", 0));
+
+    std::string content_str = config.value("content", "");
+    if (content_str.empty()) {
+        setError("text material[" + id_ + "]: content is required");
+        return false;
+    }
+
+    json content;
+    try {
+        content = json::parse(content_str);
+    } catch (const json::parse_error &e) {
+        setError("text material[" + id_ + "]: invalid content JSON: " + std::string(e.what()));
+        return false;
+    }
+
+    text_ = content.value("text", "");
+
+    if (content.contains("styles") && content["styles"].is_array()) {
+        const auto &styles = content["styles"];
+        style_runs_.reserve(styles.size());
+        for (const auto &s : styles) {
+            TextStyleRun run;
+            if (!parseStyleRun(s, run)) {
+                setError("text material[" + id_ + "]: invalid style run");
+                return false;
+            }
+            style_runs_.push_back(std::move(run));
+        }
+    }
+
+    if (style_runs_.empty()) {
+        setError("text material[" + id_ + "]: no style runs");
+        return false;
+    }
+
+    return true;
+}
+
+const std::string &TextMaterial::getText() const {
+    return text_;
+}
+TextAlignment TextMaterial::getAlignment() const {
+    return alignment_;
+}
+const std::vector<TextStyleRun> &TextMaterial::getStyleRuns() const {
+    return style_runs_;
+}
+
 } // namespace vp

@@ -3,6 +3,7 @@
 #include "../core/loadable.h"
 #include "../effect/effect.h"
 #include "../gl/types.h"
+#include "../material/material.h"
 #include <nlohmann/json.hpp>
 #include <cstdint>
 #include <memory>
@@ -12,7 +13,6 @@
 namespace vp {
 
 class RootNode;
-class Material;
 
 // 图层基类
 class Layer : public Loadable {
@@ -41,6 +41,8 @@ protected:
     // 渲染内容（子类实现具体绘制逻辑）
     // fbo: 当前要绘制到的目标 FBO
     virtual bool renderContent(const gl::FBO &fbo) = 0;
+
+    virtual MaterialType getMaterialType() const { return MATERIAL_TYPE_VIDEO; }
 
     // 应用特效链（基类实现）
     // 输入 FBO，返回特效处理后的 FBO

@@ -28,6 +28,25 @@
                     ]
                 }
             ]
+        },
+        {
+            "id": "track_text_0",
+            "type": "text",
+            "segments": [
+                {
+                    "id": "segment_1",
+                    "material_id": "material_text_0",
+                    "target_timerange": {
+                        "start": 0,
+                        "duration": 5000
+                    },
+                    "source_timerange": {
+                        "start": 0,
+                        "duration": 5000
+                    },
+                    "extra_material_refs": []
+                }
+            ]
         }
     ],
     "materials": {
@@ -45,6 +64,13 @@
                 "id": "effect_0",
                 "type": "resource",
                 "resource_path": "./test/resources/sprint_effect"
+            }
+        ],
+        "texts": [
+            {
+                "alignment": 1,
+                "content": "{\"styles\":[{\"fill\":{\"alpha\":1,\"content\":{\"render_type\":\"solid\",\"solid\":{\"alpha\":1,\"color\":[1,1,1]}}},\"font\":{\"id\":\"\",\"path\":\"/Applications/VideoFusion-macOS.app/Contents/Resources/Font/SystemFont/zh-hans.ttf\"},\"range\":[0,2],\"size\":200},{\"fill\":{\"alpha\":1,\"content\":{\"render_type\":\"solid\",\"solid\":{\"alpha\":1,\"color\":[1,0,0]}}},\"font\":{\"id\":\"\",\"path\":\"/Applications/VideoFusion-macOS.app/Contents/Resources/Font/SystemFont/zh-hans.ttf\"},\"range\":[2,4],\"size\":150}],\"text\":\"默认文本\"}",
+                "id": "material_text_0"
             }
         ]
     }

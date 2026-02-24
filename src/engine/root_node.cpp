@@ -1,8 +1,15 @@
 #include "root_node.h"
+#include "../layer/layer.h"
+#include "../layer/video_layer.h"
+#include "../layer/text_layer.h"
+#include "../gl/shader.h"
 #include <algorithm>
 #include <cstring>
 #include <nlohmann/json.hpp>
-#include <unordered_map>
+
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/gl/GrGLDirectContext.h"
+#include "include/gpu/ganesh/gl/GrGLInterface.h"
 
 using json = nlohmann::json;
 
@@ -24,7 +31,20 @@ RootNode::~RootNode() {
 }
 
 bool RootNode::init() {
-    return gl::initContext(gl_ctx_);
+    if (!gl::initContext(gl_ctx_))
+        return false;
+
+    // 在同一个 CGL 上下文上创建 Skia GPU 上下文（用于文字渲染）
+    gl::makeCurrent(gl_ctx_);
+    auto gl_interface = GrGLMakeNativeInterface();
+    if (gl_interface) {
+        auto ctx = GrDirectContexts::MakeGL(gl_interface);
+        if (ctx) {
+            skia_context_ = ctx.release();
+        }
+    }
+
+    return true;
 }
 
 void RootNode::cleanup() {
@@ -36,6 +56,12 @@ void RootNode::cleanup() {
 
     // 清空 FBO 池（会自动清理所有 FBO，包括 render_fbo_）
     fbo_pool_.clear();
+
+    if (skia_context_) {
+        skia_context_->abandonContext();
+        skia_context_->unref();
+        skia_context_ = nullptr;
+    }
 
     gl::destroyContext(gl_ctx_);
 }
@@ -172,6 +198,19 @@ std::string RootNode::loadFromJson(const std::string &json_str) {
                     materials_[MATERIAL_TYPE_EFFECT].emplace_back(std::move(material));
                 }
             }
+
+            // 加载文字素材
+            if (materials_json.contains("texts")) {
+                const auto &texts = materials_json["texts"];
+                materials_[MATERIAL_TYPE_TEXT].reserve(texts.size());
+                for (const auto &mat : texts) {
+                    auto material = std::make_unique<TextMaterial>();
+                    if (!material->load(mat)) {
+                        return "load text material failed: " + material->getErrorMessage();
+                    }
+                    materials_[MATERIAL_TYPE_TEXT].emplace_back(std::move(material));
+                }
+            }
         }
 
         if (!config.contains("tracks") || !config["tracks"].is_array())
@@ -179,12 +218,18 @@ std::string RootNode::loadFromJson(const std::string &json_str) {
 
         // 创建图层
         for (const auto &track : config["tracks"]) {
-            if (track.value("type", "") != "video" || !track.contains("segments"))
+            std::string track_type = track.value("type", "");
+            if (!track.contains("segments"))
                 continue;
 
+            std::unique_ptr<Layer> layer = nullptr;
             for (const auto &segment : track["segments"]) {
-                auto layer = std::make_unique<VideoLayer>(this);
-                if (!layer->load(segment))
+                if (track_type == "video") {
+                    layer = std::make_unique<VideoLayer>(this);
+                } else if (track_type == "text") {
+                    layer = std::make_unique<TextLayer>(this);
+                }
+                if (!layer || !layer->load(segment))
                     return "load layer failed: " + layer->getErrorMessage();
                 layers_.emplace_back(std::move(layer));
             }
@@ -318,6 +363,10 @@ const gl::QuadMesh *RootNode::getQuad() const {
 
 int64_t RootNode::getCurrentTime() const {
     return current_time_ms_;
+}
+
+GrDirectContext *RootNode::getSkiaContext() const {
+    return skia_context_;
 }
 
 gl::FBOPool *RootNode::getFBOPool() {

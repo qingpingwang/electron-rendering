@@ -18,14 +18,23 @@ pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET
 # 注意：测试直接使用父目录的 video_player_core OBJECT 库
 # 无需重复编译源文件！
 
+# Skia 路径配置（测试也需要链接 Skia）
+set(SKIA_ROOT ${CMAKE_SOURCE_DIR}/third_party/skia)
+set(SKIA_LIB ${SKIA_ROOT}/out/Release/libskia.a)
+
 # 通用链接库
 set(COMMON_LIBRARIES
     PkgConfig::FFMPEG
     "-framework OpenGL"
     "-framework CoreFoundation"
     "-framework CoreGraphics"
+    "-framework CoreText"
     "-framework AppKit"
 )
+
+if(EXISTS ${SKIA_LIB})
+    list(APPEND COMMON_LIBRARIES ${SKIA_LIB})
+endif()
 
 # ==================== 测试 1: FBO Pool 测试 ====================
 add_executable(fbo_pool_test
@@ -74,10 +83,6 @@ target_link_libraries(video_render_test PRIVATE
 # ==================== 测试 5: Skia 验证 Demo ====================
 # 查找 GLFW
 pkg_check_modules(GLFW REQUIRED glfw3)
-
-# Skia 路径配置
-set(SKIA_ROOT ${CMAKE_SOURCE_DIR}/third_party/skia)
-set(SKIA_LIB ${SKIA_ROOT}/out/Release/libskia.a)
 
 # 检查 Skia 是否已编译
 if(NOT EXISTS ${SKIA_LIB})
@@ -137,10 +142,15 @@ add_custom_target(run_tests
     COMMAND resource_loader_test ${CMAKE_SOURCE_DIR}/test || true
     COMMAND echo ""
     COMMAND echo "=========================================="
+    COMMAND echo "Running Decoder Test..."
+    COMMAND echo "=========================================="
+    COMMAND decoder_test || true
+    COMMAND echo ""
+    COMMAND echo "=========================================="
     COMMAND echo "Running Video Render Test..."
     COMMAND echo "=========================================="
     COMMAND video_render_test || true
     COMMAND echo ""
-    DEPENDS fbo_pool_test resource_loader_test video_render_test
+    DEPENDS fbo_pool_test resource_loader_test decoder_test video_render_test
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/test
 )
