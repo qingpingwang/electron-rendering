@@ -71,6 +71,59 @@ target_link_libraries(video_render_test PRIVATE
     ${COMMON_LIBRARIES}
 )
 
+# ==================== 测试 5: Skia 验证 Demo ====================
+# 查找 GLFW
+pkg_check_modules(GLFW REQUIRED glfw3)
+
+# Skia 路径配置
+set(SKIA_ROOT ${CMAKE_SOURCE_DIR}/third_party/skia)
+set(SKIA_LIB ${SKIA_ROOT}/out/Release/libskia.a)
+
+# 检查 Skia 是否已编译
+if(NOT EXISTS ${SKIA_LIB})
+    message(WARNING "❌ Skia 未编译，跳过 skia_demo")
+else()
+    add_executable(skia_demo
+        skia_demo/main.cpp
+    )
+
+    target_include_directories(skia_demo PRIVATE
+        ${SKIA_ROOT}
+        ${GLFW_INCLUDE_DIRS}
+    )
+
+    target_link_directories(skia_demo PRIVATE
+        ${GLFW_LIBRARY_DIRS}
+    )
+
+    target_link_libraries(skia_demo PRIVATE
+        ${SKIA_LIB}
+        ${GLFW_LDFLAGS}
+    )
+
+    target_compile_definitions(skia_demo PRIVATE
+        SK_GL
+        SK_RELEASE
+    )
+
+    # macOS 系统框架
+    if(APPLE)
+        find_library(CORE_FOUNDATION CoreFoundation REQUIRED)
+        find_library(CORE_GRAPHICS CoreGraphics REQUIRED)
+        find_library(CORE_TEXT CoreText REQUIRED)
+        find_library(OPENGL_FRAMEWORK OpenGL REQUIRED)
+        
+        target_link_libraries(skia_demo PRIVATE
+            ${CORE_FOUNDATION}
+            ${CORE_GRAPHICS}
+            ${CORE_TEXT}
+            ${OPENGL_FRAMEWORK}
+        )
+    endif()
+
+    message(STATUS "✅ Skia demo 已配置")
+endif()
+
 # ==================== 自定义目标：运行所有测试 ====================
 add_custom_target(run_tests
     COMMAND echo "=========================================="
@@ -87,6 +140,7 @@ add_custom_target(run_tests
     COMMAND echo "Running Video Render Test..."
     COMMAND echo "=========================================="
     COMMAND video_render_test || true
+    COMMAND echo ""
     DEPENDS fbo_pool_test resource_loader_test video_render_test
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/test
 )
