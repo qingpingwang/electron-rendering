@@ -72,6 +72,9 @@ public:
     // 按类型获取素材列表（直接数组访问，零开销）
     const std::vector<std::unique_ptr<Material>> &getMaterialsByType(MaterialType type) const;
 
+    // 获取图层列表
+    const std::vector<std::unique_ptr<Layer>> &getLayers() const;
+
 private:
     // 渲染一帧
     bool renderFrame(int64_t time_ms, uint8_t *out_buffer);

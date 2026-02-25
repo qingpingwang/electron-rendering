@@ -390,4 +390,8 @@ const std::vector<std::unique_ptr<Material>> &RootNode::getMaterialsByType(Mater
     return materials_[type];
 }
 
+const std::vector<std::unique_ptr<Layer>> &RootNode::getLayers() const {
+    return layers_;
+}
+
 } // namespace vp

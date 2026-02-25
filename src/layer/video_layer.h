@@ -20,6 +20,7 @@ public:
 
 protected:
     bool renderContent(const gl::FBO &fbo) override;
+    MaterialType getMaterialType() const override { return MATERIAL_TYPE_VIDEO; }
 
 private:
     // 计算当前应该显示的帧时间（带线性插值对齐到帧边界）

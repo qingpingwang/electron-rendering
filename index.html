@@ -229,7 +229,8 @@
         
         // ========== 播放器状态 ==========
         const player = {
-            addon: null,
+            addon: null,  // native module
+            root: null,   // RootWrap instance
             canvas: null,
             ctx: null,
             isPlaying: false,
@@ -283,13 +284,13 @@
 
         // ========== 渲染 ==========
         function render() {
-            if (!player.addon) return;
+            if (!player.root) return;
             
             const t0 = performance.now();
             
             // C++ 解码 + GPU 渲染
-            player.addon.setCurrentTime(Math.floor(player.currentTime));
-            const pixels = player.addon.draw();
+            player.root.setCurrentTime(Math.floor(player.currentTime));
+            const pixels = player.root.draw();
             
             const t1 = performance.now();
             
@@ -419,24 +420,32 @@
                 log(`加载配置: ${config.tracks?.length || 0} 轨道`, 'info');
                 
                 const t0 = performance.now();
-                const result = player.addon.load(jsonStr);
+                const result = player.root.load(jsonStr);
                 if (!result.success) {
                     throw new Error(`C++ 加载失败: ${result.error}`);
                 }
                 const t1 = performance.now();
                 
-                const info = player.addon.getInfo();
-                player.width = info.width;
-                player.height = info.height;
-                player.duration = info.durationMs;
-                player.frameRate = info.frameRate;
+                player.width = player.root.width;
+                player.height = player.root.height;
+                player.duration = player.root.durationMs;
+                player.frameRate = player.root.frameRate;
                 player.currentTime = 0;
                 
                 document.getElementById('file-info').textContent = `已加载`;
-                document.getElementById('project-id').textContent = info.id ? `项目: ${info.id}` : '项目: -';
-                document.getElementById('gpu-info').textContent = `GPU: ${info.gpu}`;
+                document.getElementById('project-id').textContent = player.root.id ? `项目: ${player.root.id}` : '项目: -';
+                document.getElementById('gpu-info').textContent = `GPU: ${player.root.gpuInfo}`;
                 
-                log(`✓ 加载成功 (${(t1-t0).toFixed(1)}ms) | ID: ${info.id || '-'} | ${info.width}×${info.height} | ${info.frameRate.toFixed(2)}fps | ${formatTime(info.durationMs)}`, 'ok');
+                log(`✓ 加载成功 (${(t1-t0).toFixed(1)}ms) | ID: ${player.root.id || '-'} | ${player.root.width}×${player.root.height} | ${player.root.frameRate.toFixed(2)}fps | ${formatTime(player.root.durationMs)}`, 'ok');
+                
+                const layers = player.root.getLayers();
+                log(`图层数量: ${layers.length}`, 'info');
+                layers.forEach((layer, i) => {
+                    let info = `  [${i}] "${layer.name}" | ${layer.type} | ${formatTime(layer.startTime)}~${formatTime(layer.endTime)}`;
+                    if (layer.type === 'text') info += ` | text="${layer.text}"`;
+                    if (layer.type === 'video' && layer.videoFrameRate) info += ` | ${layer.videoFrameRate.toFixed(1)}fps`;
+                    log(info, 'info');
+                });
                 
                 render();
                 updateUI();
@@ -473,7 +482,6 @@
             
             if (!filePath) return;
             
-            // 获取视频信息
             const videoInfo = player.addon.getVideoInfo(filePath);
             if (!videoInfo.success) {
                 log(`加载失败: ${videoInfo.error || '未知错误'}`, 'error');
@@ -536,11 +544,11 @@
             
             try {
                 player.addon = require('./build/Release/video_player');
-                player.addon.init();
+                player.root = player.addon.createRoot();
+                player.root.init();
                 
-                const info = player.addon.getInfo();
-                document.getElementById('gpu-info').textContent = `GPU: ${info.gpu}`;
-                log(`✓ Addon 加载成功 | GPU: ${info.gpu}`, 'ok');
+                document.getElementById('gpu-info').textContent = `GPU: ${player.root.gpuInfo}`;
+                log(`✓ Addon 加载成功 | GPU: ${player.root.gpuInfo}`, 'ok');
                 
             } catch (e) {
                 log(`✗ Addon 加载失败: ${e.message}`, 'err');
@@ -583,7 +591,7 @@
         }
 
         window.onload = init;
-        window.onbeforeunload = () => player.addon?.cleanup();
+        window.onbeforeunload = () => player.root?.cleanup();
     </script>
 </body>
 </html>

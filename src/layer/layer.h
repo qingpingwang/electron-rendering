@@ -37,12 +37,13 @@ public:
     int64_t getEndTime() const;
     bool isActive() const; // 判断当前时间是否在图层的时间范围内
 
+    virtual MaterialType getMaterialType() const = 0;
+    Material *getMaterial() const { return material_; }
+
 protected:
     // 渲染内容（子类实现具体绘制逻辑）
     // fbo: 当前要绘制到的目标 FBO
     virtual bool renderContent(const gl::FBO &fbo) = 0;
-
-    virtual MaterialType getMaterialType() const { return MATERIAL_TYPE_VIDEO; }
 
     // 应用特效链（基类实现）
     // 输入 FBO，返回特效处理后的 FBO

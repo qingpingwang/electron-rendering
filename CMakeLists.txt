@@ -73,8 +73,9 @@ file(GLOB_RECURSE THIRD_PARTY_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/third_party/**/*.cpp"
 )
 
-# 排除 addon.cpp（仅用于 Node.js 绑定）和备份文件
+# 排除 N-API 绑定层（依赖 napi 头文件，仅用于 Node.js 插件）和备份文件
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*/addon\\.cpp$")
+list(FILTER CORE_SOURCES EXCLUDE REGEX ".*/addon/.*")
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_backup.*")
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*\\.bak$")
 
@@ -116,6 +117,8 @@ set_source_files_properties(${THIRD_PARTY_SOURCES} PROPERTIES
 
 add_library(${PROJECT_NAME} SHARED
     src/addon.cpp
+    src/addon/root_wrap.cpp
+    src/addon/layer_wrap.cpp
     $<TARGET_OBJECTS:video_player_core>
 )
 
