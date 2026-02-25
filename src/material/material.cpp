@@ -104,6 +104,23 @@ const nlohmann::json &EffectMaterial::getConfig() const {
 
 // ========== TextMaterial 实现 ==========
 
+// 解析 content.solid 模式的颜色（fill / stroke / shadow 共用）
+static Color4f parseSolidColor(const json &obj, float default_alpha = 1.0f) {
+    Color4f c = {0.0f, 0.0f, 0.0f, default_alpha};
+    if (!obj.contains("content") || !obj["content"].contains("solid"))
+        return c;
+
+    const auto &solid = obj["content"]["solid"];
+    c.a = solid.value("alpha", 1.0f);
+    if (solid.contains("color") && solid["color"].is_array()) {
+        const auto &arr = solid["color"];
+        if (arr.size() > 0) c.r = arr[0].get<float>();
+        if (arr.size() > 1) c.g = arr[1].get<float>();
+        if (arr.size() > 2) c.b = arr[2].get<float>();
+    }
+    return c;
+}
+
 static bool parseStyleRun(const json &style, TextStyleRun &run) {
     if (!style.contains("range") || !style["range"].is_array() || style["range"].size() < 2)
         return false;
@@ -111,6 +128,8 @@ static bool parseStyleRun(const json &style, TextStyleRun &run) {
     run.range_start = style["range"][0].get<int>();
     run.range_end = style["range"][1].get<int>();
     run.font_size = style.value("size", 24.0f);
+    run.letter_spacing = style.value("letter_spacing", 0.0f);
+    run.line_height = style.value("line_height", 1.0f);
 
     if (style.contains("font")) {
         run.font_id = style["font"].value("id", "");
@@ -120,18 +139,28 @@ static bool parseStyleRun(const json &style, TextStyleRun &run) {
     if (style.contains("fill")) {
         const auto &fill = style["fill"];
         float fill_alpha = fill.value("alpha", 1.0f);
+        run.fill = parseSolidColor(fill, 1.0f);
+        run.fill.a *= fill_alpha;
+    }
 
-        if (fill.contains("content") && fill["content"].contains("solid")) {
-            const auto &solid = fill["content"]["solid"];
-            float solid_alpha = solid.value("alpha", 1.0f);
-            run.alpha = fill_alpha * solid_alpha;
+    if (style.contains("strokes") && style["strokes"].is_array()) {
+        for (const auto &s : style["strokes"]) {
+            TextStroke stroke;
+            stroke.width = s.value("width", 0.0f);
+            stroke.color = parseSolidColor(s, 1.0f);
+            run.strokes.push_back(stroke);
+        }
+    }
 
-            if (solid.contains("color") && solid["color"].is_array()) {
-                const auto &c = solid["color"];
-                if (c.size() > 0) run.color_r = c[0].get<float>();
-                if (c.size() > 1) run.color_g = c[1].get<float>();
-                if (c.size() > 2) run.color_b = c[2].get<float>();
-            }
+    if (style.contains("shadows") && style["shadows"].is_array()) {
+        for (const auto &s : style["shadows"]) {
+            TextShadow shadow;
+            shadow.color = parseSolidColor(s, 1.0f);
+            shadow.color.a = s.value("alpha", shadow.color.a);
+            shadow.angle = s.value("angle", 0.0f);
+            shadow.distance = s.value("distance", 0.0f);
+            shadow.diffuse = s.value("diffuse", 0.0f);
+            run.shadows.push_back(shadow);
         }
     }
 

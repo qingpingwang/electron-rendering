@@ -18,9 +18,10 @@ pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET
 # 注意：测试直接使用父目录的 video_player_core OBJECT 库
 # 无需重复编译源文件！
 
-# Skia 路径配置（测试也需要链接 Skia）
+# Skia 路径配置（测试也需要链接 Skia + 文本布局模块）
 set(SKIA_ROOT ${CMAKE_SOURCE_DIR}/third_party/skia)
-set(SKIA_LIB ${SKIA_ROOT}/out/Release/libskia.a)
+set(SKIA_OUT ${SKIA_ROOT}/out/Release)
+set(SKIA_LIB ${SKIA_OUT}/libskia.a)
 
 # 通用链接库
 set(COMMON_LIBRARIES
@@ -33,7 +34,15 @@ set(COMMON_LIBRARIES
 )
 
 if(EXISTS ${SKIA_LIB})
-    list(APPEND COMMON_LIBRARIES ${SKIA_LIB})
+    list(APPEND COMMON_LIBRARIES
+        ${SKIA_OUT}/libskparagraph.a
+        ${SKIA_OUT}/libskshaper.a
+        ${SKIA_OUT}/libskunicode_icu.a
+        ${SKIA_OUT}/libskunicode_core.a
+        ${SKIA_OUT}/libharfbuzz.a
+        ${SKIA_OUT}/libicu.a
+        ${SKIA_LIB}
+    )
 endif()
 
 # ==================== 测试 1: FBO Pool 测试 ====================

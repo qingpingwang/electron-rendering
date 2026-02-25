@@ -6,34 +6,46 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkColorSpace.h"
-#include "include/core/SkFont.h"
-#include "include/core/SkFontMetrics.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkSurface.h"
-#include "include/core/SkTypeface.h"
 #include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/gpu/ganesh/GrBackendSurface.h"
 #include "include/gpu/ganesh/gl/GrGLBackendSurface.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/ganesh/GrTypes.h"
+#include "modules/skparagraph/include/Paragraph.h"
+#include "modules/skparagraph/include/ParagraphBuilder.h"
+#include "modules/skparagraph/include/ParagraphStyle.h"
+#include "modules/skparagraph/include/TextStyle.h"
+#include "include/effects/SkImageFilters.h"
+
+#include <cmath>
+
+namespace {
+constexpr float kDegToRad = 3.14159265358979323846f / 180.0f;
+}
 
 #ifdef __APPLE__
 #include <OpenGL/gl3.h>
 #endif
 
 using json = nlohmann::json;
+using namespace skia::textlayout;
 
 namespace vp {
 
-// UTF-8 字符索引 -> 字节区间提取
-static std::string utf8Substr(const std::string &str, int char_start, int char_end) {
-    size_t byte_start = 0, byte_end = 0;
-    int idx = 0;
-    size_t i = 0;
+static SkColor toSkColor(const Color4f &c) {
+    auto clamp = [](float v) -> uint8_t {
+        return static_cast<uint8_t>(std::max(0.0f, std::min(1.0f, v)) * 255.0f);
+    };
+    return SkColorSetARGB(clamp(c.a), clamp(c.r), clamp(c.g), clamp(c.b));
+}
 
-    while (i < str.size() && idx < char_end) {
-        if (idx == char_start) byte_start = i;
+static size_t utf8CharToByteOffset(const std::string &str, int char_idx) {
+    size_t i = 0;
+    int idx = 0;
+    while (i < str.size() && idx < char_idx) {
         unsigned char c = str[i];
         if (c < 0x80)
             i += 1;
@@ -47,24 +59,80 @@ static std::string utf8Substr(const std::string &str, int char_start, int char_e
             i += 1;
         idx++;
     }
-    if (idx == char_start) byte_start = i;
-    byte_end = i;
-
-    if (byte_start >= str.size()) return "";
-    return str.substr(byte_start, byte_end - byte_start);
+    return i;
 }
 
-static uint32_t toSkColor(float r, float g, float b, float a) {
-    auto clamp = [](float v) -> uint8_t {
-        return static_cast<uint8_t>(std::max(0.0f, std::min(1.0f, v)) * 255.0f);
-    };
-    return SkColorSetARGB(clamp(a), clamp(r), clamp(g), clamp(b));
+static TextAlign toSkTextAlign(TextAlignment align) {
+    switch (align) {
+    case TEXT_ALIGN_CENTER: return TextAlign::kCenter;
+    case TEXT_ALIGN_RIGHT: return TextAlign::kRight;
+    default: return TextAlign::kLeft;
+    }
+}
+
+// StyleFn 签名: void(TextStyle&, const TextStyleRun&, size_t run_idx)
+template <typename StyleFn>
+static std::unique_ptr<Paragraph> buildParagraph(
+    const std::vector<TextStyleRun> &runs,
+    const std::string &text,
+    TextAlignment alignment,
+    SkScalar layout_width,
+    StyleFn &&styleFn) {
+    auto &fm = FontManager::getInstance();
+    auto fc = fm.getFontCollection();
+    auto unicode = fm.getUnicode();
+    if (!fc || !unicode) return nullptr;
+
+    ParagraphStyle ps;
+    ps.setTextAlign(toSkTextAlign(alignment));
+    auto builder = ParagraphBuilder::make(ps, fc, unicode);
+
+    for (size_t ri = 0; ri < runs.size(); ++ri) {
+        const auto &sr = runs[ri];
+        size_t bs = utf8CharToByteOffset(text, sr.range_start);
+        size_t be = utf8CharToByteOffset(text, sr.range_end);
+        if (bs >= be || bs >= text.size()) continue;
+
+        skia::textlayout::TextStyle style;
+        style.setFontSize(sr.font_size);
+        style.setLetterSpacing(sr.letter_spacing);
+        style.setHeight(sr.line_height);
+        style.setHeightOverride(sr.line_height != 1.0f);
+        auto tf = fm.resolve(sr.font_path, sr.font_id);
+        if (tf) style.setTypeface(tf);
+
+        styleFn(style, sr, ri);
+
+        builder->pushStyle(style);
+        builder->addText(text.c_str() + bs, be - bs);
+        builder->pop();
+    }
+
+    auto p = builder->Build();
+    p->layout(layout_width);
+    return p;
+}
+
+static void applyStrokeStyle(skia::textlayout::TextStyle &style,
+                             const TextStyleRun &sr, size_t stroke_idx) {
+    if (stroke_idx < sr.strokes.size()) {
+        const auto &st = sr.strokes[stroke_idx];
+        SkPaint paint;
+        paint.setStyle(SkPaint::kStroke_Style);
+        paint.setStrokeWidth(st.width * sr.font_size * 2.0f);
+        paint.setStrokeJoin(SkPaint::kRound_Join);
+        paint.setStrokeCap(SkPaint::kRound_Cap);
+        paint.setColor(toSkColor(st.color));
+        paint.setAntiAlias(true);
+        style.setForegroundPaint(paint);
+    } else {
+        style.setColor(SK_ColorTRANSPARENT);
+    }
 }
 
 TextLayer::TextLayer(RootNode *root) :
     Layer(root) {
 }
-
 TextLayer::~TextLayer() = default;
 
 bool TextLayer::load(const json &config, const std::string &base_path) {
@@ -76,7 +144,6 @@ bool TextLayer::load(const json &config, const std::string &base_path) {
         setError("text material not found");
         return false;
     }
-
     return true;
 }
 
@@ -95,57 +162,70 @@ bool TextLayer::renderContent(const gl::FBO &fbo) {
     GrGLFramebufferInfo fbInfo;
     fbInfo.fFBOID = fbo.fbo;
     fbInfo.fFormat = GL_RGBA8;
-
-    auto backendRT = GrBackendRenderTargets::MakeGL(
-        fbo.width, fbo.height, 0, 8, fbInfo);
-
+    auto backendRT = GrBackendRenderTargets::MakeGL(fbo.width, fbo.height, 0, 8, fbInfo);
     auto surface = SkSurfaces::WrapBackendRenderTarget(
-        ctx, backendRT,
-        kTopLeft_GrSurfaceOrigin,
-        kRGBA_8888_SkColorType,
-        nullptr, nullptr);
-
-    if (!surface)
-        return false;
+        ctx, backendRT, kTopLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType, nullptr, nullptr);
+    if (!surface) return false;
 
     SkCanvas *canvas = surface->getCanvas();
-    auto &fm = FontManager::getInstance();
+    TextAlignment alignment = text_material_->getAlignment();
+    SkScalar w = static_cast<SkScalar>(fbo.width);
 
-    // 测量总宽度用于对齐
-    float total_width = 0;
-    for (const auto &sr : runs) {
-        std::string sub = utf8Substr(text, sr.range_start, sr.range_end);
-        SkFont font(fm.resolve(sr.font_path, sr.font_id), sr.font_size);
-        total_width += font.measureText(sub.c_str(), sub.size(), SkTextEncoding::kUTF8);
+    size_t max_strokes = 0;
+    for (const auto &sr : runs)
+        max_strokes = std::max(max_strokes, sr.strokes.size());
+
+    auto fillStyle = [](skia::textlayout::TextStyle &s, const TextStyleRun &sr, size_t) {
+        s.setColor(toSkColor(sr.fill));
+    };
+
+    auto probe = buildParagraph(runs, text, alignment, w, fillStyle);
+    if (!probe) return false;
+    float y = (fbo.height - probe->getHeight()) * 0.5f;
+
+    // 绘制全部层（描边 + 填充），visible_run < 0 表示全部可见
+    auto paintLayers = [&](int visible_run) {
+        auto maskStyle = [visible_run](auto applyVisible) {
+            return [=](skia::textlayout::TextStyle &s, const TextStyleRun &sr, size_t ri) {
+                if (visible_run >= 0 && ri != static_cast<size_t>(visible_run))
+                    s.setColor(SK_ColorTRANSPARENT);
+                else
+                    applyVisible(s, sr, ri);
+            };
+        };
+
+        for (size_t i = max_strokes; i > 0; --i) {
+            size_t si = i - 1;
+            auto p = buildParagraph(runs, text, alignment, w,
+                                    maskStyle([si](skia::textlayout::TextStyle &s, const TextStyleRun &sr, size_t) {
+                                        applyStrokeStyle(s, sr, si);
+                                    }));
+            if (p) p->paint(canvas, 0, y);
+        }
+
+        auto fill = buildParagraph(runs, text, alignment, w, maskStyle(fillStyle));
+        if (fill) fill->paint(canvas, 0, y);
+    };
+
+    // 1. 逐 run 阴影
+    for (size_t ri = 0; ri < runs.size(); ++ri) {
+        for (const auto &sh : runs[ri].shadows) {
+            float rad = sh.angle * kDegToRad;
+            SkScalar sigma = sh.diffuse * runs[ri].font_size * 2.0f;
+
+            SkPaint lp;
+            lp.setImageFilter(SkImageFilters::DropShadowOnly(
+                sh.distance * std::cos(rad), -sh.distance * std::sin(rad),
+                sigma, sigma, toSkColor(sh.color), nullptr));
+
+            canvas->saveLayer(nullptr, &lp);
+            paintLayers(static_cast<int>(ri));
+            canvas->restore();
+        }
     }
 
-    float x = 0;
-    TextAlignment align = text_material_->getAlignment();
-    if (align == TEXT_ALIGN_CENTER)
-        x = (fbo.width - total_width) * 0.5f;
-    else if (align == TEXT_ALIGN_RIGHT)
-        x = fbo.width - total_width;
-
-    // 垂直居中：取第一个 run 的 metrics 做基线
-    SkFont first_font(fm.resolve(runs[0].font_path, runs[0].font_id), runs[0].font_size);
-    SkFontMetrics metrics;
-    first_font.getMetrics(&metrics);
-    float y = (fbo.height - (metrics.fDescent - metrics.fAscent)) * 0.5f - metrics.fAscent;
-
-    SkPaint paint;
-    paint.setAntiAlias(true);
-
-    for (const auto &sr : runs) {
-        std::string sub = utf8Substr(text, sr.range_start, sr.range_end);
-        if (sub.empty()) continue;
-
-        SkFont font(fm.resolve(sr.font_path, sr.font_id), sr.font_size);
-        font.setEdging(SkFont::Edging::kAntiAlias);
-
-        paint.setColor(toSkColor(sr.color_r, sr.color_g, sr.color_b, sr.alpha));
-        canvas->drawString(sub.c_str(), x, y, font, paint);
-        x += font.measureText(sub.c_str(), sub.size(), SkTextEncoding::kUTF8);
-    }
+    // 2. 实际内容
+    paintLayers(-1);
 
     ctx->flushAndSubmit();
     return true;

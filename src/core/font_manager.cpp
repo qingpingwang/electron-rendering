@@ -4,6 +4,7 @@
 #include "include/core/SkFontStyle.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTypeface.h"
+#include "modules/skunicode/include/SkUnicode_icu.h"
 
 #ifdef __APPLE__
 #define SK_BUILD_FOR_MAC
@@ -21,20 +22,14 @@ FontManager::FontManager() {
 #ifdef __APPLE__
     font_mgr_ = SkFontMgr_New_CoreText(nullptr);
 #endif
+
+    font_collection_ = sk_make_sp<skia::textlayout::FontCollection>();
+    font_collection_->setDefaultFontManager(font_mgr_);
+
+    unicode_ = SkUnicodes::ICU::Make();
 }
 
 FontManager::~FontManager() = default;
-
-sk_sp<SkTypeface> FontManager::matchTypeface(const std::string &family) {
-    if (!font_mgr_)
-        return nullptr;
-
-    auto typeface = font_mgr_->matchFamilyStyle(family.c_str(), SkFontStyle());
-    if (!typeface)
-        typeface = font_mgr_->matchFamilyStyle(nullptr, SkFontStyle());
-
-    return typeface;
-}
 
 sk_sp<SkTypeface> FontManager::loadFromFile(const std::string &path) {
     if (path.empty())
@@ -59,11 +54,13 @@ sk_sp<SkTypeface> FontManager::resolve(const std::string &path, const std::strin
         auto tf = loadFromFile(path);
         if (tf) return tf;
     }
-    if (!family.empty()) {
-        auto tf = matchTypeface(family);
+    if (!family.empty() && font_mgr_) {
+        auto tf = font_mgr_->matchFamilyStyle(family.c_str(), SkFontStyle());
         if (tf) return tf;
     }
-    return matchTypeface("");
+    if (font_mgr_)
+        return font_mgr_->matchFamilyStyle(nullptr, SkFontStyle());
+    return nullptr;
 }
 
 } // namespace vp

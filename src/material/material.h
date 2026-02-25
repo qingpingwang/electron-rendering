@@ -88,6 +88,25 @@ enum TextAlignment {
     TEXT_ALIGN_RIGHT = 2
 };
 
+struct Color4f {
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = 0.0f;
+    float a = 1.0f;
+};
+
+struct TextShadow {
+    Color4f color;
+    float angle = 0.0f;    // 度，0 = 右，90 = 下
+    float distance = 0.0f;  // 像素
+    float diffuse = 0.0f;   // 模糊扩散
+};
+
+struct TextStroke {
+    float width = 0.0f;
+    Color4f color;
+};
+
 // 富文本样式区间（纯数据，无渲染依赖）
 struct TextStyleRun {
     int range_start = 0;
@@ -95,10 +114,14 @@ struct TextStyleRun {
     float font_size = 24.0f;
     std::string font_path;
     std::string font_id;
-    float color_r = 1.0f;
-    float color_g = 1.0f;
-    float color_b = 1.0f;
-    float alpha = 1.0f;
+
+    Color4f fill = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    float letter_spacing = 0.0f;
+    float line_height = 1.0f;
+
+    std::vector<TextStroke> strokes;
+    std::vector<TextShadow> shadows;
 };
 
 // 文字素材

@@ -44,9 +44,17 @@ pkg_check_modules(FFMPEG REQUIRED
 
 # ========== 三方库 ==========
 
-# Skia 2D Graphics Library（预编译静态库）
+# Skia 2D Graphics Library（预编译静态库 + 模块）
 set(SKIA_ROOT ${CMAKE_SOURCE_DIR}/third_party/skia)
-set(SKIA_LIB ${SKIA_ROOT}/out/Release/libskia.a)
+set(SKIA_OUT ${SKIA_ROOT}/out/Release)
+set(SKIA_LIB ${SKIA_OUT}/libskia.a)
+
+set(SKIA_PARAGRAPH_LIB ${SKIA_OUT}/libskparagraph.a)
+set(SKIA_SHAPER_LIB ${SKIA_OUT}/libskshaper.a)
+set(SKIA_UNICODE_CORE_LIB ${SKIA_OUT}/libskunicode_core.a)
+set(SKIA_UNICODE_ICU_LIB ${SKIA_OUT}/libskunicode_icu.a)
+set(SKIA_HARFBUZZ_LIB ${SKIA_OUT}/libharfbuzz.a)
+set(SKIA_ICU_LIB ${SKIA_OUT}/libicu.a)
 
 if(NOT EXISTS ${SKIA_LIB})
     message(WARNING "⚠️ Skia 未编译 (${SKIA_LIB})，TextLayer 将不可用")
@@ -150,9 +158,17 @@ if(APPLE)
         ${FFMPEG_LIBRARIES}
     )
 
-    # Skia 静态库
+    # Skia 静态库 + 文本布局模块
     if(EXISTS ${SKIA_LIB})
-        target_link_libraries(${PROJECT_NAME} PRIVATE ${SKIA_LIB})
+        target_link_libraries(${PROJECT_NAME} PRIVATE
+            ${SKIA_PARAGRAPH_LIB}
+            ${SKIA_SHAPER_LIB}
+            ${SKIA_UNICODE_ICU_LIB}
+            ${SKIA_UNICODE_CORE_LIB}
+            ${SKIA_HARFBUZZ_LIB}
+            ${SKIA_ICU_LIB}
+            ${SKIA_LIB}
+        )
     endif()
     target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIRS})
     

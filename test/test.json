@@ -69,7 +69,7 @@
         "texts": [
             {
                 "alignment": 1,
-                "content": "{\"styles\":[{\"fill\":{\"alpha\":1,\"content\":{\"render_type\":\"solid\",\"solid\":{\"alpha\":1,\"color\":[1,1,1]}}},\"font\":{\"id\":\"\",\"path\":\"/Applications/VideoFusion-macOS.app/Contents/Resources/Font/SystemFont/zh-hans.ttf\"},\"range\":[0,2],\"size\":200},{\"fill\":{\"alpha\":1,\"content\":{\"render_type\":\"solid\",\"solid\":{\"alpha\":1,\"color\":[1,0,0]}}},\"font\":{\"id\":\"\",\"path\":\"/Applications/VideoFusion-macOS.app/Contents/Resources/Font/SystemFont/zh-hans.ttf\"},\"range\":[2,4],\"size\":150}],\"text\":\"默认文本\"}",
+                "content": "{\"styles\":[{\"fill\":{\"content\":{\"solid\":{\"color\":[0,0,0]}}},\"range\":[0,2],\"shadows\":[{\"diffuse\":0,\"angle\":-45,\"content\":{\"solid\":{\"color\":[0,0,0]}},\"distance\":27.781448364257812,\"alpha\":0.899999976158142}],\"strokes\":[{\"width\":0.079999998211860657,\"content\":{\"solid\":{\"color\":[1,1,1]}}}],\"useLetterColor\":true,\"size\":150,\"font\":{\"path\":\"/Applications/VideoFusion-macOS.app/Contents/Resources/Font/SystemFont/zh-hans.ttf\",\"id\":\"\"}},{\"fill\":{\"content\":{\"solid\":{\"color\":[0,0,0]}}},\"range\":[2,4],\"shadows\":[{\"diffuse\":0.054999999701976776,\"angle\":-45,\"content\":{\"solid\":{\"color\":[0,0,0]}},\"distance\":74.996986389160156,\"alpha\":0.899999976158142}],\"strokes\":[{\"width\":0.079999998211860657,\"content\":{\"solid\":{\"color\":[1,1,1]}}}],\"useLetterColor\":true,\"size\":150,\"font\":{\"path\":\"/Applications/VideoFusion-macOS.app/Contents/Resources/Font/SystemFont/zh-hans.ttf\",\"id\":\"\"}}],\"text\":\"默认文本\"}",
                 "id": "material_text_0"
             }
         ]
