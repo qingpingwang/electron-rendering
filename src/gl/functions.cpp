@@ -5,7 +5,6 @@
 namespace vp {
 namespace gl {
 
-// 全屏四边形顶点数据（UV Y 轴已翻转以适配 Canvas）
 static const float QUAD_VERTICES[] = {
     -1.0f, 1.0f, 0.0f, 1.0f,  // 左上: pos(-1, 1), UV(0, 1)
     1.0f, 1.0f, 1.0f, 1.0f,   // 右上: pos( 1, 1), UV(1, 1)
