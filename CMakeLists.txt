@@ -60,6 +60,9 @@ if(NOT EXISTS ${SKIA_LIB})
     message(WARNING "⚠️ Skia 未编译 (${SKIA_LIB})，TextLayer 将不可用")
 endif()
 
+# GLAD（非 Apple 平台的 GL 函数加载器）
+set(GLAD_ROOT ${CMAKE_SOURCE_DIR}/third_party/glad)
+
 # ========== 源文件 ==========
 
 # 使用递归扫描自动收集源文件（使用 CMake 内置变量）
@@ -72,6 +75,11 @@ file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS
 file(GLOB_RECURSE THIRD_PARTY_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/third_party/**/*.cpp"
 )
+
+# GLAD 源文件（.c，仅非 Apple 平台）
+if(NOT APPLE)
+    set(GLAD_SOURCES ${GLAD_ROOT}/src/glad.c)
+endif()
 
 # 排除 N-API 绑定层（依赖 napi 头文件，仅用于 Node.js 插件）和备份文件
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*/addon\\.cpp$")
@@ -88,6 +96,7 @@ list(FILTER THIRD_PARTY_SOURCES EXCLUDE REGEX ".*/skia/.*")
 add_library(video_player_core OBJECT
     ${CORE_SOURCES}
     ${THIRD_PARTY_SOURCES}
+    ${GLAD_SOURCES}
 )
 
 # 核心库的编译配置
@@ -96,6 +105,7 @@ target_include_directories(video_player_core PUBLIC
     ${CMAKE_SOURCE_DIR}/third_party
     ${FFMPEG_INCLUDE_DIRS}
     ${SKIA_ROOT}
+    $<$<NOT:$<PLATFORM_ID:Darwin>>:${GLAD_ROOT}/include>
 )
 
 target_compile_definitions(video_player_core PUBLIC
@@ -141,6 +151,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 # 链接核心库（继承其配置）
 target_link_libraries(${PROJECT_NAME} PRIVATE video_player_core)
 
+# ---- 平台特定依赖 ----
 if(APPLE)
     find_library(OPENGL_LIB OpenGL REQUIRED)
     find_library(COCOA_LIB Cocoa REQUIRED)
@@ -149,42 +160,39 @@ if(APPLE)
     find_library(IOSURFACE_LIB IOSurface REQUIRED)
     find_library(CORE_GRAPHICS_LIB CoreGraphics REQUIRED)
     find_library(CORE_TEXT_LIB CoreText REQUIRED)
-    
-    target_link_libraries(${PROJECT_NAME} PRIVATE
-        ${OPENGL_LIB}
-        ${COCOA_LIB}
-        ${CF_LIB}
-        ${COREVIDEO_LIB}
-        ${IOSURFACE_LIB}
-        ${CORE_GRAPHICS_LIB}
-        ${CORE_TEXT_LIB}
-        ${FFMPEG_LIBRARIES}
-    )
 
-    # Skia 静态库 + 文本布局模块
-    if(EXISTS ${SKIA_LIB})
-        target_link_libraries(${PROJECT_NAME} PRIVATE
-            ${SKIA_PARAGRAPH_LIB}
-            ${SKIA_SHAPER_LIB}
-            ${SKIA_UNICODE_ICU_LIB}
-            ${SKIA_UNICODE_CORE_LIB}
-            ${SKIA_HARFBUZZ_LIB}
-            ${SKIA_ICU_LIB}
-            ${SKIA_LIB}
-        )
-    endif()
-    target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIRS})
-    
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        ${OPENGL_LIB} ${COCOA_LIB} ${CF_LIB}
+        ${COREVIDEO_LIB} ${IOSURFACE_LIB}
+        ${CORE_GRAPHICS_LIB} ${CORE_TEXT_LIB}
+    )
     set_target_properties(${PROJECT_NAME} PROPERTIES
         LINK_FLAGS "-undefined dynamic_lookup"
     )
+elseif(WIN32)
+    find_package(OpenGL REQUIRED)
+    target_link_libraries(${PROJECT_NAME} PRIVATE OpenGL::GL EGL)
 elseif(UNIX)
     find_package(OpenGL REQUIRED)
+    pkg_check_modules(EGL REQUIRED egl)
+    target_link_libraries(${PROJECT_NAME} PRIVATE OpenGL::GL ${EGL_LIBRARIES})
+    target_link_directories(${PROJECT_NAME} PRIVATE ${EGL_LIBRARY_DIRS})
+endif()
+
+# ---- 公共依赖（所有平台） ----
+target_link_libraries(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARIES})
+target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIRS})
+
+if(EXISTS ${SKIA_LIB})
     target_link_libraries(${PROJECT_NAME} PRIVATE
-        OpenGL::GL
-        ${FFMPEG_LIBRARIES}
+        ${SKIA_PARAGRAPH_LIB}
+        ${SKIA_SHAPER_LIB}
+        ${SKIA_UNICODE_ICU_LIB}
+        ${SKIA_UNICODE_CORE_LIB}
+        ${SKIA_HARFBUZZ_LIB}
+        ${SKIA_ICU_LIB}
+        ${SKIA_LIB}
     )
-    target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIRS})
 endif()
 
 target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wno-unused-parameter)

@@ -44,7 +44,67 @@ bool initContext(GLContext &ctx) {
     ctx.initialized = true;
     return true;
 #else
-    return false;
+    ctx.egl_display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (ctx.egl_display == EGL_NO_DISPLAY)
+        return false;
+
+    if (!eglInitialize(ctx.egl_display, nullptr, nullptr))
+        return false;
+
+    EGLint config_attribs[] = {
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+        EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, 8,
+        EGL_NONE};
+
+    EGLint num_configs = 0;
+    if (!eglChooseConfig(ctx.egl_display, config_attribs, &ctx.egl_config, 1, &num_configs) ||
+        num_configs == 0) {
+        eglTerminate(ctx.egl_display);
+        ctx.egl_display = EGL_NO_DISPLAY;
+        return false;
+    }
+
+    if (!eglBindAPI(EGL_OPENGL_API)) {
+        eglTerminate(ctx.egl_display);
+        ctx.egl_display = EGL_NO_DISPLAY;
+        return false;
+    }
+
+    EGLint ctx_attribs[] = {
+        EGL_CONTEXT_MAJOR_VERSION, 3,
+        EGL_CONTEXT_MINOR_VERSION, 2,
+        EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
+        EGL_NONE};
+
+    ctx.egl_context = eglCreateContext(ctx.egl_display, ctx.egl_config, EGL_NO_CONTEXT, ctx_attribs);
+    if (ctx.egl_context == EGL_NO_CONTEXT) {
+        eglTerminate(ctx.egl_display);
+        ctx.egl_display = EGL_NO_DISPLAY;
+        return false;
+    }
+
+    if (!eglMakeCurrent(ctx.egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, ctx.egl_context)) {
+        eglDestroyContext(ctx.egl_display, ctx.egl_context);
+        eglTerminate(ctx.egl_display);
+        ctx.egl_context = EGL_NO_CONTEXT;
+        ctx.egl_display = EGL_NO_DISPLAY;
+        return false;
+    }
+
+    if (!gladLoadGLLoader((GLADloadproc)eglGetProcAddress)) {
+        eglDestroyContext(ctx.egl_display, ctx.egl_context);
+        eglTerminate(ctx.egl_display);
+        ctx.egl_context = EGL_NO_CONTEXT;
+        ctx.egl_display = EGL_NO_DISPLAY;
+        return false;
+    }
+
+    ctx.initialized = true;
+    return true;
 #endif
 }
 
@@ -61,6 +121,16 @@ void destroyContext(GLContext &ctx) {
         CGLDestroyPixelFormat(ctx.cgl_pixel_format);
         ctx.cgl_pixel_format = nullptr;
     }
+#else
+    if (ctx.egl_display != EGL_NO_DISPLAY) {
+        eglMakeCurrent(ctx.egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        if (ctx.egl_context != EGL_NO_CONTEXT) {
+            eglDestroyContext(ctx.egl_display, ctx.egl_context);
+            ctx.egl_context = EGL_NO_CONTEXT;
+        }
+        eglTerminate(ctx.egl_display);
+        ctx.egl_display = EGL_NO_DISPLAY;
+    }
 #endif
     ctx.initialized = false;
 }
@@ -69,6 +139,9 @@ void makeCurrent(const GLContext &ctx) {
 #ifdef __APPLE__
     if (ctx.cgl_context)
         CGLSetCurrentContext(ctx.cgl_context);
+#else
+    if (ctx.egl_display != EGL_NO_DISPLAY && ctx.egl_context != EGL_NO_CONTEXT)
+        eglMakeCurrent(ctx.egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, ctx.egl_context);
 #endif
 }
 

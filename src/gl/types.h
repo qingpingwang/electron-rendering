@@ -4,8 +4,8 @@
 #include <OpenGL/OpenGL.h>
 #include <OpenGL/gl3.h>
 #else
-#include <GL/gl.h>
-#include <GL/glext.h>
+#include <glad/glad.h>
+#include <EGL/egl.h>
 #endif
 
 namespace vp {
@@ -16,6 +16,10 @@ struct GLContext {
 #ifdef __APPLE__
     CGLContextObj cgl_context = nullptr;
     CGLPixelFormatObj cgl_pixel_format = nullptr;
+#else
+    EGLDisplay egl_display = EGL_NO_DISPLAY;
+    EGLContext egl_context = EGL_NO_CONTEXT;
+    EGLConfig egl_config = nullptr;
 #endif
     bool initialized = false;
 };

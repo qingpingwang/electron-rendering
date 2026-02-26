@@ -26,9 +26,7 @@ namespace {
 constexpr float kDegToRad = 3.14159265358979323846f / 180.0f;
 }
 
-#ifdef __APPLE__
-#include <OpenGL/gl3.h>
-#endif
+#include "../gl/types.h"
 
 using json = nlohmann::json;
 using namespace skia::textlayout;

@@ -3,9 +3,7 @@
 #include "../engine/root_node.h"
 #include "../layer/layer.h"
 
-#ifdef __APPLE__
-#include <OpenGL/gl3.h>
-#endif
+#include "../gl/types.h"
 
 static Napi::FunctionReference g_constructor;
 

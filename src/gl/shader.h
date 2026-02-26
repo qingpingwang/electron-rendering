@@ -1,11 +1,6 @@
 #pragma once
 
-#ifdef __APPLE__
-#include <OpenGL/gl3.h>
-#else
-#include <GL/gl.h>
-#endif
-
+#include "types.h"
 #include <string>
 
 namespace vp {
