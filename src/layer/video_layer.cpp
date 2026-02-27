@@ -70,6 +70,13 @@ bool VideoLayer::load(const json &config, const std::string &base_path) {
     return true;
 }
 
+void VideoLayer::prepare() {
+    if (decoder_ && decoder_->isOpen()) {
+        TimeMs frame_time = calculateFrameTime(getStartTime());
+        decoder_->decodeFrameAt(frame_time, current_frame_);
+    }
+}
+
 bool VideoLayer::renderContent(const gl::FBO &fbo, TimeMs time_ms) {
     TimeMs frame_time = calculateFrameTime(time_ms);
     if (frame_time == kInvalidTime)

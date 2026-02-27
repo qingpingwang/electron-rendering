@@ -36,6 +36,9 @@ public:
     TimeMs getEndTime() const;
     bool isActive(TimeMs time_ms) const;
 
+    // 预备（子类实现：如视频解码到起始帧）
+    virtual void prepare() = 0;
+
     virtual MaterialType getMaterialType() const = 0;
     Material *getMaterial() const;
     bool hasTransition() const;

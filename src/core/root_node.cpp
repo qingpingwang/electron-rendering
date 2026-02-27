@@ -291,6 +291,9 @@ std::string RootNode::loadFromJson(const std::string &json_str) {
             unload();
             return "layers are empty";
         }
+        for (auto &layer : layers_) {
+            layer->prepare();
+        }
 
         // 创建 OpenGL 资源
         gl::makeCurrent(gl_ctx_);

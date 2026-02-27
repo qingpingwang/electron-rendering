@@ -15,6 +15,7 @@ public:
     ~VideoLayer() override;
 
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
+    void prepare() override;
 
     double getFrameRate() const;
     bool isLoaded() const;
