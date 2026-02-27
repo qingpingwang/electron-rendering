@@ -1,15 +1,18 @@
 #pragma once
 
-#include <string>
+#include "../core/types.h"
 #include <cstdint>
+#include <string>
 
 extern "C" {
-#include <libavcodec/avcodec.h>
-#include <libavformat/avformat.h>
-#include <libavutil/imgutils.h>
-#include <libavutil/hwcontext.h>
-#include <libswscale/swscale.h>
+#include <libavutil/rational.h>
 }
+
+struct AVFormatContext;
+struct AVCodecContext;
+struct SwsContext;
+struct AVFrame;
+struct AVPacket;
 
 namespace vp {
 
@@ -18,7 +21,7 @@ struct VideoFrame {
     uint8_t *data = nullptr; // CPU内存中的RGBA数据
     int width = 0;
     int height = 0;
-    int64_t pts_ms = 0;
+    TimeMs pts_ms = 0;
     bool valid = false;
 };
 
@@ -35,11 +38,11 @@ public:
     void close();
 
     // 解码指定时间的帧
-    bool decodeFrameAt(int64_t time_ms, VideoFrame &out);
+    bool decodeFrameAt(TimeMs time_ms, VideoFrame &out);
 
     int getWidth() const;
     int getHeight() const;
-    int64_t getDurationMs() const;
+    TimeMs getDurationMs() const;
     double getFrameRate() const;
     bool isOpen() const;
 
@@ -48,8 +51,8 @@ public:
 private:
     bool decodeNextFrame(VideoFrame &out);
     void convertToRGBA(AVFrame *frame, VideoFrame &out);
-    int64_t ptsToMs(int64_t pts) const;
-    int64_t msToPts(int64_t ms) const;
+    TimeMs ptsToMs(int64_t pts) const;
+    int64_t msToPts(TimeMs ms) const;
 
     AVFormatContext *format_ctx_ = nullptr;
     AVCodecContext *codec_ctx_ = nullptr;
@@ -61,12 +64,12 @@ private:
     int video_stream_idx_ = -1;
     int width_ = 0;
     int height_ = 0;
-    int64_t duration_ms_ = 0;
+    TimeMs duration_ms_ = 0;
     double frame_rate_ = 0.0;
     AVRational time_base_ = {0, 1};
 
     uint8_t *rgba_buffer_ = nullptr;
-    int64_t last_decoded_ms_ = -1;
+    TimeMs last_decoded_ms_ = kInvalidTime;
     std::string path_;
     bool has_alpha_ = false; // 是否包含 Alpha 通道
 };

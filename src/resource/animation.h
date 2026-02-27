@@ -1,10 +1,10 @@
 #pragma once
 
 #include "../core/loadable.h"
-#include <nlohmann/json.hpp>
+#include "../core/types.h"
+#include "uniform_param.h"
 #include <string>
 #include <vector>
-#include "uniform_param.h"
 
 // 前置声明
 namespace vp {
@@ -23,10 +23,10 @@ public:
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
 
     // 获取指定时间、指定通道的值
-    float getValueAt(int64_t time_ms, int channel) const;
+    float getValueAt(TimeMs time_ms, int channel) const;
 
     // 获取所有通道的值（vec2/vec3/vec4）
-    std::vector<float> getValuesAt(int64_t time_ms) const;
+    std::vector<float> getValuesAt(TimeMs time_ms) const;
 
     const std::string &getName() const;
     int getChannelNum() const;
@@ -38,7 +38,7 @@ public:
     bool affectsPass(int pass_index) const;
 
     // 转换为 UniformParam（指定时间点的静态值）
-    std::unique_ptr<UniformParam> convertToUniformParam(int64_t time_ms) const;
+    std::unique_ptr<UniformParam> convertToUniformParam(TimeMs time_ms) const;
 
 private:
     std::string name_;
@@ -50,16 +50,16 @@ private:
     std::vector<int> render_pass_index_list_; // 影响的 pass 列表
 
     struct Keyframe {
-        int64_t time_ms;
+        TimeMs time_ms;
         std::vector<float> data;
     };
     std::vector<Keyframe> keyframes_;
 
     // 插值计算
-    float interpolate(int64_t time_ms, int channel) const;
+    float interpolate(TimeMs time_ms, int channel) const;
 
     // 处理 repeatMode
-    int64_t adjustTime(int64_t time_ms) const;
+    TimeMs adjustTime(TimeMs time_ms) const;
 };
 
 } // namespace vp

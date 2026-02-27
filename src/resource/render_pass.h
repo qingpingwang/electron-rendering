@@ -4,7 +4,6 @@
 #include "../gl/shader.h"
 #include "../gl/types.h"
 #include "uniform_param.h"
-#include <nlohmann/json.hpp>
 #include <memory>
 #include <string>
 #include <vector>

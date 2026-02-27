@@ -1,15 +1,15 @@
 #pragma once
 
+#include "../core/types.h"
 #include <cstdint>
 #include <string>
 
-extern "C" {
-#include <libavcodec/avcodec.h>
-#include <libavformat/avformat.h>
-#include <libavutil/imgutils.h>
-#include <libavutil/opt.h>
-#include <libswscale/swscale.h>
-}
+struct AVFormatContext;
+struct AVCodecContext;
+struct AVStream;
+struct AVFrame;
+struct AVPacket;
+struct SwsContext;
 
 namespace vp {
 
@@ -35,7 +35,7 @@ public:
     bool open(const std::string &output_file, const EncoderConfig &config);
 
     // 编码一帧（输入 RGBA 数据和时间戳，单位：毫秒）
-    bool encodeFrame(const uint8_t *rgba_data, int64_t pts_ms);
+    bool encodeFrame(const uint8_t *rgba_data, TimeMs pts_ms);
 
     // 关闭编码器（会 flush 所有缓存帧）
     void close();

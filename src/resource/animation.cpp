@@ -38,7 +38,7 @@ bool ResourceAnimation::load(const nlohmann::json &config, const std::string &ba
 
         for (const auto &keyframe_config : kf_array) {
             Keyframe keyframe;
-            keyframe.time_ms = keyframe_config["time"].get<int64_t>();
+            keyframe.time_ms = static_cast<TimeMs>(keyframe_config["time"].get<int64_t>());
 
             if (keyframe_config.contains("data")) {
                 const auto &data_array = keyframe_config["data"];
@@ -55,14 +55,14 @@ bool ResourceAnimation::load(const nlohmann::json &config, const std::string &ba
     return !keyframes_.empty();
 }
 
-int64_t ResourceAnimation::adjustTime(int64_t time_ms) const {
+TimeMs ResourceAnimation::adjustTime(TimeMs time_ms) const {
     if (keyframes_.empty())
         return 0;
 
     // 应用速度
-    time_ms = static_cast<int64_t>(time_ms * speed_);
+    time_ms = static_cast<TimeMs>(time_ms * speed_);
 
-    int64_t max_time = keyframes_.back().time_ms;
+    TimeMs max_time = keyframes_.back().time_ms;
 
     if (repeat_mode_ == 0) {
         // 停止在最后一帧
@@ -77,7 +77,7 @@ int64_t ResourceAnimation::adjustTime(int64_t time_ms) const {
     return time_ms;
 }
 
-float ResourceAnimation::interpolate(int64_t time_ms, int channel) const {
+float ResourceAnimation::interpolate(TimeMs time_ms, int channel) const {
     if (keyframes_.empty() || channel >= channel_num_)
         return 0.0f;
 
@@ -107,11 +107,11 @@ float ResourceAnimation::interpolate(int64_t time_ms, int channel) const {
     return 0.0f;
 }
 
-float ResourceAnimation::getValueAt(int64_t time_ms, int channel) const {
+float ResourceAnimation::getValueAt(TimeMs time_ms, int channel) const {
     return interpolate(time_ms, channel);
 }
 
-std::vector<float> ResourceAnimation::getValuesAt(int64_t time_ms) const {
+std::vector<float> ResourceAnimation::getValuesAt(TimeMs time_ms) const {
     std::vector<float> values;
     values.reserve(channel_num_);
     for (int i = 0; i < channel_num_; ++i) {
@@ -142,7 +142,7 @@ bool ResourceAnimation::affectsPass(int pass_index) const {
            != render_pass_index_list_.end();
 }
 
-std::unique_ptr<UniformParam> ResourceAnimation::convertToUniformParam(int64_t time_ms) const {
+std::unique_ptr<UniformParam> ResourceAnimation::convertToUniformParam(TimeMs time_ms) const {
     // 获取当前时间点的动画值
     std::vector<float> values = getValuesAt(time_ms);
 

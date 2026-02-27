@@ -12,8 +12,9 @@ Effect::Effect(RootNode *root) :
 Effect::~Effect() {
 }
 
-bool Effect::isActive(int64_t time_ms) {
-    return time_ms >= 0 && time_ms < getRenderResource()->getResourceDuration();
+bool Effect::isActive(TimeMs time_ms) {
+    // todo 更复杂的时间支持
+    return time_ms != kInvalidTime && time_ms < getRenderResource()->getResourceDuration();
 }
 
 RenderResource *Effect::getRenderResource() {
@@ -60,18 +61,15 @@ bool ResourceEffect::loadFromFolder(const std::string &folder_path) {
     return true;
 }
 
-gl::FBO ResourceEffect::apply(const gl::FBO &input, int64_t time_ms) {
-    // 如果资源不存在或时间超出资源时长，返回无效 FBO
-    if (!resource_ || !isActive(time_ms)) {
+gl::FBO ResourceEffect::apply(const std::vector<gl::FBO> &inputs, TimeMs time_ms) {
+    if (!resource_ || inputs.empty() || !isActive(time_ms))
         return gl::FBO{};
-    }
 
-    // 调用 RenderResource 渲染
-    return resource_->render({input}, time_ms);
+    return resource_->render(inputs, time_ms);
 }
 
 const char *ResourceEffect::getType() const {
-    return "ResourceEffect";
+    return "effect";
 }
 
 RenderResource *ResourceEffect::getRenderResource() {

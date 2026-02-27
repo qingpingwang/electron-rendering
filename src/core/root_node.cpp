@@ -68,19 +68,20 @@ void RootNode::cleanup() {
 
 // ========== 缓存 ==========
 
-int64_t RootNode::getHalfFrameMs() const {
-    return (frame_rate_ > 0) ? static_cast<int64_t>(500.0 / frame_rate_) : 20;
+TimeMs RootNode::getHalfFrameMs() const {
+    return (frame_rate_ > 0) ? static_cast<TimeMs>(500.0 / frame_rate_) : 20;
 }
 
-bool RootNode::isCacheHit(int64_t time_ms) const {
-    if (cache_time_ms_ < 0)
+bool RootNode::isCacheHit(TimeMs time_ms) const {
+    if (cache_time_ms_ == kInvalidTime)
         return false;
-    return std::abs(time_ms - cache_time_ms_) <= getHalfFrameMs();
+    TimeMs diff = (time_ms >= cache_time_ms_) ? (time_ms - cache_time_ms_) : (cache_time_ms_ - time_ms);
+    return diff <= getHalfFrameMs();
 }
 
 // ========== 渲染 ==========
 
-bool RootNode::renderFrame(int64_t time_ms, uint8_t *out_buffer) {
+bool RootNode::renderFrame(TimeMs time_ms, uint8_t *out_buffer) {
     if (layers_.empty())
         return false;
 
@@ -110,7 +111,7 @@ bool RootNode::renderFrame(int64_t time_ms, uint8_t *out_buffer) {
     return true;
 }
 
-void RootNode::startPrepareNextFrame(int64_t next_time_ms) {
+void RootNode::startPrepareNextFrame(TimeMs next_time_ms) {
     if (next_time_ms > duration_ms_)
         return;
     if (isCacheHit(next_time_ms))
@@ -130,7 +131,7 @@ void RootNode::startPrepareNextFrame(int64_t next_time_ms) {
         bool success = renderFrame(next_time_ms, cache_data_.data());
         if (!success) {
             std::lock_guard<std::mutex> lock(cache_mutex_);
-            cache_time_ms_ = -1;
+            cache_time_ms_ = kInvalidTime;
         }
         preparing_ = false;
     });
@@ -173,42 +174,28 @@ std::string RootNode::loadFromJson(const std::string &json_str) {
         if (config.contains("materials")) {
             const auto &materials_json = config["materials"];
 
-            // 加载视频素材
-            if (materials_json.contains("videos")) {
-                const auto &videos = materials_json["videos"];
-                materials_[MATERIAL_TYPE_VIDEO].reserve(videos.size());
-                for (const auto &mat : videos) {
-                    auto material = std::make_unique<VideoMaterial>();
-                    if (!material->load(mat)) {
-                        return "load video material failed: " + material->getErrorMessage();
-                    }
-                    materials_[MATERIAL_TYPE_VIDEO].emplace_back(std::move(material));
-                }
-            }
+            using Factory = std::unique_ptr<Material> (*)();
+            const struct {
+                const char *key;
+                MaterialType type;
+                Factory create;
+            } loaders[] = {
+                {"videos", MATERIAL_TYPE_VIDEO, []() -> std::unique_ptr<Material> { return std::make_unique<VideoMaterial>(); }},
+                {"effects", MATERIAL_TYPE_EFFECT, []() -> std::unique_ptr<Material> { return std::make_unique<EffectMaterial>(); }},
+                {"texts", MATERIAL_TYPE_TEXT, []() -> std::unique_ptr<Material> { return std::make_unique<TextMaterial>(); }},
+                {"transitions", MATERIAL_TYPE_TRANSITION, []() -> std::unique_ptr<Material> { return std::make_unique<TransitionMaterial>(); }},
+            };
 
-            // 加载特效素材
-            if (materials_json.contains("effects")) {
-                const auto &effects = materials_json["effects"];
-                materials_[MATERIAL_TYPE_EFFECT].reserve(effects.size());
-                for (const auto &mat : effects) {
-                    auto material = std::make_unique<EffectMaterial>();
-                    if (!material->load(mat)) {
-                        return "load effect material failed: " + material->getErrorMessage();
-                    }
-                    materials_[MATERIAL_TYPE_EFFECT].emplace_back(std::move(material));
-                }
-            }
-
-            // 加载文字素材
-            if (materials_json.contains("texts")) {
-                const auto &texts = materials_json["texts"];
-                materials_[MATERIAL_TYPE_TEXT].reserve(texts.size());
-                for (const auto &mat : texts) {
-                    auto material = std::make_unique<TextMaterial>();
-                    if (!material->load(mat)) {
-                        return "load text material failed: " + material->getErrorMessage();
-                    }
-                    materials_[MATERIAL_TYPE_TEXT].emplace_back(std::move(material));
+            for (const auto &loader : loaders) {
+                if (!materials_json.contains(loader.key))
+                    continue;
+                const auto &arr = materials_json[loader.key];
+                materials_[loader.type].reserve(arr.size());
+                for (const auto &mat : arr) {
+                    auto material = loader.create();
+                    if (!material->load(mat))
+                        return std::string("load ") + loader.key + " failed: " + material->getErrorMessage();
+                    materials_[loader.type].emplace_back(std::move(material));
                 }
             }
         }
@@ -222,14 +209,28 @@ std::string RootNode::loadFromJson(const std::string &json_str) {
             if (!track.contains("segments"))
                 continue;
 
-            std::unique_ptr<Layer> layer = nullptr;
-            for (const auto &segment : track["segments"]) {
-                if (track_type == "video") {
-                    layer = std::make_unique<VideoLayer>(this);
-                } else if (track_type == "text") {
-                    layer = std::make_unique<TextLayer>(this);
+            using LayerFactory = std::unique_ptr<Layer> (*)(RootNode *);
+            static const struct {
+                const char *type;
+                LayerFactory create;
+            } layer_types[] = {
+                {"video", [](RootNode *r) -> std::unique_ptr<Layer> { return std::make_unique<VideoLayer>(r); }},
+                {"text", [](RootNode *r) -> std::unique_ptr<Layer> { return std::make_unique<TextLayer>(r); }},
+            };
+
+            LayerFactory factory = nullptr;
+            for (const auto &lt : layer_types) {
+                if (track_type == lt.type) {
+                    factory = lt.create;
+                    break;
                 }
-                if (!layer || !layer->load(segment))
+            }
+            if (!factory)
+                continue;
+
+            for (const auto &segment : track["segments"]) {
+                auto layer = factory(this);
+                if (!layer->load(segment))
                     return "load layer failed: " + layer->getErrorMessage();
                 layers_.emplace_back(std::move(layer));
             }
@@ -268,7 +269,7 @@ void RootNode::unload() {
     cancelPrepare();
     layers_.clear();
     cache_data_.clear();
-    cache_time_ms_ = -1;
+    cache_time_ms_ = kInvalidTime;
     current_time_ms_ = 0;
     id_.clear();
     canvas_ = CanvasConfig{};
@@ -286,8 +287,8 @@ void RootNode::unload() {
 
 // ========== 外部接口 ==========
 
-void RootNode::setCurrentTime(int64_t time_ms) {
-    current_time_ms_ = std::clamp(time_ms, int64_t(0), duration_ms_);
+void RootNode::setCurrentTime(TimeMs time_ms) {
+    current_time_ms_ = std::clamp(time_ms, TimeMs(0), duration_ms_);
 }
 
 bool RootNode::draw(uint8_t *buffer, size_t buffer_size) {
@@ -313,7 +314,7 @@ bool RootNode::draw(uint8_t *buffer, size_t buffer_size) {
     }
 
     // 启动异步准备下一帧
-    int64_t next_time = current_time_ms_ + static_cast<int64_t>(1000.0 / (frame_rate_ > 0 ? frame_rate_ : 25.0));
+    TimeMs next_time = current_time_ms_ + static_cast<TimeMs>(1000.0 / (frame_rate_ > 0 ? frame_rate_ : 25.0));
     startPrepareNextFrame(next_time);
 
     return true;
@@ -329,7 +330,7 @@ int RootNode::getHeight() const {
     return canvas_.height;
 }
 
-int64_t RootNode::getDurationMs() const {
+TimeMs RootNode::getDurationMs() const {
     return duration_ms_;
 }
 
@@ -361,7 +362,7 @@ const gl::QuadMesh *RootNode::getQuad() const {
     return &quad_;
 }
 
-int64_t RootNode::getCurrentTime() const {
+TimeMs RootNode::getCurrentTime() const {
     return current_time_ms_;
 }
 

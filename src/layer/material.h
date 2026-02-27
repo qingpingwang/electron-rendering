@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../core/loadable.h"
+#include "../core/types.h"
 #include <nlohmann/json.hpp>
-#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -13,7 +13,8 @@ enum MaterialType {
     MATERIAL_TYPE_VIDEO = 0,
     MATERIAL_TYPE_EFFECT = 1,
     MATERIAL_TYPE_TEXT = 2,
-    MATERIAL_TYPE_COUNT = 3
+    MATERIAL_TYPE_TRANSITION = 3,
+    MATERIAL_TYPE_COUNT = 4
 };
 
 // 素材基类
@@ -46,12 +47,12 @@ public:
 
     int getWidth() const;
     int getHeight() const;
-    int64_t getDuration() const;
+    TimeMs getDuration() const;
 
 private:
     int width_ = 0;
     int height_ = 0;
-    int64_t duration_ = 0;
+    TimeMs duration_ = 0;
 };
 
 // 特效素材（配置层）
@@ -98,8 +99,8 @@ struct Color4f {
 struct TextShadow {
     Color4f color;
     float angle = 0.0f;    // 度，0 = 右，90 = 下
-    float distance = 0.0f;  // 像素
-    float diffuse = 0.0f;   // 模糊扩散
+    float distance = 0.0f; // 像素
+    float diffuse = 0.0f;  // 模糊扩散
 };
 
 struct TextStroke {
@@ -140,6 +141,20 @@ private:
     std::string text_;
     TextAlignment alignment_ = TEXT_ALIGN_LEFT;
     std::vector<TextStyleRun> style_runs_;
+};
+
+// 转场继承自特效
+class TransitionMaterial : public EffectMaterial {
+public:
+    TransitionMaterial() = default;
+    ~TransitionMaterial() override = default;
+
+    bool load(const nlohmann::json &config, const std::string &base_path = "") override;
+
+    TimeMs getDuration() const;
+
+private:
+    TimeMs duration_ms_ = 0;
 };
 
 } // namespace vp

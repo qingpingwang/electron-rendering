@@ -1,6 +1,6 @@
 #include "layer.h"
-#include "../engine/root_node.h"
-#include "../effect/effect.h"
+#include "../core/root_node.h"
+#include "effect.h"
 #include "../resource/render_resource.h"
 
 using json = nlohmann::json;
@@ -27,7 +27,7 @@ bool Layer::load(const json &config, const std::string &base_path) {
         return false;
     }
     start_time_ms_ = config["target_timerange"].value("start", 0);
-    int64_t duration = config["target_timerange"].value("duration", 0);
+    TimeMs duration = config["target_timerange"].value("duration", 0);
     end_time_ms_ = start_time_ms_ + duration;
 
     // 获取素材指针
@@ -38,22 +38,21 @@ bool Layer::load(const json &config, const std::string &base_path) {
     }
     material_ = root_->getMaterial(getMaterialType(), material_id);
 
-    std::vector<std::string> effect_ids = config.value("extra_material_refs", std::vector<std::string>{});
-    effect_materials_.reserve(effect_ids.size());
+    auto effect_ids = config.value("extra_material_refs", std::vector<std::string>{});
+    effects_.reserve(effect_ids.size());
     for (const auto &effect_id : effect_ids) {
-        effect_materials_.emplace_back(root_->getMaterial(MATERIAL_TYPE_EFFECT, effect_id));
-    }
-
-    // 加载特效素材
-    effects_.reserve(effect_materials_.size());
-    for (const auto &effect_material : effect_materials_) {
-        std::unique_ptr<ResourceEffect> resource_effect = std::make_unique<ResourceEffect>(root_);
-        std::string resource_path = static_cast<EffectMaterial *>(effect_material)->getResourcePath();
-        if (!resource_effect->loadFromFolder(resource_path)) {
-            setError("load effect[" + resource_path + "] failed: " + resource_effect->getRenderResource()->getErrorMessage());
+        auto *mat = static_cast<EffectMaterial *>(root_->getMaterial(MATERIAL_TYPE_EFFECT, effect_id));
+        if (!mat) {
+            setError("effect material not found: " + effect_id);
             return false;
         }
-        effects_.emplace_back(std::move(resource_effect));
+        auto effect = std::make_unique<ResourceEffect>(root_);
+        const auto &path = mat->getResourcePath();
+        if (!effect->loadFromFolder(path)) {
+            setError("load effect[" + path + "] failed: " + effect->getRenderResource()->getErrorMessage());
+            return false;
+        }
+        effects_.emplace_back(std::move(effect));
     }
     return true;
 }
@@ -62,22 +61,22 @@ const std::string &Layer::getName() const {
     return name_;
 }
 
-int64_t Layer::getDurationMs() const {
+TimeMs Layer::getDurationMs() const {
     return end_time_ms_ - start_time_ms_;
 }
 
-int64_t Layer::getStartTime() const {
+TimeMs Layer::getStartTime() const {
     return start_time_ms_;
 }
 
-int64_t Layer::getEndTime() const {
+TimeMs Layer::getEndTime() const {
     return end_time_ms_;
 }
 
 bool Layer::isActive() const {
     if (!root_)
         return false;
-    int64_t current = root_->getCurrentTime();
+    TimeMs current = root_->getCurrentTime();
     return current >= start_time_ms_ && current < end_time_ms_;
 }
 
@@ -87,7 +86,7 @@ bool Layer::hasActiveEffects() const {
     }
 
     // 计算图层的相对时间（从图层开始时间算起）
-    int64_t offset_time = root_->getCurrentTime() - start_time_ms_;
+    TimeMs offset_time = root_->getCurrentTime() - start_time_ms_;
 
     // 检查是否有任何特效在当前时间处于活跃状态
     return std::any_of(effects_.begin(), effects_.end(),
@@ -153,17 +152,16 @@ gl::FBO Layer::applyEffects(const gl::FBO &input) {
 
     gl::FBO current = input;
 
-    int64_t offset_time = root_->getCurrentTime() - getStartTime();
+    TimeMs offset_time = root_->getCurrentTime() - getStartTime();
     // 依次应用特效链
     for (auto &effect : effects_) {
-        if (!effect->isActive(offset_time)) {
+        if (!effect->isActive(offset_time))
             continue;
-        }
         // 释放上一个 FBO
         if (current.isValid() && current.fbo != input.fbo) {
             root_->getFBOPool()->release(current);
         }
-        gl::FBO output = effect->apply(current, offset_time);
+        gl::FBO output = effect->apply({current}, offset_time);
         if (!output.isValid()) {
             // 特效失败，返回无效 FBO
             return gl::FBO{};

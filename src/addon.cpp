@@ -1,7 +1,7 @@
 #include <napi.h>
 #include "addon/root_wrap.h"
 #include "addon/layer_wrap.h"
-#include "decoder/video_decoder.h"
+#include "codec/video_decoder.h"
 
 static Napi::Value CreateRoot(const Napi::CallbackInfo &info) {
     return RootWrap::NewInstance(info.Env());

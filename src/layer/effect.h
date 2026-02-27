@@ -1,10 +1,11 @@
 #pragma once
 
 #include "../core/loadable.h"
+#include "../core/types.h"
 #include "../gl/types.h"
-#include <nlohmann/json.hpp>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace vp {
 
@@ -30,16 +31,10 @@ public:
     // 从 JSON 加载特效配置
     bool load(const nlohmann::json &config, const std::string &base_path = "") override = 0;
 
-    // 应用特效：输入 FBO → 返回输出 FBO
-    // input: 输入 FBO（纹理）
+    // 应用特效：输入 FBO 列表 → 返回输出 FBO
+    // inputs: 输入 FBO 列表（特效传 1 个，转场传 2 个）
     // time_ms: 当前时间（用于动画特效）
-    // 返回: 输出 FBO（由特效内部创建/管理）
-    //
-    // 注意：
-    // - 特效内部自己管理 FBO（可以从 pool 获取、可以维护成员变量复用）
-    // - Layer 不管理特效返回的 FBO
-    // - 特效可以在析构或下次 apply 时清理 FBO
-    virtual gl::FBO apply(const gl::FBO &input, int64_t time_ms = 0) = 0;
+    virtual gl::FBO apply(const std::vector<gl::FBO> &inputs, TimeMs time_ms = 0) = 0;
 
     // 获取特效类型名称
     virtual const char *getType() const = 0;
@@ -49,7 +44,7 @@ public:
     virtual RenderResource *getRenderResource();
     virtual const RenderResource *getRenderResource() const;
 
-    bool isActive(int64_t time_ms);
+    bool isActive(TimeMs time_ms);
 
 protected:
     RootNode *root_; // 访问 FBOPool、Shader、Quad 等共享资源
@@ -69,8 +64,7 @@ public:
     // 从文件夹路径直接加载
     bool loadFromFolder(const std::string &folder_path);
 
-    // 应用特效
-    gl::FBO apply(const gl::FBO &input, int64_t time_ms = 0) override;
+    gl::FBO apply(const std::vector<gl::FBO> &inputs, TimeMs time_ms = 0) override;
 
     const char *getType() const override;
 

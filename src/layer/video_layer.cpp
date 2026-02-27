@@ -1,5 +1,5 @@
 #include "video_layer.h"
-#include "../engine/root_node.h"
+#include "../core/root_node.h"
 #include <nlohmann/json.hpp>
 #include "../gl/functions.h"
 #include "../gl/shader.h"
@@ -71,8 +71,8 @@ bool VideoLayer::load(const json &config, const std::string &base_path) {
 }
 
 bool VideoLayer::renderContent(const gl::FBO &fbo) {
-    int64_t frame_time = calculateFrameTime();
-    if (frame_time < 0)
+    TimeMs frame_time = calculateFrameTime();
+    if (frame_time == kInvalidTime)
         return true;
 
     // 解码当前时间的帧（decoder内部会处理帧复用）
@@ -103,28 +103,29 @@ bool VideoLayer::isLoaded() const {
     return decoder_ && decoder_->isOpen();
 }
 
-int64_t VideoLayer::calculateFrameTime() const {
+TimeMs VideoLayer::calculateFrameTime() const {
     if (!root_)
-        return -1;
+        return kInvalidTime;
 
     // 获取当前时间并转换为图层内部时间（相对于开始时间）
-    int64_t current_time = root_->getCurrentTime();
-    int64_t layer_time = current_time - start_time_ms_;
+    TimeMs current_time = root_->getCurrentTime();
+    
+    // 检查是否在图层时间范围内（当前时间是否在图层开始时间之前）
+    if (current_time < start_time_ms_)
+        return kInvalidTime;
+    
+    TimeMs layer_time = current_time - start_time_ms_;
 
-    // 检查是否在图层时间范围内
-    if (layer_time < 0)
-        return -1;
-
-    int64_t layer_duration = end_time_ms_ - start_time_ms_;
+    TimeMs layer_duration = end_time_ms_ - start_time_ms_;
     if (layer_time >= layer_duration)
-        return -1;
+        return kInvalidTime;
 
     // 线性映射：将图层时间范围映射到资源时间范围
     // progress: 0.0 (图层开始) -> 1.0 (图层结束)
     double progress = static_cast<double>(layer_time) / static_cast<double>(layer_duration);
 
     // 计算资源中的时间位置
-    return source_start_ms_ + static_cast<int64_t>(progress * source_duration_ms_);
+    return source_start_ms_ + static_cast<TimeMs>(progress * source_duration_ms_);
 }
 
 } // namespace vp

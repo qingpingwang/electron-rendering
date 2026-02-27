@@ -39,7 +39,7 @@ int VideoMaterial::getHeight() const {
     return height_;
 }
 
-int64_t VideoMaterial::getDuration() const {
+TimeMs VideoMaterial::getDuration() const {
     return duration_;
 }
 
@@ -47,35 +47,17 @@ int64_t VideoMaterial::getDuration() const {
 
 bool EffectMaterial::load(const json &config, const std::string &base_path) {
     id_ = config.value("id", "");
-    type_ = config.value("type", "resource");
+    type_ = config.value("type", "effect");
 
     if (id_.empty()) {
         setError("effect material: id is required");
         return false;
     }
 
-    // 根据类型加载不同字段
-    if (type_ == "resource") {
-        // resource 类型：存储资源路径
-        path_ = config.value("resource_path", "");
-        if (path_.empty()) {
-            setError("effect material[" + id_ + "]: resource_path is required for type 'resource'");
-            return false;
-        }
-    } else if (type_ == "builtin") {
-        // builtin 类型：存储内置特效名称
-        effect_name_ = config.value("effect_name", "");
-        if (effect_name_.empty()) {
-            setError("effect material[" + id_ + "]: effect_name is required for type 'builtin'");
-            return false;
-        }
-    } else if (type_ == "lut") {
-        // lut 类型：存储 LUT 文件路径
-        path_ = config.value("lut_file", "");
-        if (path_.empty()) {
-            setError("effect material[" + id_ + "]: lut_file is required for type 'lut'");
-            return false;
-        }
+    path_ = config.value("resource_path", "");
+    if (path_.empty()) {
+        setError("effect material[" + id_ + "]: resource_path is required for type 'resource'");
+        return false;
     }
 
     // 存储额外配置（如果有）
@@ -221,6 +203,20 @@ TextAlignment TextMaterial::getAlignment() const {
 }
 const std::vector<TextStyleRun> &TextMaterial::getStyleRuns() const {
     return style_runs_;
+}
+
+bool TransitionMaterial::load(const json &config, const std::string &base_path) {
+    duration_ms_ = config.value("duration", 0);
+    if (duration_ms_ == 0) {
+        setError("transition material[" + id_ + "]: duration is required");
+        return false;
+    }
+
+    return EffectMaterial::load(config, base_path);
+}
+
+TimeMs TransitionMaterial::getDuration() const {
+    return duration_ms_;
 }
 
 } // namespace vp

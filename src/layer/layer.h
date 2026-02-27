@@ -1,11 +1,10 @@
 #pragma once
 
 #include "../core/loadable.h"
-#include "../effect/effect.h"
+#include "../core/types.h"
+#include "effect.h"
 #include "../gl/types.h"
-#include "../material/material.h"
-#include <nlohmann/json.hpp>
-#include <cstdint>
+#include "material.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -31,10 +30,10 @@ public:
     bool draw();
 
     const std::string &getName() const;
-    int64_t getDurationMs() const;
+    TimeMs getDurationMs() const;
 
-    int64_t getStartTime() const;
-    int64_t getEndTime() const;
+    TimeMs getStartTime() const;
+    TimeMs getEndTime() const;
     bool isActive() const; // 判断当前时间是否在图层的时间范围内
 
     virtual MaterialType getMaterialType() const = 0;
@@ -54,12 +53,11 @@ protected:
     bool hasActiveEffects() const;
 
     RootNode *root_ = nullptr;
-    Material *material_ = nullptr;             // 图层使用的素材
-    std::vector<Material *> effect_materials_; // 图层使用的特效素材
+    Material *material_ = nullptr;
     std::string name_;
-    int64_t duration_ms_ = 0;
-    int64_t start_time_ms_ = 0;
-    int64_t end_time_ms_ = 0;
+    TimeMs duration_ms_ = 0;
+    TimeMs start_time_ms_ = 0;
+    TimeMs end_time_ms_ = 0;
 
     // 特效支持
     std::vector<std::unique_ptr<Effect>> effects_; // 特效链

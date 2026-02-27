@@ -1,7 +1,7 @@
 #include "text_layer.h"
 #include "../core/font_manager.h"
-#include "../engine/root_node.h"
-#include "../material/material.h"
+#include "../core/root_node.h"
+#include "material.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"

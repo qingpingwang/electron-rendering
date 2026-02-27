@@ -1,15 +1,13 @@
 #pragma once
 
 #include "../core/loadable.h"
+#include "../core/types.h"
 #include "../gl/types.h"
 #include "animation.h"
 #include "render_pass.h"
 #include "texture_player.h"
 #include "uniform_param.h"
-#include <map>
 #include <memory>
-#include <nlohmann/json.hpp>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -32,7 +30,7 @@ public:
 
     // 渲染（输入 FBO → 输出 FBO）
     // 支持单输入（effect）和多输入（transition）
-    gl::FBO render(const std::vector<gl::FBO> &inputs, int64_t time_ms);
+    gl::FBO render(const std::vector<gl::FBO> &inputs, TimeMs time_ms);
 
     // 获取资源信息
     const std::string &getName() const;
@@ -44,9 +42,9 @@ public:
     bool setVecParam(const std::string &name, const std::vector<float> &value);
     bool setBoolParam(const std::string &name, bool value);
 
-    int64_t getResourceDuration() const;
+    TimeMs getResourceDuration() const;
 
-    void setResourceDuration(int64_t duration_ms);
+    void setResourceDuration(TimeMs duration_ms);
 
 private:
     RootNode *root_;
@@ -56,7 +54,7 @@ private:
     std::string id_;
     std::string desc_;
     std::string format_;
-    int64_t resource_duration_ms_;
+    TimeMs resource_duration_ms_;
     std::string base_path_; // 资源文件夹路径
 
     // 渲染组件

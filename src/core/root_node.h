@@ -1,10 +1,10 @@
 #pragma once
 
-#include "../material/material.h"
+#include "../core/types.h"
+#include "../layer/material.h"
 #include "../gl/functions.h"
 #include "../gl/fbo_pool.h"
 #include <atomic>
-#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -13,7 +13,9 @@
 
 class GrDirectContext;
 
-namespace gl { class Shader; }
+namespace gl {
+class Shader;
+}
 
 namespace vp {
 
@@ -40,12 +42,12 @@ public:
     std::string loadFromJson(const std::string &json_str);
     void unload();
 
-    void setCurrentTime(int64_t time_ms);
+    void setCurrentTime(TimeMs time_ms);
     bool draw(uint8_t *buffer, size_t buffer_size);
 
     int getWidth() const;
     int getHeight() const;
-    int64_t getDurationMs() const;
+    TimeMs getDurationMs() const;
     double getFrameRate() const;
     const std::string &getId() const;
     const CanvasConfig &getCanvas() const;
@@ -55,7 +57,7 @@ public:
     // 获取共享渲染资源
     gl::Shader *getShader() const;
     const gl::QuadMesh *getQuad() const;
-    int64_t getCurrentTime() const;
+    TimeMs getCurrentTime() const;
 
     // Skia 上下文（文字渲染用，共享 CGL 上下文）
     GrDirectContext *getSkiaContext() const;
@@ -77,13 +79,13 @@ public:
 
 private:
     // 渲染一帧
-    bool renderFrame(int64_t time_ms, uint8_t *out_buffer);
+    bool renderFrame(TimeMs time_ms, uint8_t *out_buffer);
     // 异步准备
-    void startPrepareNextFrame(int64_t next_time_ms);
+    void startPrepareNextFrame(TimeMs next_time_ms);
     void cancelPrepare();
     // 缓存
-    bool isCacheHit(int64_t time_ms) const;
-    int64_t getHalfFrameMs() const;
+    bool isCacheHit(TimeMs time_ms) const;
+    TimeMs getHalfFrameMs() const;
 
     // OpenGL 资源
     gl::GLContext gl_ctx_;
@@ -104,13 +106,13 @@ private:
     // 项目配置
     std::string id_;
     CanvasConfig canvas_;
-    int64_t duration_ms_ = 0;
+    TimeMs duration_ms_ = 0;
     double frame_rate_ = 0.0;
-    int64_t current_time_ms_ = 0;
+    TimeMs current_time_ms_ = 0;
 
     // 帧缓存
     std::vector<uint8_t> cache_data_;
-    int64_t cache_time_ms_ = -1;
+    TimeMs cache_time_ms_ = kInvalidTime;
     mutable std::mutex cache_mutex_;
 
     // 异步线程

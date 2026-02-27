@@ -1,5 +1,13 @@
 #include "video_decoder.h"
 
+extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libavutil/imgutils.h>
+#include <libavutil/hwcontext.h>
+#include <libswscale/swscale.h>
+}
+
 namespace vp {
 
 VideoDecoder::VideoDecoder() {
@@ -151,7 +159,7 @@ bool VideoDecoder::open(const std::string &path) {
         rgba_buffer_, AV_PIX_FMT_RGBA,
         width_, height_, 1);
 
-    last_decoded_ms_ = -1;
+    last_decoded_ms_ = kInvalidTime;
     return true;
 }
 
@@ -179,29 +187,27 @@ void VideoDecoder::close() {
     width_ = height_ = 0;
     duration_ms_ = 0;
     frame_rate_ = 0.0;
-    last_decoded_ms_ = -1;
+    last_decoded_ms_ = kInvalidTime;
 }
 
-bool VideoDecoder::decodeFrameAt(int64_t time_ms, VideoFrame &out) {
+bool VideoDecoder::decodeFrameAt(TimeMs time_ms, VideoFrame &out) {
     if (!format_ctx_ || video_stream_idx_ < 0)
         return false;
 
-    if (time_ms < 0)
-        time_ms = 0;
     if (time_ms >= duration_ms_)
         time_ms = duration_ms_ - 1;
 
     // 计算帧间隔
-    int64_t frame_interval = (frame_rate_ > 0) ? (int64_t)(1000.0 / frame_rate_) : 40;
+    TimeMs frame_interval = (frame_rate_ > 0) ? (TimeMs)(1000.0 / frame_rate_) : 40;
 
     // 判断是否需要 seek
     bool need_seek = false;
-    if (last_decoded_ms_ < 0) {
+    if (last_decoded_ms_ == kInvalidTime) {
         need_seek = true;
-    } else if (time_ms < last_decoded_ms_ - frame_interval) {
+    } else if (time_ms < last_decoded_ms_ && (last_decoded_ms_ - time_ms) > frame_interval) {
         // 倒退超过一帧间隔才seek（容错视频帧PTS的时间戳偏差）
         need_seek = true;
-    } else if (time_ms - last_decoded_ms_ > frame_interval * 10) {
+    } else if (last_decoded_ms_ != kInvalidTime && time_ms > last_decoded_ms_ && (time_ms - last_decoded_ms_) > frame_interval * 10) {
         need_seek = true;
     }
 
@@ -211,15 +217,15 @@ bool VideoDecoder::decodeFrameAt(int64_t time_ms, VideoFrame &out) {
         if (av_seek_frame(format_ctx_, video_stream_idx_, target_pts, AVSEEK_FLAG_BACKWARD) < 0)
             return false;
         avcodec_flush_buffers(codec_ctx_);
-        last_decoded_ms_ = -1; // 重置，强制解码
+        last_decoded_ms_ = kInvalidTime; // 重置，强制解码
     }
 
     // 已经在目标时间或之后，直接返回（避免重复解码）
-    if (last_decoded_ms_ >= time_ms)
+    if (last_decoded_ms_ != kInvalidTime && last_decoded_ms_ >= time_ms)
         return true;
 
     // 解码直到目标时间（seek和顺序解码共用此逻辑）
-    while (last_decoded_ms_ < time_ms) {
+    while (last_decoded_ms_ == kInvalidTime || last_decoded_ms_ < time_ms) {
         if (!decodeNextFrame(out))
             return false;
         last_decoded_ms_ = out.pts_ms;
@@ -298,13 +304,13 @@ void VideoDecoder::convertToRGBA(AVFrame *frame, VideoFrame &out) {
     out.valid = true;
 }
 
-int64_t VideoDecoder::ptsToMs(int64_t pts) const {
+TimeMs VideoDecoder::ptsToMs(int64_t pts) const {
     if (pts == AV_NOPTS_VALUE)
         return 0;
     return av_rescale_q(pts, time_base_, {1, 1000});
 }
 
-int64_t VideoDecoder::msToPts(int64_t ms) const {
+int64_t VideoDecoder::msToPts(TimeMs ms) const {
     return av_rescale_q(ms, {1, 1000}, time_base_);
 }
 
@@ -316,7 +322,7 @@ int VideoDecoder::getHeight() const {
     return height_;
 }
 
-int64_t VideoDecoder::getDurationMs() const {
+TimeMs VideoDecoder::getDurationMs() const {
     return duration_ms_;
 }
 

@@ -1,5 +1,5 @@
 #include "render_resource.h"
-#include "../engine/root_node.h"
+#include "../core/root_node.h"
 #include "texture_player.h"
 #include <algorithm>
 #include <filesystem>
@@ -171,7 +171,7 @@ bool RenderResource::loadTextures(const nlohmann::json &config) {
     return true;
 }
 
-gl::FBO RenderResource::render(const std::vector<gl::FBO> &inputs, int64_t time_ms) {
+gl::FBO RenderResource::render(const std::vector<gl::FBO> &inputs, TimeMs time_ms) {
     if (render_passes_.empty() || !root_ || inputs.empty()) {
         setError("render resource is not valid");
         return gl::FBO{};
@@ -304,11 +304,11 @@ bool RenderResource::setBoolParam(const std::string &name, bool value) {
     return false;
 }
 
-int64_t RenderResource::getResourceDuration() const {
+TimeMs RenderResource::getResourceDuration() const {
     return resource_duration_ms_;
 }
 
-void RenderResource::setResourceDuration(int64_t duration_ms) {
+void RenderResource::setResourceDuration(TimeMs duration_ms) {
     resource_duration_ms_ = duration_ms;
 }
 

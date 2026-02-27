@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../core/loadable.h"
+#include "../core/types.h"
 #include "../gl/types.h"
-#include <nlohmann/json.hpp>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -24,7 +24,7 @@ public:
     bool load(const nlohmann::json &config, const std::string &base_path) override;
 
     // 播放（获取指定时间的纹理）
-    virtual gl::Texture play(int64_t time_ms) = 0;
+    virtual gl::Texture play(TimeMs time_ms) = 0;
 
     // 获取信息
     std::string getName() const {
@@ -71,7 +71,7 @@ public:
     ~ImageTexture() override;
 
     bool load(const nlohmann::json &config, const std::string &base_path) override;
-    gl::Texture play(int64_t time_ms) override;
+    gl::Texture play(TimeMs time_ms) override;
 
 private:
     bool loadStaticImage(); // 加载静态图片
@@ -89,12 +89,12 @@ public:
     ~VideoTexture() override;
 
     bool load(const nlohmann::json &config, const std::string &base_path) override;
-    gl::Texture play(int64_t time_ms) override;
+    gl::Texture play(TimeMs time_ms) override;
 
 private:
     std::unique_ptr<VideoDecoder> decoder_;
-    int64_t last_time_ms_ = -1;
-    int64_t duration_ms_ = 0;
+    TimeMs last_time_ms_ = kInvalidTime;
+    TimeMs duration_ms_ = 0;
     float fps_ = 0.0f;
 };
 

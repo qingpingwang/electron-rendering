@@ -1,4 +1,13 @@
 #include "video_encoder.h"
+
+extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libavutil/imgutils.h>
+#include <libavutil/opt.h>
+#include <libswscale/swscale.h>
+}
+
 #include <iostream>
 
 namespace vp {
@@ -126,7 +135,7 @@ bool VideoEncoder::open(const std::string &output_file, const EncoderConfig &con
     return true;
 }
 
-bool VideoEncoder::encodeFrame(const uint8_t *rgba_data, int64_t pts_ms) {
+bool VideoEncoder::encodeFrame(const uint8_t *rgba_data, TimeMs pts_ms) {
     if (!is_open_ || !codec_ctx_ || !frame_ || !sws_ctx_) {
         return false;
     }

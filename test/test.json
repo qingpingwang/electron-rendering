@@ -26,6 +26,21 @@
                     "extra_material_refs": [
                         "effect_0"
                     ]
+                },
+                {
+                    "id": "segment_1",
+                    "material_id": "material_video_0",
+                    "target_timerange": {
+                        "start": 5000,
+                        "duration": 1000
+                    },
+                    "source_timerange": {
+                        "start": 0,
+                        "duration": 1000
+                    },
+                    "extra_material_refs": [
+                        "effect_0"
+                    ]
                 }
             ]
         },
@@ -62,7 +77,7 @@
         "effects": [
             {
                 "id": "effect_0",
-                "type": "resource",
+                "type": "effect",
                 "resource_path": "./test/resources/sprint_effect"
             }
         ],
@@ -71,6 +86,14 @@
                 "alignment": 1,
                 "content": "{\"styles\":[{\"fill\":{\"content\":{\"solid\":{\"color\":[0,0,0]}}},\"range\":[0,2],\"shadows\":[{\"diffuse\":0,\"angle\":-45,\"content\":{\"solid\":{\"color\":[0,0,0]}},\"distance\":27.781448364257812,\"alpha\":0.899999976158142}],\"strokes\":[{\"width\":0.079999998211860657,\"content\":{\"solid\":{\"color\":[1,1,1]}}}],\"useLetterColor\":true,\"size\":150,\"font\":{\"path\":\"/Applications/VideoFusion-macOS.app/Contents/Resources/Font/SystemFont/zh-hans.ttf\",\"id\":\"\"}},{\"fill\":{\"content\":{\"solid\":{\"color\":[0,0,0]}}},\"range\":[2,4],\"shadows\":[{\"diffuse\":0.054999999701976776,\"angle\":-45,\"content\":{\"solid\":{\"color\":[0,0,0]}},\"distance\":74.996986389160156,\"alpha\":0.899999976158142}],\"strokes\":[{\"width\":0.079999998211860657,\"content\":{\"solid\":{\"color\":[1,1,1]}}}],\"useLetterColor\":true,\"size\":150,\"font\":{\"path\":\"/Applications/VideoFusion-macOS.app/Contents/Resources/Font/SystemFont/zh-hans.ttf\",\"id\":\"\"}}],\"text\":\"默认文本\"}",
                 "id": "material_text_0"
+            }
+        ],
+        "transitions": [
+            {
+                "id": "transition_0",
+                "type": "transition",
+                "duration": 1000,
+                "resource_path": "./test/resources/sprint_transition"
             }
         ]
     }

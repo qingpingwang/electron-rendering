@@ -1,6 +1,6 @@
 #include "texture_player.h"
-#include "../engine/root_node.h"
-#include "../decoder/video_decoder.h"
+#include "../core/root_node.h"
+#include "../codec/video_decoder.h"
 #include "../gl/functions.h"
 #include "../third_party/stb_image/stb_image.h"
 #include <cstring>
@@ -181,7 +181,7 @@ bool ImageTexture::loadGif() {
     return true;
 }
 
-gl::Texture ImageTexture::play(int64_t time_ms) {
+gl::Texture ImageTexture::play(TimeMs time_ms) {
     // 卫语句：纹理未创建
     if (texture_.id == 0) {
         setError("texture not created");
@@ -256,14 +256,14 @@ bool VideoTexture::load(const nlohmann::json &config, const std::string &base_pa
     return true;
 }
 
-gl::Texture VideoTexture::play(int64_t time_ms) {
+gl::Texture VideoTexture::play(TimeMs time_ms) {
     if (!decoder_ || texture_.id == 0) {
         setError("decoder or texture not created");
         return gl::Texture{};
     }
 
     // 处理循环模式
-    int64_t sampling_time = time_ms;
+    TimeMs sampling_time = time_ms;
     switch (repeat_mode_) {
     case 0: // 停止在最后一帧
         sampling_time = std::min(sampling_time, duration_ms_);

@@ -2,7 +2,7 @@
 #include "root_wrap.h"
 #include "../layer/layer.h"
 #include "../layer/video_layer.h"
-#include "../material/material.h"
+#include "../layer/material.h"
 
 static Napi::FunctionReference g_constructor;
 
