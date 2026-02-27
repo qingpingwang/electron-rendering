@@ -7,8 +7,8 @@
 //
 // 注意：程序启动时会自动切换到项目根目录，所有相对路径从根目录开始
 
-#include "../../src/engine/root_node.h"
-#include "../../src/encoder/video_encoder.h"
+#include "../../src/core/root_node.h"
+#include "../../src/codec/video_encoder.h"
 #include <chrono>
 #include <fstream>
 #include <iostream>

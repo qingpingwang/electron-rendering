@@ -24,7 +24,8 @@
                         "duration": 5000
                     },
                     "extra_material_refs": [
-                        "effect_0"
+                        "effect_0",
+                        "transition_0"
                     ]
                 },
                 {
@@ -93,7 +94,7 @@
                 "id": "transition_0",
                 "type": "transition",
                 "duration": 1000,
-                "resource_path": "./test/resources/sprint_transition"
+                "resource_path": "./test/resources/transition_test"
             }
         ]
     }

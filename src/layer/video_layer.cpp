@@ -70,8 +70,8 @@ bool VideoLayer::load(const json &config, const std::string &base_path) {
     return true;
 }
 
-bool VideoLayer::renderContent(const gl::FBO &fbo) {
-    TimeMs frame_time = calculateFrameTime();
+bool VideoLayer::renderContent(const gl::FBO &fbo, TimeMs time_ms) {
+    TimeMs frame_time = calculateFrameTime(time_ms);
     if (frame_time == kInvalidTime)
         return true;
 
@@ -103,28 +103,16 @@ bool VideoLayer::isLoaded() const {
     return decoder_ && decoder_->isOpen();
 }
 
-TimeMs VideoLayer::calculateFrameTime() const {
-    if (!root_)
+TimeMs VideoLayer::calculateFrameTime(TimeMs time_ms) const {
+    if (time_ms < start_time_ms_)
         return kInvalidTime;
 
-    // 获取当前时间并转换为图层内部时间（相对于开始时间）
-    TimeMs current_time = root_->getCurrentTime();
-    
-    // 检查是否在图层时间范围内（当前时间是否在图层开始时间之前）
-    if (current_time < start_time_ms_)
-        return kInvalidTime;
-    
-    TimeMs layer_time = current_time - start_time_ms_;
-
+    TimeMs layer_time = time_ms - start_time_ms_;
     TimeMs layer_duration = end_time_ms_ - start_time_ms_;
     if (layer_time >= layer_duration)
         return kInvalidTime;
 
-    // 线性映射：将图层时间范围映射到资源时间范围
-    // progress: 0.0 (图层开始) -> 1.0 (图层结束)
     double progress = static_cast<double>(layer_time) / static_cast<double>(layer_duration);
-
-    // 计算资源中的时间位置
     return source_start_ms_ + static_cast<TimeMs>(progress * source_duration_ms_);
 }
 

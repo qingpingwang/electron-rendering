@@ -20,12 +20,12 @@ public:
     bool isLoaded() const;
 
 protected:
-    bool renderContent(const gl::FBO &fbo) override;
+    bool renderContent(const gl::FBO &fbo, TimeMs time_ms) override;
     MaterialType getMaterialType() const override { return MATERIAL_TYPE_VIDEO; }
 
 private:
     // 计算当前应该显示的帧时间（带线性插值对齐到帧边界）
-    TimeMs calculateFrameTime() const;
+    TimeMs calculateFrameTime(TimeMs time_ms) const;
     std::unique_ptr<VideoDecoder> decoder_ = nullptr;
     VideoFrame current_frame_;
     int video_width_ = 0;

@@ -82,8 +82,9 @@ bool RootNode::isCacheHit(TimeMs time_ms) const {
 // ========== 渲染 ==========
 
 bool RootNode::renderFrame(TimeMs time_ms, uint8_t *out_buffer) {
-    if (layers_.empty())
-        return false;
+    if (layers_.empty()) {
+        return true;
+    }
 
     gl::makeCurrent(gl_ctx_);
 
@@ -91,15 +92,28 @@ bool RootNode::renderFrame(TimeMs time_ms, uint8_t *out_buffer) {
     gl::bindFBO(render_fbo_);
     gl::cleanColor();
 
-    for (auto &layer : layers_) {
-        // 取消标志或绘制失败，直接返回
-        if (cancel_flag_ || !layer->draw()) {
+    for (size_t i = 0; i < layers_.size(); i++) {
+        if (cancel_flag_) {
+            gl::unbindFBO();
+            return false;
+        }
+        auto &layer = layers_[i];
+        auto *transition = layer->getActiveTransition(time_ms);
+        // 不是最后一个图层
+        if (!transition || i == layers_.size() - 1) {
+            if (!layer->draw(render_fbo_, time_ms)) {
+                gl::unbindFBO();
+                return false;
+            }
+            continue;
+        }
+
+        auto &nextLayer = layers_[++i];
+        if (!renderTransition(layer.get(), nextLayer.get(), transition, time_ms)) {
             gl::unbindFBO();
             return false;
         }
     }
-
-    gl::unbindFBO();
 
     if (cancel_flag_)
         return false;
@@ -108,6 +122,39 @@ bool RootNode::renderFrame(TimeMs time_ms, uint8_t *out_buffer) {
     if (!gl::readPixels(render_fbo_, out_buffer, static_cast<int>(canvas_.width * canvas_.height * 4)))
         return false;
 
+    return true;
+}
+
+bool RootNode::renderTransition(Layer *from, Layer *to, Effect *transition, TimeMs time_ms) {
+    gl::FBO fbo0 = fbo_pool_.acquire(canvas_.width, canvas_.height);
+    gl::FBO fbo1 = fbo_pool_.acquire(canvas_.width, canvas_.height);
+    if (!fbo0.isValid() || !fbo1.isValid()) {
+        fbo_pool_.release(fbo0);
+        fbo_pool_.release(fbo1);
+        return false;
+    }
+
+    TimeMs t0 = time_ms >= from->getEndTime() ? from->getEndTime() - 1 : time_ms;
+    TimeMs t1 = time_ms < to->getStartTime() ? to->getStartTime() : time_ms;
+    if (!from->draw(fbo0, t0) || !to->draw(fbo1, t1)) {
+        fbo_pool_.release(fbo0);
+        fbo_pool_.release(fbo1);
+        return false;
+    }
+
+    TimeMs transitionTime = time_ms - from->getEndTime() + transition->getDurationMs() / 2;
+    gl::FBO effect_out = transition->apply({fbo0, fbo1}, transitionTime);
+    fbo_pool_.release(fbo0);
+    fbo_pool_.release(fbo1);
+
+    gl::drawTextureQuad(
+        render_fbo_,
+        gl::Texture{effect_out.texture, effect_out.width, effect_out.height},
+        getShader(),
+        0,
+        "uTex",
+        &quad_);
+    fbo_pool_.release(effect_out);
     return true;
 }
 
@@ -233,6 +280,10 @@ std::string RootNode::loadFromJson(const std::string &json_str) {
                 if (!layer->load(segment))
                     return "load layer failed: " + layer->getErrorMessage();
                 layers_.emplace_back(std::move(layer));
+            }
+            // 最后一个图层不能有转场
+            if (!layers_.empty() && layers_.back()->hasTransition()) {
+                return "last layer cannot have transition on track[" + track_type + "] segment[" + std::to_string(track["segments"].size()) + "]";
             }
         }
 

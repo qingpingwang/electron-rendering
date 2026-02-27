@@ -25,32 +25,35 @@ public:
     // 从 JSON 加载图层基础配置（解析通用属性）
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
 
-    // 绘制图层到 render_fbo_（基类实现，模板方法）
-    // 流程：检查特效 → 选择目标 FBO → renderContent() → 应用特效 → blit 到 render_fbo_
-    bool draw();
+    // 绘制图层到目标 FBO
+    // 流程：检查特效 → 选择中间/直出 → renderContent() → 应用特效 → blit 到 target
+    bool draw(const gl::FBO &target, TimeMs time_ms);
 
     const std::string &getName() const;
     TimeMs getDurationMs() const;
 
     TimeMs getStartTime() const;
     TimeMs getEndTime() const;
-    bool isActive() const; // 判断当前时间是否在图层的时间范围内
+    bool isActive(TimeMs time_ms) const;
 
     virtual MaterialType getMaterialType() const = 0;
-    Material *getMaterial() const { return material_; }
+    Material *getMaterial() const;
+    bool hasTransition() const;
+
+    // 转场
+    Effect *getActiveTransition(TimeMs time_ms) const;
 
 protected:
     // 渲染内容（子类实现具体绘制逻辑）
     // fbo: 当前要绘制到的目标 FBO
-    virtual bool renderContent(const gl::FBO &fbo) = 0;
+    virtual bool renderContent(const gl::FBO &fbo, TimeMs time_ms) = 0;
 
     // 应用特效链（基类实现）
     // 输入 FBO，返回特效处理后的 FBO
     // 注意：返回的 FBO 由特效内部管理，Layer 不负责释放
-    gl::FBO applyEffects(const gl::FBO &input);
+    gl::FBO applyEffects(const gl::FBO &input, TimeMs time_ms);
 
-    // 检查是否有活跃的特效
-    bool hasActiveEffects() const;
+    bool hasActiveEffects(TimeMs time_ms) const;
 
     RootNode *root_ = nullptr;
     Material *material_ = nullptr;
@@ -59,8 +62,9 @@ protected:
     TimeMs start_time_ms_ = 0;
     TimeMs end_time_ms_ = 0;
 
-    // 特效支持
-    std::vector<std::unique_ptr<Effect>> effects_; // 特效链
+    // 特效 & 转场
+    std::vector<std::unique_ptr<Effect>> effects_;
+    std::vector<std::unique_ptr<Effect>> transitions_;
 };
 
 } // namespace vp

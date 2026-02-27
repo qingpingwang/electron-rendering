@@ -14,7 +14,7 @@ public:
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
 
 protected:
-    bool renderContent(const gl::FBO &fbo) override;
+    bool renderContent(const gl::FBO &fbo, TimeMs time_ms) override;
     MaterialType getMaterialType() const override { return MATERIAL_TYPE_TEXT; }
 
 private:

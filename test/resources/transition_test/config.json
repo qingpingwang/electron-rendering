@@ -1,0 +1,18 @@
+{
+    "name": "crossfade",
+    "desc": "简单交叉溶解转场",
+    "format": "transition",
+    "id": "transition_crossfade",
+    "suggestionDuration": 1000,
+    "renderPass": [
+        {
+            "fboSize": 1.0,
+            "shader": {
+                "vert": "shaders/pass0.vert",
+                "frag": "shaders/pass0.frag"
+            }
+        }
+    ],
+    "uniform": [],
+    "animation": []
+}

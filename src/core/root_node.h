@@ -19,6 +19,7 @@ class Shader;
 
 namespace vp {
 
+class Effect;
 class Layer;
 
 // Canvas 配置结构体
@@ -80,6 +81,8 @@ public:
 private:
     // 渲染一帧
     bool renderFrame(TimeMs time_ms, uint8_t *out_buffer);
+    // 渲染转场（两层混合）
+    bool renderTransition(Layer *from, Layer *to, Effect *transition, TimeMs time_ms);
     // 异步准备
     void startPrepareNextFrame(TimeMs next_time_ms);
     void cancelPrepare();

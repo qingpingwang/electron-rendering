@@ -3,7 +3,7 @@
 //   cmake --build build
 //   ./build/test/decoder_test [video_path]
 
-#include "../../src/decoder/video_decoder.h"
+#include "../../src/codec/video_decoder.h"
 #include "../../third_party/stb_image/stb_image_write.h"
 #include <iostream>
 

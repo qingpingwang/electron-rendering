@@ -38,23 +38,59 @@ bool Layer::load(const json &config, const std::string &base_path) {
     }
     material_ = root_->getMaterial(getMaterialType(), material_id);
 
-    auto effect_ids = config.value("extra_material_refs", std::vector<std::string>{});
-    effects_.reserve(effect_ids.size());
-    for (const auto &effect_id : effect_ids) {
-        auto *mat = static_cast<EffectMaterial *>(root_->getMaterial(MATERIAL_TYPE_EFFECT, effect_id));
+    auto ref_ids = config.value("extra_material_refs", std::vector<std::string>{});
+    for (const auto &ref_id : ref_ids) {
+        static const MaterialType kRefTypes[] = {MATERIAL_TYPE_EFFECT, MATERIAL_TYPE_TRANSITION};
+        Material *mat = nullptr;
+        MaterialType mat_type = MATERIAL_TYPE_EFFECT;
+        for (auto type : kRefTypes) {
+            mat = root_->getMaterial(type, ref_id);
+            if (mat) {
+                mat_type = type;
+                break;
+            }
+        }
         if (!mat) {
-            setError("effect material not found: " + effect_id);
+            setError("extra material not found: " + ref_id);
             return false;
         }
+
+        auto *effect_mat = static_cast<EffectMaterial *>(mat);
         auto effect = std::make_unique<ResourceEffect>(root_);
-        const auto &path = mat->getResourcePath();
-        if (!effect->loadFromFolder(path)) {
-            setError("load effect[" + path + "] failed: " + effect->getRenderResource()->getErrorMessage());
+        if (!effect->loadFromFolder(effect_mat->getResourcePath())) {
+            setError("load extra[" + ref_id + "] failed: " + effect->getRenderResource()->getErrorMessage());
             return false;
         }
-        effects_.emplace_back(std::move(effect));
+
+        if (mat_type == MATERIAL_TYPE_TRANSITION) {
+            auto *trans_mat = static_cast<TransitionMaterial *>(mat);
+            effect->getRenderResource()->setResourceDuration(trans_mat->getDuration());
+            transitions_.emplace_back(std::move(effect));
+        } else {
+            effects_.emplace_back(std::move(effect));
+        }
     }
     return true;
+}
+
+Material *Layer::getMaterial() const {
+    return material_;
+}
+
+bool Layer::hasTransition() const {
+    return !transitions_.empty();
+}
+
+Effect *Layer::getActiveTransition(TimeMs time_ms) const {
+    if (!hasTransition())
+        return nullptr;
+    auto &transition = transitions_.front();
+    TimeMs halfTransitionDuration = transition->getRenderResource()->getResourceDuration() / 2;
+    TimeMs relativeTime = time_ms - getStartTime();
+    // 时间在图层结束前[getDurationMs - transitionDuration/2, getDurationMs + transitionDuration/2]
+    if (relativeTime >= getDurationMs() - halfTransitionDuration && relativeTime < getDurationMs() + halfTransitionDuration)
+        return transition.get();
+    return nullptr;
 }
 
 const std::string &Layer::getName() const {
@@ -73,103 +109,80 @@ TimeMs Layer::getEndTime() const {
     return end_time_ms_;
 }
 
-bool Layer::isActive() const {
-    if (!root_)
-        return false;
-    TimeMs current = root_->getCurrentTime();
-    return current >= start_time_ms_ && current < end_time_ms_;
+bool Layer::isActive(TimeMs time_ms) const {
+    return time_ms >= start_time_ms_ && time_ms < end_time_ms_;
 }
 
-bool Layer::hasActiveEffects() const {
-    if (effects_.empty()) {
+bool Layer::hasActiveEffects(TimeMs time_ms) const {
+    if (effects_.empty())
         return false;
-    }
 
-    // 计算图层的相对时间（从图层开始时间算起）
-    TimeMs offset_time = root_->getCurrentTime() - start_time_ms_;
-
-    // 检查是否有任何特效在当前时间处于活跃状态
+    TimeMs offset = time_ms - start_time_ms_;
     return std::any_of(effects_.begin(), effects_.end(),
-                       [offset_time](const auto &effect) {
-                           return effect->isActive(offset_time);
+                       [offset](const auto &effect) {
+                           return effect->isActive(offset);
                        });
 }
 
-bool Layer::draw() {
-    if (!root_)
+bool Layer::draw(const gl::FBO &target, TimeMs time_ms) {
+    if (!root_ || !target.isValid())
         return false;
 
-    // 检查图层是否在活跃时间范围内
-    if (!isActive())
-        return true; // 不在时间范围内，跳过渲染（不是错误）
+    if (!isActive(time_ms))
+        return true;
 
-    // 检查是否有活跃的特效
-    if (!hasActiveEffects()) {
-        // 无特效：直接渲染到 render_fbo_
-        return renderContent(root_->getRenderFBO());
-    }
+    if (!hasActiveEffects(time_ms))
+        return renderContent(target, time_ms);
 
-    // 有特效：需要中间 FBO
-    gl::FBO temp_fbo = root_->getFBOPool()->acquire(root_->getWidth(), root_->getHeight());
+    gl::FBO temp_fbo = root_->getFBOPool()->acquire(target.width, target.height);
     if (!temp_fbo.isValid())
         return false;
 
-    // 渲染内容到临时 FBO
-    if (!renderContent(temp_fbo)) {
+    if (!renderContent(temp_fbo, time_ms)) {
         setError("render content failed");
         root_->getFBOPool()->release(temp_fbo);
         return false;
     }
 
-    gl::FBO final_effect_output = applyEffects(temp_fbo);
-    if (!final_effect_output.isValid()) {
+    gl::FBO effect_out = applyEffects(temp_fbo, time_ms);
+    if (!effect_out.isValid()) {
         setError("apply effects failed");
         root_->getFBOPool()->release(temp_fbo);
         return false;
     }
 
-    // 使用通用函数绘制特效输出到 render_fbo_
     gl::drawTextureQuad(
-        root_->getRenderFBO(),
-        gl::Texture{final_effect_output.texture, final_effect_output.width, final_effect_output.height},
+        target,
+        gl::Texture{effect_out.texture, effect_out.width, effect_out.height},
         root_->getShader(),
         0,
         "uTex",
         root_->getQuad());
 
-    // 释放临时 FBO
     root_->getFBOPool()->release(temp_fbo);
-    root_->getFBOPool()->release(final_effect_output);
+    root_->getFBOPool()->release(effect_out);
     return true;
 }
 
-gl::FBO Layer::applyEffects(const gl::FBO &input) {
-    if (effects_.empty())
-        return gl::FBO{}; // 返回无效 FBO
-
-    if (!root_)
+gl::FBO Layer::applyEffects(const gl::FBO &input, TimeMs time_ms) {
+    if (effects_.empty() || !root_)
         return gl::FBO{};
 
     gl::FBO current = input;
+    TimeMs offset = time_ms - getStartTime();
 
-    TimeMs offset_time = root_->getCurrentTime() - getStartTime();
-    // 依次应用特效链
     for (auto &effect : effects_) {
-        if (!effect->isActive(offset_time))
+        if (!effect->isActive(offset))
             continue;
-        // 释放上一个 FBO
-        if (current.isValid() && current.fbo != input.fbo) {
+        if (current.isValid() && current.fbo != input.fbo)
             root_->getFBOPool()->release(current);
-        }
-        gl::FBO output = effect->apply({current}, offset_time);
-        if (!output.isValid()) {
-            // 特效失败，返回无效 FBO
+        gl::FBO output = effect->apply({current}, offset);
+        if (!output.isValid())
             return gl::FBO{};
-        }
         current = output;
     }
 
-    return current; // 返回最后一个特效的输出
+    return current;
 }
 
 } // namespace vp

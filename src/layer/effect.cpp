@@ -14,7 +14,7 @@ Effect::~Effect() {
 
 bool Effect::isActive(TimeMs time_ms) {
     // todo 更复杂的时间支持
-    return time_ms != kInvalidTime && time_ms < getRenderResource()->getResourceDuration();
+    return time_ms != kInvalidTime && time_ms < getDurationMs();
 }
 
 RenderResource *Effect::getRenderResource() {
@@ -78,6 +78,10 @@ RenderResource *ResourceEffect::getRenderResource() {
 
 const RenderResource *ResourceEffect::getRenderResource() const {
     return resource_.get();
+}
+
+TimeMs Effect::getDurationMs() const {
+    return getRenderResource()->getResourceDuration();
 }
 
 } // namespace vp

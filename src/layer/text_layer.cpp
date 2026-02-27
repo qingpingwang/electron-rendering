@@ -145,7 +145,7 @@ bool TextLayer::load(const json &config, const std::string &base_path) {
     return true;
 }
 
-bool TextLayer::renderContent(const gl::FBO &fbo) {
+bool TextLayer::renderContent(const gl::FBO &fbo, TimeMs /* time_ms */) {
     GrDirectContext *ctx = root_->getSkiaContext();
     if (!ctx || !text_material_)
         return true;

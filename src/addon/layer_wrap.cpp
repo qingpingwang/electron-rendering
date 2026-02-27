@@ -1,5 +1,6 @@
 #include "layer_wrap.h"
 #include "root_wrap.h"
+#include "../core/root_node.h"
 #include "../layer/layer.h"
 #include "../layer/video_layer.h"
 #include "../layer/material.h"
@@ -85,8 +86,9 @@ Napi::Value LayerWrap::GetDurationMs(const Napi::CallbackInfo &info) {
 
 Napi::Value LayerWrap::GetActive(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    return l ? Napi::Boolean::New(info.Env(), l->isActive())
-             : info.Env().Undefined();
+    if (!l) return info.Env().Undefined();
+    auto *rw = RootWrap::Unwrap(root_ref_.Value().As<Napi::Object>());
+    return Napi::Boolean::New(info.Env(), l->isActive(rw->root()->getCurrentTime()));
 }
 
 // ========== Text Layer Getters ==========

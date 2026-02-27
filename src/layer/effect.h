@@ -46,6 +46,8 @@ public:
 
     bool isActive(TimeMs time_ms);
 
+    TimeMs getDurationMs() const;
+
 protected:
     RootNode *root_; // 访问 FBOPool、Shader、Quad 等共享资源
     std::string name_;

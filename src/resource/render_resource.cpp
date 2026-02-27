@@ -184,7 +184,7 @@ gl::FBO RenderResource::render(const std::vector<gl::FBO> &inputs, TimeMs time_m
         uniforms.emplace_back(anim->convertToUniformParam(time_ms));
     }
     uniforms.emplace_back(std::make_unique<UniformParam>("time", UniformType::Float, std::vector<float>{static_cast<float>(time_ms)}, "uTime", true));
-    uniforms.emplace_back(std::make_unique<UniformParam>("progress", UniformType::Float, std::vector<float>{static_cast<float>(time_ms / resource_duration_ms_)}, "uProgress", true));
+    uniforms.emplace_back(std::make_unique<UniformParam>("progress", UniformType::Float, std::vector<float>{static_cast<float>(static_cast<double>(time_ms) / static_cast<double>(resource_duration_ms_))}, "uProgress", true));
 
     // 播放外部纹理
     for (auto &texture : textures_) {
