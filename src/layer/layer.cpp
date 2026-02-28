@@ -189,42 +189,37 @@ bool Layer::draw(const gl::FBO &target, TimeMs time_ms) {
 
     auto *shader = root_->getShader();
     float aspect = static_cast<float>(target.width) / target.height;
+    setClipUniforms(shader, clip_, aspect);
 
     if (!hasActiveEffects(time_ms)) {
-        setClipUniforms(shader, clip_, aspect);
         bool ok = renderContent(target, time_ms);
         resetClipUniforms(shader);
         return ok;
     }
 
     gl::FBO temp_fbo = root_->getFBOPool()->acquire(target.width, target.height);
-    if (!temp_fbo.isValid())
+    if (!temp_fbo.isValid()) {
+        resetClipUniforms(shader);
         return false;
+    }
 
     if (!renderContent(temp_fbo, time_ms)) {
         setError("render content failed");
         root_->getFBOPool()->release(temp_fbo);
+        resetClipUniforms(shader);
         return false;
     }
 
     gl::FBO effect_out = applyEffects(temp_fbo, time_ms);
+    root_->getFBOPool()->release(temp_fbo);
     if (!effect_out.isValid()) {
         setError("apply effects failed");
-        root_->getFBOPool()->release(temp_fbo);
+        resetClipUniforms(shader);
         return false;
     }
-
-    setClipUniforms(shader, clip_, aspect);
-    gl::drawTextureQuad(
-        target,
-        gl::Texture{effect_out.texture, effect_out.width, effect_out.height},
-        shader,
-        0,
-        "uTex",
-        root_->getQuad());
     resetClipUniforms(shader);
-
-    root_->getFBOPool()->release(temp_fbo);
+    gl::drawTextureQuad(target, gl::Texture{effect_out.texture, effect_out.width, effect_out.height},
+                        shader, 0, "uTex", root_->getQuad());
     root_->getFBOPool()->release(effect_out);
     return true;
 }

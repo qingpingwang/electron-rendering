@@ -28,7 +28,7 @@
                         "transition_0"
                     ],
                     "clip": {
-                        "alpha": 0.5,
+                        "alpha": 0.8,
                         "flip": {
                             "horizontal": false,
                             "vertical": false
