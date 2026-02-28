@@ -5,9 +5,10 @@ R"(
 
     uniform sampler2D uTex;
     uniform float uTime;
+    uniform float uAlpha;
 
     void main()
-    {  
-        FragColor = texture(uTex, vUV);
+    {
+        FragColor = texture(uTex, vUV) * uAlpha;
     }
 )"

@@ -61,8 +61,7 @@ bool initContext(GLContext &ctx) {
         EGL_NONE};
 
     EGLint num_configs = 0;
-    if (!eglChooseConfig(ctx.egl_display, config_attribs, &ctx.egl_config, 1, &num_configs) ||
-        num_configs == 0) {
+    if (!eglChooseConfig(ctx.egl_display, config_attribs, &ctx.egl_config, 1, &num_configs) || num_configs == 0) {
         eglTerminate(ctx.egl_display);
         ctx.egl_display = EGL_NO_DISPLAY;
         return false;
@@ -291,6 +290,10 @@ void destroyFBO(FBO &fbo) {
 // ========== 网格 ==========
 
 QuadMesh createQuadMesh() {
+    return createQuadMesh(QUAD_VERTICES, sizeof(QUAD_VERTICES));
+}
+
+QuadMesh createQuadMesh(const float *vertices, size_t size_bytes) {
     QuadMesh mesh;
 
     glGenVertexArrays(1, &mesh.vao);
@@ -298,7 +301,7 @@ QuadMesh createQuadMesh() {
 
     glBindVertexArray(mesh.vao);
     glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(QUAD_VERTICES), QUAD_VERTICES, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(size_bytes), vertices, GL_STATIC_DRAW);
 
     // pos
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);

@@ -65,6 +65,9 @@ void destroyFBO(FBO &fbo);
 // 创建全屏四边形
 QuadMesh createQuadMesh();
 
+// 创建自定义顶点的四边形（格式同全屏版：pos.xy + uv.xy，4 个顶点）
+QuadMesh createQuadMesh(const float *vertices, size_t size_bytes);
+
 // 销毁网格
 void destroyQuadMesh(QuadMesh &mesh);
 

@@ -39,6 +39,9 @@ public:
     void setVec2(const std::string &name, float x, float y) const;
     void setVec3(const std::string &name, float x, float y, float z) const;
     void setVec4(const std::string &name, float x, float y, float z, float w) const;
+    void setMat2(const std::string &name, const float *value) const;
+    void setMat3(const std::string &name, const float *value) const;
+    void setMat4(const std::string &name, const float *value) const;
 
     // 获取 uniform 位置
     GLint getUniformLocation(const std::string &name) const;

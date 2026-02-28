@@ -1,7 +1,13 @@
 #include "layer.h"
 #include "../core/root_node.h"
 #include "effect.h"
+#include "../gl/functions.h"
+#include "../gl/shader.h"
 #include "../resource/render_resource.h"
+#include <algorithm>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 using json = nlohmann::json;
 
@@ -37,6 +43,25 @@ bool Layer::load(const json &config, const std::string &base_path) {
         return false;
     }
     material_ = root_->getMaterial(getMaterialType(), material_id);
+
+    // 解析 clip 属性
+    if (config.contains("clip")) {
+        auto &c = config["clip"];
+        clip_.alpha = c.value("alpha", 1.0f);
+        clip_.rotation = c.value("rotation", 0.0f);
+        if (c.contains("flip")) {
+            clip_.flip_h = c["flip"].value("horizontal", false);
+            clip_.flip_v = c["flip"].value("vertical", false);
+        }
+        if (c.contains("scale")) {
+            clip_.scale_x = c["scale"].value("x", 1.0f);
+            clip_.scale_y = c["scale"].value("y", 1.0f);
+        }
+        if (c.contains("transform")) {
+            clip_.transform_x = c["transform"].value("x", 0.0f);
+            clip_.transform_y = c["transform"].value("y", 0.0f);
+        }
+    }
 
     auto ref_ids = config.value("extra_material_refs", std::vector<std::string>{});
     for (const auto &ref_id : ref_ids) {
@@ -124,6 +149,37 @@ bool Layer::hasActiveEffects(TimeMs time_ms) const {
                        });
 }
 
+static glm::mat4 computeModelMatrix(const Clip &clip, float aspect) {
+    // glm 左乘: m = m * Op, 对顶点实际执行顺序从下往上读:
+    // 1. scale(user)  2. scale(1/aspect)  3. rotate  4. scale(aspect)  5. translate
+    // 即: 先缩放 → 等比空间旋转 → 最后位移（位移不受旋转影响）
+    float sx = clip.flip_h ? -clip.scale_x : clip.scale_x;
+    float sy = clip.flip_v ? -clip.scale_y : clip.scale_y;
+    glm::mat4 m(1.0f);
+    m = glm::translate(m, glm::vec3(clip.transform_x, clip.transform_y, 0.0f));
+    m = glm::scale(m, glm::vec3(1.0f, aspect, 1.0f));
+    m = glm::rotate(m, glm::radians(clip.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+    m = glm::scale(m, glm::vec3(1.0f, 1.0f / aspect, 1.0f));
+    m = glm::scale(m, glm::vec3(sx, sy, 1.0f));
+    return m;
+}
+
+static void setClipUniforms(gl::Shader *shader, const Clip &clip, float aspect) {
+    glm::mat4 model = computeModelMatrix(clip, aspect);
+    shader->use();
+    shader->setMat4("uModel", glm::value_ptr(model));
+    shader->setFloat("uAlpha", clip.alpha);
+    shader->unuse();
+}
+
+static void resetClipUniforms(gl::Shader *shader) {
+    static const glm::mat4 identity(1.0f);
+    shader->use();
+    shader->setMat4("uModel", glm::value_ptr(identity));
+    shader->setFloat("uAlpha", 1.0f);
+    shader->unuse();
+}
+
 bool Layer::draw(const gl::FBO &target, TimeMs time_ms) {
     if (!root_ || !target.isValid())
         return false;
@@ -131,8 +187,15 @@ bool Layer::draw(const gl::FBO &target, TimeMs time_ms) {
     if (!isActive(time_ms))
         return true;
 
-    if (!hasActiveEffects(time_ms))
-        return renderContent(target, time_ms);
+    auto *shader = root_->getShader();
+    float aspect = static_cast<float>(target.width) / target.height;
+
+    if (!hasActiveEffects(time_ms)) {
+        setClipUniforms(shader, clip_, aspect);
+        bool ok = renderContent(target, time_ms);
+        resetClipUniforms(shader);
+        return ok;
+    }
 
     gl::FBO temp_fbo = root_->getFBOPool()->acquire(target.width, target.height);
     if (!temp_fbo.isValid())
@@ -151,13 +214,15 @@ bool Layer::draw(const gl::FBO &target, TimeMs time_ms) {
         return false;
     }
 
+    setClipUniforms(shader, clip_, aspect);
     gl::drawTextureQuad(
         target,
         gl::Texture{effect_out.texture, effect_out.width, effect_out.height},
-        root_->getShader(),
+        shader,
         0,
         "uTex",
         root_->getQuad());
+    resetClipUniforms(shader);
 
     root_->getFBOPool()->release(temp_fbo);
     root_->getFBOPool()->release(effect_out);
@@ -183,6 +248,32 @@ gl::FBO Layer::applyEffects(const gl::FBO &input, TimeMs time_ms) {
     }
 
     return current;
+}
+
+gl::QuadMesh Layer::createFitQuad(int layer_w, int layer_h, int canvas_w, int canvas_h) {
+    float scale = std::min(static_cast<float>(canvas_w) / layer_w,
+                           static_cast<float>(canvas_h) / layer_h);
+    float nw = (layer_w * scale) / canvas_w;
+    float nh = (layer_h * scale) / canvas_h;
+    const float vertices[] = {
+        -nw,
+        nh,
+        0.0f,
+        1.0f,
+        nw,
+        nh,
+        1.0f,
+        1.0f,
+        -nw,
+        -nh,
+        0.0f,
+        0.0f,
+        nw,
+        -nh,
+        1.0f,
+        0.0f,
+    };
+    return gl::createQuadMesh(vertices, sizeof(vertices));
 }
 
 } // namespace vp

@@ -13,6 +13,17 @@ namespace vp {
 
 class RootNode;
 
+struct Clip {
+    float alpha = 1.0f;
+    bool flip_h = false;
+    bool flip_v = false;
+    float rotation = 0.0f;
+    float scale_x = 1.0f;
+    float scale_y = 1.0f;
+    float transform_x = 0.0f;
+    float transform_y = 0.0f;
+};
+
 // 图层基类
 class Layer : public Loadable {
 public:
@@ -47,6 +58,9 @@ public:
     Effect *getActiveTransition(TimeMs time_ms) const;
 
 protected:
+    // 长边适配：根据图层宽高和画布宽高创建居中 QuadMesh
+    static gl::QuadMesh createFitQuad(int layer_w, int layer_h, int canvas_w, int canvas_h);
+
     // 渲染内容（子类实现具体绘制逻辑）
     // fbo: 当前要绘制到的目标 FBO
     virtual bool renderContent(const gl::FBO &fbo, TimeMs time_ms) = 0;
@@ -60,6 +74,7 @@ protected:
 
     RootNode *root_ = nullptr;
     Material *material_ = nullptr;
+    Clip clip_;
     std::string name_;
     TimeMs duration_ms_ = 0;
     TimeMs start_time_ms_ = 0;

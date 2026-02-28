@@ -44,6 +44,10 @@ pkg_check_modules(FFMPEG REQUIRED
 
 # ========== 三方库 ==========
 
+# glm (header-only math library, via submodule)
+set(GLM_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/glm)
+
 # Skia 2D Graphics Library（预编译静态库 + 模块）
 set(SKIA_ROOT ${CMAKE_SOURCE_DIR}/third_party/skia)
 set(SKIA_OUT ${SKIA_ROOT}/out/Release)
@@ -71,9 +75,10 @@ file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/src/*.cpp"
 )
 
-# 第三方库源文件（自动扫描 third_party 下所有 .cpp）
-file(GLOB_RECURSE THIRD_PARTY_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/third_party/**/*.cpp"
+# 第三方库源文件（按需显式添加）
+set(THIRD_PARTY_SOURCES
+    ${CMAKE_SOURCE_DIR}/third_party/stb_image/stb_image_impl.cpp
+    ${CMAKE_SOURCE_DIR}/third_party/stb_image/stb_image_write_impl.cpp
 )
 
 # GLAD 源文件（.c，仅非 Apple 平台）
@@ -81,14 +86,11 @@ if(NOT APPLE)
     set(GLAD_SOURCES ${GLAD_ROOT}/src/glad.c)
 endif()
 
-# 排除 N-API 绑定层（依赖 napi 头文件，仅用于 Node.js 插件）和备份文件
+# 排除 N-API 绑定层和备份文件
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*/addon\\.cpp$")
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*/addon/.*")
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_backup.*")
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*\\.bak$")
-
-# 排除 Skia 源码（已预编译为静态库）
-list(FILTER THIRD_PARTY_SOURCES EXCLUDE REGEX ".*/skia/.*")
 
 # ========== 核心库（OBJECT 库，编译一次，多处使用）==========
 
@@ -113,6 +115,8 @@ target_compile_definitions(video_player_core PUBLIC
     SK_GL
     SK_RELEASE
 )
+
+target_link_libraries(video_player_core PUBLIC glm::glm)
 
 target_compile_options(video_player_core PRIVATE 
     -Wall -Wextra -Wno-unused-parameter

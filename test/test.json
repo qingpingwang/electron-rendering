@@ -1,7 +1,7 @@
 {
     "canvas_config": {
-        "width": 1088,
-        "height": 1920,
+        "width": 1920,
+        "height": 1080,
         "ratio": "16:9"
     },
     "duration": 6000,
@@ -26,7 +26,23 @@
                     "extra_material_refs": [
                         "effect_0",
                         "transition_0"
-                    ]
+                    ],
+                    "clip": {
+                        "alpha": 0.5,
+                        "flip": {
+                            "horizontal": false,
+                            "vertical": false
+                        },
+                        "rotation": 45.0,
+                        "scale": {
+                            "x": 1.0,
+                            "y": 1.0
+                        },
+                        "transform": {
+                            "x": 0.0,
+                            "y": 0.0
+                        }
+                    }
                 },
                 {
                     "id": "segment_1",

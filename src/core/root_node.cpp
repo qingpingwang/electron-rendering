@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <cstring>
 #include <nlohmann/json.hpp>
+#include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/gpu/ganesh/gl/GrGLDirectContext.h"
@@ -310,6 +312,13 @@ std::string RootNode::loadFromJson(const std::string &json_str) {
             unload();
             return "create OpenGL resources failed";
         }
+
+        // 初始化 shader uniform 默认值（GLSL uniform 默认全零）
+        static const glm::mat4 identity(1.0f);
+        shader_->use();
+        shader_->setMat4("uModel", glm::value_ptr(identity));
+        shader_->setFloat("uAlpha", 1.0f);
+        shader_->unuse();
 
         cache_data_.resize(static_cast<size_t>(canvas_.width) * canvas_.height * 4);
         return "";

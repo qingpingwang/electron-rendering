@@ -17,6 +17,7 @@ VideoLayer::~VideoLayer() {
     if (decoder_)
         decoder_->close();
     gl::destroyTexture(texture_);
+    gl::destroyQuadMesh(quad_);
 }
 
 bool VideoLayer::load(const json &config, const std::string &base_path) {
@@ -51,6 +52,14 @@ bool VideoLayer::load(const json &config, const std::string &base_path) {
     video_width_ = decoder_->getWidth();
     video_height_ = decoder_->getHeight();
     video_duration_ms_ = decoder_->getDurationMs();
+
+    // 长边适配
+    const auto &canvas = root_->getCanvas();
+    quad_ = createFitQuad(video_width_, video_height_, canvas.width, canvas.height);
+    if (!quad_.isValid()) {
+        setError("create quad mesh failed");
+        return false;
+    }
 
     // 解析源视频时间范围，必须有
     if (!config.contains("source_timerange")) {
@@ -98,7 +107,7 @@ bool VideoLayer::renderContent(const gl::FBO &fbo, TimeMs time_ms) {
     }
 
     // 使用通用函数绘制到目标 FBO
-    gl::drawTextureQuad(fbo, texture_, root_->getShader(), 0, "uTex", root_->getQuad());
+    gl::drawTextureQuad(fbo, texture_, root_->getShader(), 0, "uTex", &quad_);
     return true;
 }
 

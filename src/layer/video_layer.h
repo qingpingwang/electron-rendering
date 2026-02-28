@@ -39,6 +39,7 @@ private:
 
     // 渲染资源
     gl::Texture texture_ = gl::Texture{}; // 自己的纹理
+    gl::QuadMesh quad_;                    // 长边适配后的顶点网格
 
     // 纹理缓存优化：记录已上传的帧PTS，避免重复上传相同数据
     TimeMs uploaded_pts_ = kInvalidTime;
