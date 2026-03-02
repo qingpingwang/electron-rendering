@@ -1,7 +1,7 @@
 {
     "canvas_config": {
-        "width": 1920,
-        "height": 1080,
+        "width": 720,
+        "height": 1280,
         "ratio": "16:9"
     },
     "duration": 6000,
@@ -24,7 +24,6 @@
                         "duration": 5000
                     },
                     "extra_material_refs": [
-                        "effect_0",
                         "transition_0"
                     ],
                     "clip": {
@@ -42,7 +41,8 @@
                             "x": 0.0,
                             "y": 0.0
                         }
-                    }
+                    },
+                    "volume": 0.5
                 },
                 {
                     "id": "segment_1",
@@ -57,7 +57,8 @@
                     },
                     "extra_material_refs": [
                         "effect_0"
-                    ]
+                    ],
+                    "volume": 0
                 }
             ]
         },
@@ -77,6 +78,25 @@
                         "duration": 5000
                     },
                     "extra_material_refs": []
+                }
+            ]
+        },
+        {
+            "id": "track_audio_0",
+            "type": "audio",
+            "segments": [
+                {
+                    "id": "segment_2",
+                    "material_id": "material_audio_0",
+                    "target_timerange": {
+                        "start": 0,
+                        "duration": 5000
+                    },
+                    "source_timerange": {
+                        "start": 0,
+                        "duration": 5000
+                    },
+                    "volume": 0.5
                 }
             ]
         }
@@ -111,6 +131,13 @@
                 "type": "transition",
                 "duration": 1000,
                 "resource_path": "./test/resources/transition_test"
+            }
+        ],
+        "audios": [
+            {
+                "id": "material_audio_0",
+                "name": "test.wav",
+                "path": "./test/test.wav"
             }
         ]
     }

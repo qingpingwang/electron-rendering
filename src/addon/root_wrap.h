@@ -21,13 +21,18 @@ private:
     std::unique_ptr<vp::RootNode> root_;
     uint32_t gen_ = 0;
 
+    // 复用的像素缓冲区（V8 管理，避免每帧 malloc/GC）
+    Napi::Reference<Napi::ArrayBuffer> pixel_ab_;
+
     Napi::Value Init(const Napi::CallbackInfo &info);
     Napi::Value Load(const Napi::CallbackInfo &info);
     Napi::Value Unload(const Napi::CallbackInfo &info);
     Napi::Value Cleanup(const Napi::CallbackInfo &info);
     Napi::Value SetCurrentTime(const Napi::CallbackInfo &info);
+    Napi::Value IsSameFrame(const Napi::CallbackInfo &info);
     Napi::Value Draw(const Napi::CallbackInfo &info);
     Napi::Value GetLayers(const Napi::CallbackInfo &info);
+    Napi::Value GetAudioInfos(const Napi::CallbackInfo &info);
 
     Napi::Value GetWidth(const Napi::CallbackInfo &info);
     Napi::Value GetHeight(const Napi::CallbackInfo &info);

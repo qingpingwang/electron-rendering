@@ -2,6 +2,7 @@
 #include "../layer/layer.h"
 #include "../layer/video_layer.h"
 #include "../layer/text_layer.h"
+#include "../layer/audio_layer.h"
 #include "../gl/shader.h"
 #include <algorithm>
 #include <cstring>
@@ -56,8 +57,8 @@ void RootNode::cleanup() {
     gl::destroyQuadMesh(quad_);
     shader_.reset();
 
-    // 清空 FBO 池（会自动清理所有 FBO，包括 render_fbo_）
     fbo_pool_.clear();
+    gl::cleanupNativeTexture();
 
     if (skia_context_) {
         skia_context_->abandonContext();
@@ -78,7 +79,12 @@ bool RootNode::isCacheHit(TimeMs time_ms) const {
     if (cache_time_ms_ == kInvalidTime)
         return false;
     TimeMs diff = (time_ms >= cache_time_ms_) ? (time_ms - cache_time_ms_) : (cache_time_ms_ - time_ms);
-    return diff <= getHalfFrameMs();
+    return diff < getHalfFrameMs();
+}
+
+bool RootNode::isSameFrame(TimeMs time_ms) const {
+    TimeMs diff = (time_ms >= current_time_ms_) ? (time_ms - current_time_ms_) : (current_time_ms_ - time_ms);
+    return diff < getHalfFrameMs();
 }
 
 // ========== 渲染 ==========
@@ -100,6 +106,10 @@ bool RootNode::renderFrame(TimeMs time_ms, uint8_t *out_buffer) {
             return false;
         }
         auto &layer = layers_[i];
+        // 音频图层不渲染
+        if (layer->getMaterialType() == MATERIAL_TYPE_AUDIO) {
+            continue;
+        }
         auto *transition = layer->getActiveTransition(time_ms);
         // 不是最后一个图层
         if (!transition || i == layers_.size() - 1) {
@@ -233,6 +243,7 @@ std::string RootNode::loadFromJson(const std::string &json_str) {
                 {"effects", MATERIAL_TYPE_EFFECT, []() -> std::unique_ptr<Material> { return std::make_unique<EffectMaterial>(); }},
                 {"texts", MATERIAL_TYPE_TEXT, []() -> std::unique_ptr<Material> { return std::make_unique<TextMaterial>(); }},
                 {"transitions", MATERIAL_TYPE_TRANSITION, []() -> std::unique_ptr<Material> { return std::make_unique<TransitionMaterial>(); }},
+                {"audios", MATERIAL_TYPE_AUDIO, []() -> std::unique_ptr<Material> { return std::make_unique<AudioMaterial>(); }},
             };
 
             for (const auto &loader : loaders) {
@@ -265,6 +276,7 @@ std::string RootNode::loadFromJson(const std::string &json_str) {
             } layer_types[] = {
                 {"video", [](RootNode *r) -> std::unique_ptr<Layer> { return std::make_unique<VideoLayer>(r); }},
                 {"text", [](RootNode *r) -> std::unique_ptr<Layer> { return std::make_unique<TextLayer>(r); }},
+                {"audio", [](RootNode *r) -> std::unique_ptr<Layer> { return std::make_unique<AudioLayer>(r); }},
             };
 
             LayerFactory factory = nullptr;
@@ -354,33 +366,31 @@ void RootNode::setCurrentTime(TimeMs time_ms) {
     current_time_ms_ = std::clamp(time_ms, TimeMs(0), duration_ms_);
 }
 
-bool RootNode::draw(uint8_t *buffer, size_t buffer_size) {
+int RootNode::draw(uint8_t *buffer, size_t buffer_size) {
     if (layers_.empty() || !buffer)
-        return false;
+        return -1;
 
     size_t required = static_cast<size_t>(canvas_.width) * canvas_.height * 4;
     if (buffer_size < required)
-        return false;
+        return -1;
 
-    // 检查缓存
-    if (isCacheHit(current_time_ms_)) {
-        // 命中：等待准备完成，拷贝缓存
+    int status = isCacheHit(current_time_ms_) ? 0 : 1;
+
+    if (status == 0) {
         if (prepare_thread_.joinable())
             prepare_thread_.join();
         std::lock_guard<std::mutex> lock(cache_mutex_);
         std::memcpy(buffer, cache_data_.data(), required);
     } else {
-        // 未命中：取消异步任务，直接渲染
         cancelPrepare();
         cancel_flag_ = false;
         renderFrame(current_time_ms_, buffer);
     }
 
-    // 启动异步准备下一帧
     TimeMs next_time = current_time_ms_ + static_cast<TimeMs>(1000.0 / (frame_rate_ > 0 ? frame_rate_ : 25.0));
     startPrepareNextFrame(next_time);
 
-    return true;
+    return status;
 }
 
 // ========== Getter 方法 ==========
@@ -456,6 +466,35 @@ const std::vector<std::unique_ptr<Material>> &RootNode::getMaterialsByType(Mater
 
 const std::vector<std::unique_ptr<Layer>> &RootNode::getLayers() const {
     return layers_;
+}
+
+nlohmann::json RootNode::getAudioInfos() const {
+    json result = json::object();
+
+    for (const auto &layer : layers_) {
+        MaterialType type = layer->getMaterialType();
+        if (type != MATERIAL_TYPE_AUDIO && type != MATERIAL_TYPE_VIDEO)
+            continue;
+        if (layer->getVolume() <= 0.0f)
+            continue;
+
+        Material *mat = layer->getMaterial();
+        if (!mat || mat->getPath().empty())
+            continue;
+
+        const TimeRange &src = layer->getSourceRange();
+        const TimeRange &tgt = layer->getTargetRange();
+
+        result[layer->getName()] = {
+            {"path", mat->getPath()},
+            {"volume", layer->getVolume()},
+            {"layerType", (type == MATERIAL_TYPE_AUDIO) ? "audio" : "video"},
+            {"sourceRange", {{"start", src.start}, {"duration", src.duration}}},
+            {"targetRange", {{"start", tgt.start}, {"duration", tgt.duration}}},
+        };
+    }
+
+    return result;
 }
 
 } // namespace vp

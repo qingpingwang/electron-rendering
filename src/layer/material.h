@@ -14,7 +14,8 @@ enum MaterialType {
     MATERIAL_TYPE_EFFECT = 1,
     MATERIAL_TYPE_TEXT = 2,
     MATERIAL_TYPE_TRANSITION = 3,
-    MATERIAL_TYPE_COUNT = 4
+    MATERIAL_TYPE_AUDIO = 4,
+    MATERIAL_TYPE_COUNT = 5
 };
 
 // 素材基类
@@ -155,6 +156,20 @@ public:
 
 private:
     TimeMs duration_ms_ = 0;
+};
+
+// 音频素材
+class AudioMaterial : public Material {
+public:
+    AudioMaterial() = default;
+    ~AudioMaterial() override = default;
+
+    bool load(const nlohmann::json &config, const std::string &base_path = "") override;
+
+    const std::string &getName() const;
+
+private:
+    std::string name_;
 };
 
 } // namespace vp

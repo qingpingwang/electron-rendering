@@ -47,6 +47,10 @@ public:
     TimeMs getEndTime() const;
     bool isActive(TimeMs time_ms) const;
 
+    float getVolume() const;
+    const TimeRange &getTargetRange() const;
+    const TimeRange &getSourceRange() const;
+
     // 预备（子类实现：如视频解码到起始帧）
     virtual void prepare() = 0;
 
@@ -76,9 +80,10 @@ protected:
     Material *material_ = nullptr;
     Clip clip_;
     std::string name_;
-    TimeMs duration_ms_ = 0;
-    TimeMs start_time_ms_ = 0;
-    TimeMs end_time_ms_ = 0;
+    std::string material_id_;
+    float volume_ = 1.0f;
+    TimeRange target_range_;
+    TimeRange source_range_;
 
     // 特效 & 转场
     std::vector<std::unique_ptr<Effect>> effects_;

@@ -44,7 +44,8 @@ public:
     void unload();
 
     void setCurrentTime(TimeMs time_ms);
-    bool draw(uint8_t *buffer, size_t buffer_size);
+    bool isSameFrame(TimeMs time_ms) const;
+    int draw(uint8_t *buffer, size_t buffer_size);
 
     int getWidth() const;
     int getHeight() const;
@@ -77,6 +78,9 @@ public:
 
     // 获取图层列表
     const std::vector<std::unique_ptr<Layer>> &getLayers() const;
+
+    // 获取所有含音频的图层信息（layerId → {path, volume, layerType, sourceRange, targetRange}）
+    nlohmann::json getAudioInfos() const;
 
 private:
     // 渲染一帧

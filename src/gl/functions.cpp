@@ -2,6 +2,12 @@
 #include "shader.h"
 #include <stb_image/stb_image.h>
 
+#ifdef __APPLE__
+#include <CoreVideo/CoreVideo.h>
+#include <OpenGL/CGLIOSurface.h>
+#include <IOSurface/IOSurface.h>
+#endif
+
 namespace vp {
 namespace gl {
 
@@ -365,6 +371,139 @@ bool readPixels(const FBO &fbo, uint8_t *out_buffer, int buffer_size) {
     glReadPixels(0, 0, fbo.width, fbo.height, GL_RGBA, GL_UNSIGNED_BYTE, out_buffer);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     return true;
+}
+
+// ========== 原生缓冲区 → 纹理（零拷贝）==========
+
+#ifdef __APPLE__
+
+static const char *s_nv12_vert = R"(
+    #version 330 core
+    layout(location = 0) in vec2 aPos;
+    layout(location = 1) in vec2 aUV;
+    out vec2 vUV;
+    void main() {
+        gl_Position = vec4(aPos, 0.0, 1.0);
+        vUV = aUV;
+    }
+)";
+
+static const char *s_nv12_frag = R"(
+    #version 330 core
+    in vec2 vUV;
+    out vec4 FragColor;
+    uniform sampler2DRect uTexY;
+    uniform sampler2DRect uTexUV;
+    uniform vec2 uTexSize;
+    void main() {
+        vec2 coord = vUV * uTexSize;
+        float y = texture(uTexY, coord).r;
+        vec2 uv = texture(uTexUV, coord * 0.5).rg;
+        y = 1.1644 * (y - 0.0625);
+        float cb = uv.r - 0.5;
+        float cr = uv.g - 0.5;
+        FragColor = vec4(
+            clamp(y + 1.7928 * cr, 0.0, 1.0),
+            clamp(y - 0.2133 * cb - 0.5329 * cr, 0.0, 1.0),
+            clamp(y + 2.1124 * cb, 0.0, 1.0),
+            1.0);
+    }
+)";
+
+static struct {
+    GLuint rect[2] = {};
+    GLuint fbo[2] = {};
+    std::unique_ptr<Shader> nv12_shader;
+    QuadMesh quad;
+    bool ready = false;
+} s_ntx;
+
+static void ensureNativeResources() {
+    if (s_ntx.ready) return;
+    glGenTextures(2, s_ntx.rect);
+    glGenFramebuffers(2, s_ntx.fbo);
+    s_ntx.nv12_shader = std::make_unique<Shader>(s_nv12_vert, s_nv12_frag);
+    s_ntx.quad = createQuadMesh();
+    s_ntx.ready = true;
+}
+
+static void bindIOSurface(GLuint tex, IOSurfaceRef surface, int plane,
+                          GLenum internal_fmt, GLenum fmt, GLenum type, int w, int h) {
+    glBindTexture(GL_TEXTURE_RECTANGLE, tex);
+    CGLTexImageIOSurface2D(CGLGetCurrentContext(),
+                           GL_TEXTURE_RECTANGLE, internal_fmt, w, h, fmt, type, surface, plane);
+}
+
+static void attachDrawTarget(Texture &tex, int w, int h) {
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_ntx.fbo[0]);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex.id, 0);
+    glViewport(0, 0, w, h);
+}
+
+#endif // __APPLE__
+
+bool updateTextureFromNativeBuffer(Texture &tex, void *native_buf) {
+#ifdef __APPLE__
+    if (!native_buf || !tex.isValid()) return false;
+
+    auto pixbuf = static_cast<CVPixelBufferRef>(native_buf);
+    IOSurfaceRef surface = CVPixelBufferGetIOSurface(pixbuf);
+    if (!surface) return false;
+
+    ensureNativeResources();
+
+    int w = static_cast<int>(IOSurfaceGetWidth(surface));
+    int h = static_cast<int>(IOSurfaceGetHeight(surface));
+    OSType fmt = CVPixelBufferGetPixelFormatType(pixbuf);
+
+    bool nv12 = (fmt == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange ||
+                 fmt == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange);
+
+    if (nv12) {
+        if (!s_ntx.nv12_shader || !s_ntx.nv12_shader->isValid()) return false;
+
+        bindIOSurface(s_ntx.rect[0], surface, 0, GL_R8, GL_RED, GL_UNSIGNED_BYTE, w, h);
+        bindIOSurface(s_ntx.rect[1], surface, 1, GL_RG8, GL_RG, GL_UNSIGNED_BYTE, w / 2, h / 2);
+
+        attachDrawTarget(tex, w, h);
+
+        s_ntx.nv12_shader->use();
+        bindTexture({s_ntx.rect[0], w, h}, 0, GL_TEXTURE_RECTANGLE);
+        s_ntx.nv12_shader->setInt("uTexY", 0);
+        bindTexture({s_ntx.rect[1], w / 2, h / 2}, 1, GL_TEXTURE_RECTANGLE);
+        s_ntx.nv12_shader->setInt("uTexUV", 1);
+        s_ntx.nv12_shader->setVec2("uTexSize", static_cast<float>(w), static_cast<float>(h));
+        drawQuad(s_ntx.quad);
+        s_ntx.nv12_shader->unuse();
+    } else {
+        bindIOSurface(s_ntx.rect[0], surface, 0, GL_RGBA8, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, w, h);
+
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, s_ntx.fbo[1]);
+        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                               GL_TEXTURE_RECTANGLE, s_ntx.rect[0], 0);
+        attachDrawTarget(tex, w, h);
+        glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    tex.width = w;
+    tex.height = h;
+    return true;
+#else
+    (void)tex; (void)native_buf;
+    return false;
+#endif
+}
+
+void cleanupNativeTexture() {
+#ifdef __APPLE__
+    if (!s_ntx.ready) return;
+    glDeleteTextures(2, s_ntx.rect);
+    glDeleteFramebuffers(2, s_ntx.fbo);
+    s_ntx.nv12_shader.reset();
+    destroyQuadMesh(s_ntx.quad);
+    s_ntx = {};
+#endif
 }
 
 }

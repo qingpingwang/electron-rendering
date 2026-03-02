@@ -19,6 +19,12 @@ Napi::Function LayerWrap::GetClass(Napi::Env env) {
         InstanceAccessor("alignment", &LayerWrap::GetAlignment, nullptr),
         InstanceAccessor("videoFrameRate", &LayerWrap::GetVideoFrameRate, nullptr),
         InstanceAccessor("videoLoaded", &LayerWrap::GetVideoLoaded, nullptr),
+
+        InstanceAccessor("volume", &LayerWrap::GetVolume, nullptr),
+        InstanceAccessor("audioPath", &LayerWrap::GetAudioPath, nullptr),
+        InstanceAccessor("audioName", &LayerWrap::GetAudioName, nullptr),
+        InstanceAccessor("sourceStart", &LayerWrap::GetSourceStart, nullptr),
+        InstanceAccessor("sourceDuration", &LayerWrap::GetSourceDuration, nullptr),
     });
 
     g_constructor = Napi::Persistent(cls);
@@ -62,6 +68,7 @@ Napi::Value LayerWrap::GetType(const Napi::CallbackInfo &info) {
     switch (l->getMaterialType()) {
     case vp::MATERIAL_TYPE_TEXT:  return Napi::String::New(info.Env(), "text");
     case vp::MATERIAL_TYPE_VIDEO: return Napi::String::New(info.Env(), "video");
+    case vp::MATERIAL_TYPE_AUDIO: return Napi::String::New(info.Env(), "audio");
     default:                      return Napi::String::New(info.Env(), "unknown");
     }
 }
@@ -138,4 +145,46 @@ Napi::Value LayerWrap::GetVideoLoaded(const Napi::CallbackInfo &info) {
     auto *vl = dynamic_cast<vp::VideoLayer *>(l);
     return vl ? Napi::Boolean::New(info.Env(), vl->isLoaded())
               : info.Env().Undefined();
+}
+
+// ========== Common Getters (all layers) ==========
+
+Napi::Value LayerWrap::GetVolume(const Napi::CallbackInfo &info) {
+    auto *l = getLayer(info.Env());
+    return l ? Napi::Number::New(info.Env(), l->getVolume())
+             : info.Env().Undefined();
+}
+
+// ========== Audio Layer Getters ==========
+
+Napi::Value LayerWrap::GetAudioPath(const Napi::CallbackInfo &info) {
+    auto *l = getLayer(info.Env());
+    if (!l || l->getMaterialType() != vp::MATERIAL_TYPE_AUDIO)
+        return info.Env().Undefined();
+
+    auto *mat = dynamic_cast<vp::AudioMaterial *>(l->getMaterial());
+    return mat ? Napi::String::New(info.Env(), mat->getPath())
+               : info.Env().Undefined();
+}
+
+Napi::Value LayerWrap::GetAudioName(const Napi::CallbackInfo &info) {
+    auto *l = getLayer(info.Env());
+    if (!l || l->getMaterialType() != vp::MATERIAL_TYPE_AUDIO)
+        return info.Env().Undefined();
+
+    auto *mat = dynamic_cast<vp::AudioMaterial *>(l->getMaterial());
+    return mat ? Napi::String::New(info.Env(), mat->getName())
+               : info.Env().Undefined();
+}
+
+Napi::Value LayerWrap::GetSourceStart(const Napi::CallbackInfo &info) {
+    auto *l = getLayer(info.Env());
+    return l ? Napi::Number::New(info.Env(), static_cast<double>(l->getSourceRange().start))
+             : info.Env().Undefined();
+}
+
+Napi::Value LayerWrap::GetSourceDuration(const Napi::CallbackInfo &info) {
+    auto *l = getLayer(info.Env());
+    return l ? Napi::Number::New(info.Env(), static_cast<double>(l->getSourceRange().duration))
+             : info.Env().Undefined();
 }

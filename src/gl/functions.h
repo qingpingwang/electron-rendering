@@ -36,6 +36,12 @@ Texture createTextureFromFile(const char *path, bool flip_y = true);
 // 更新纹理数据（使用纹理自身的格式）
 bool updateTexture(Texture &tex, const uint8_t *data, int width, int height);
 
+// 从平台原生缓冲区更新纹理（零拷贝，macOS: CVPixelBuffer → IOSurface → GL）
+bool updateTextureFromNativeBuffer(Texture &tex, void *native_buf);
+
+// 清理零拷贝内部资源（GL 上下文销毁前调用）
+void cleanupNativeTexture();
+
 // 绑定纹理到指定纹理单元
 void bindTexture(const Texture &tex, int unit = 0, GLenum target = GL_TEXTURE_2D);
 

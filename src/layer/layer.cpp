@@ -32,17 +32,25 @@ bool Layer::load(const json &config, const std::string &base_path) {
         setError("target_timerange is required");
         return false;
     }
-    start_time_ms_ = config["target_timerange"].value("start", 0);
-    TimeMs duration = config["target_timerange"].value("duration", 0);
-    end_time_ms_ = start_time_ms_ + duration;
+    target_range_.start = config["target_timerange"].value("start", 0);
+    target_range_.duration = config["target_timerange"].value("duration", 0);
 
     // 获取素材指针
-    std::string material_id = config.value("material_id", "");
-    if (material_id.empty()) {
+    material_id_ = config.value("material_id", "");
+    if (material_id_.empty()) {
         setError("material_id is required");
         return false;
     }
-    material_ = root_->getMaterial(getMaterialType(), material_id);
+    material_ = root_->getMaterial(getMaterialType(), material_id_);
+
+    // 解析音量（所有图层通用，默认 1.0）
+    volume_ = config.value("volume", 1.0f);
+
+    // 解析源时间范围（视频/音频用于裁剪映射）
+    if (config.contains("source_timerange")) {
+        source_range_.start = config["source_timerange"].value("start", 0);
+        source_range_.duration = config["source_timerange"].value("duration", 0);
+    }
 
     // 解析 clip 属性
     if (config.contains("clip")) {
@@ -123,26 +131,38 @@ const std::string &Layer::getName() const {
 }
 
 TimeMs Layer::getDurationMs() const {
-    return end_time_ms_ - start_time_ms_;
+    return target_range_.duration;
 }
 
 TimeMs Layer::getStartTime() const {
-    return start_time_ms_;
+    return target_range_.start;
 }
 
 TimeMs Layer::getEndTime() const {
-    return end_time_ms_;
+    return target_range_.end();
 }
 
 bool Layer::isActive(TimeMs time_ms) const {
-    return time_ms >= start_time_ms_ && time_ms < end_time_ms_;
+    return time_ms >= target_range_.start && time_ms < target_range_.end();
+}
+
+float Layer::getVolume() const {
+    return volume_;
+}
+
+const TimeRange &Layer::getTargetRange() const {
+    return target_range_;
+}
+
+const TimeRange &Layer::getSourceRange() const {
+    return source_range_;
 }
 
 bool Layer::hasActiveEffects(TimeMs time_ms) const {
     if (effects_.empty())
         return false;
 
-    TimeMs offset = time_ms - start_time_ms_;
+    TimeMs offset = time_ms - target_range_.start;
     return std::any_of(effects_.begin(), effects_.end(),
                        [offset](const auto &effect) {
                            return effect->isActive(offset);
@@ -181,6 +201,9 @@ static void resetClipUniforms(gl::Shader *shader) {
 }
 
 bool Layer::draw(const gl::FBO &target, TimeMs time_ms) {
+    if (getMaterialType() == MATERIAL_TYPE_AUDIO)
+        return true;
+
     if (!root_ || !target.isValid())
         return false;
 

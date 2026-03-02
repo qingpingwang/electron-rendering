@@ -10,6 +10,7 @@ extern "C" {
 
 struct AVFormatContext;
 struct AVCodecContext;
+struct AVBufferRef;
 struct SwsContext;
 struct AVFrame;
 struct AVPacket;
@@ -18,11 +19,15 @@ namespace vp {
 
 // 解码后的视频帧
 struct VideoFrame {
-    uint8_t *data = nullptr; // CPU内存中的RGBA数据
+    uint8_t *data = nullptr;    // SW: CPU RGBA 像素
+    void *native_buf = nullptr; // HW: 平台原生缓冲区 (macOS: CVPixelBufferRef)
     int width = 0;
     int height = 0;
     TimeMs pts_ms = 0;
     bool valid = false;
+    bool hw = false;
+
+    void releaseNative();
 };
 
 // FFmpeg 视频解码器
@@ -51,6 +56,7 @@ public:
 private:
     bool decodeNextFrame(VideoFrame &out);
     void convertToRGBA(AVFrame *frame, VideoFrame &out);
+    void ensureSwsContext(int src_fmt);
     TimeMs ptsToMs(int64_t pts) const;
     int64_t msToPts(TimeMs ms) const;
 
@@ -68,10 +74,14 @@ private:
     double frame_rate_ = 0.0;
     AVRational time_base_ = {0, 1};
 
+    AVBufferRef *hw_device_ctx_ = nullptr;
+    bool hw_accel_ = false;
+    int sws_src_fmt_ = -1;
+
     uint8_t *rgba_buffer_ = nullptr;
     TimeMs last_decoded_ms_ = kInvalidTime;
     std::string path_;
-    bool has_alpha_ = false; // 是否包含 Alpha 通道
+    bool has_alpha_ = false;
 };
 
 } // namespace vp

@@ -219,4 +219,27 @@ TimeMs TransitionMaterial::getDuration() const {
     return duration_ms_;
 }
 
+// ========== AudioMaterial 实现 ==========
+
+bool AudioMaterial::load(const json &config, const std::string &base_path) {
+    id_ = config.value("id", "");
+    name_ = config.value("name", "");
+    path_ = config.value("path", "");
+
+    if (id_.empty()) {
+        setError("audio material: id is required");
+        return false;
+    }
+    if (path_.empty()) {
+        setError("audio material[" + id_ + "]: path is required");
+        return false;
+    }
+
+    return true;
+}
+
+const std::string &AudioMaterial::getName() const {
+    return name_;
+}
+
 } // namespace vp

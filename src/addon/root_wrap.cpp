@@ -2,8 +2,8 @@
 #include "layer_wrap.h"
 #include "../core/root_node.h"
 #include "../layer/layer.h"
-
 #include "../gl/types.h"
+#include <nlohmann/json.hpp>
 
 static Napi::FunctionReference g_constructor;
 
@@ -14,8 +14,10 @@ Napi::Function RootWrap::GetClass(Napi::Env env) {
                                             InstanceMethod("unload", &RootWrap::Unload),
                                             InstanceMethod("cleanup", &RootWrap::Cleanup),
                                             InstanceMethod("setCurrentTime", &RootWrap::SetCurrentTime),
+                                            InstanceMethod("isSameFrame", &RootWrap::IsSameFrame),
                                             InstanceMethod("draw", &RootWrap::Draw),
                                             InstanceMethod("getLayers", &RootWrap::GetLayers),
+                                            InstanceMethod("getAudioInfos", &RootWrap::GetAudioInfos),
 
                                             InstanceAccessor("width", &RootWrap::GetWidth, nullptr),
                                             InstanceAccessor("height", &RootWrap::GetHeight, nullptr),
@@ -87,6 +89,16 @@ Napi::Value RootWrap::SetCurrentTime(const Napi::CallbackInfo &info) {
     return env.Undefined();
 }
 
+Napi::Value RootWrap::IsSameFrame(const Napi::CallbackInfo &info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsNumber()) {
+        Napi::TypeError::New(env, "expected time in ms").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    auto time_ms = static_cast<vp::TimeMs>(info[0].As<Napi::Number>().Int64Value());
+    return Napi::Boolean::New(env, root_->isSameFrame(time_ms));
+}
+
 Napi::Value RootWrap::Draw(const Napi::CallbackInfo &info) {
     Napi::Env env = info.Env();
     if (!root_->isLoaded())
@@ -96,11 +108,18 @@ Napi::Value RootWrap::Draw(const Napi::CallbackInfo &info) {
     if (size == 0)
         return env.Null();
 
-    Napi::ArrayBuffer ab = Napi::ArrayBuffer::New(env, size);
-    if (!root_->draw(static_cast<uint8_t *>(ab.Data()), size))
+    if (pixel_ab_.IsEmpty() || pixel_ab_.Value().ByteLength() != size)
+        pixel_ab_ = Napi::Persistent(Napi::ArrayBuffer::New(env, size));
+
+    auto ab = pixel_ab_.Value();
+    int status = root_->draw(static_cast<uint8_t *>(ab.Data()), size);
+    if (status < 0)
         return env.Null();
 
-    return Napi::Uint8Array::New(env, size, ab, 0);
+    Napi::Object result = Napi::Object::New(env);
+    result.Set("pixels", Napi::Uint8Array::New(env, size, ab, 0));
+    result.Set("status", Napi::Number::New(env, status));
+    return result;
 }
 
 Napi::Value RootWrap::GetLayers(const Napi::CallbackInfo &info) {
@@ -115,6 +134,31 @@ Napi::Value RootWrap::GetLayers(const Napi::CallbackInfo &info) {
                 LayerWrap::NewInstance(env, layers[i].get(), self, gen_));
 
     return arr;
+}
+
+static Napi::Value jsonToNapi(Napi::Env env, const nlohmann::json &j) {
+    if (j.is_object()) {
+        Napi::Object obj = Napi::Object::New(env);
+        for (auto &[key, val] : j.items())
+            obj.Set(key, jsonToNapi(env, val));
+        return obj;
+    }
+    if (j.is_string()) return Napi::String::New(env, j.get<std::string>());
+    if (j.is_number_float()) return Napi::Number::New(env, j.get<double>());
+    if (j.is_number_unsigned()) return Napi::Number::New(env, static_cast<double>(j.get<uint64_t>()));
+    if (j.is_number_integer()) return Napi::Number::New(env, static_cast<double>(j.get<int64_t>()));
+    if (j.is_boolean()) return Napi::Boolean::New(env, j.get<bool>());
+    if (j.is_array()) {
+        Napi::Array arr = Napi::Array::New(env, j.size());
+        for (size_t i = 0; i < j.size(); ++i)
+            arr.Set(static_cast<uint32_t>(i), jsonToNapi(env, j[i]));
+        return arr;
+    }
+    return env.Null();
+}
+
+Napi::Value RootWrap::GetAudioInfos(const Napi::CallbackInfo &info) {
+    return jsonToNapi(info.Env(), root_->getAudioInfos());
 }
 
 // ========== Getters ==========

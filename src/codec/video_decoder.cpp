@@ -8,7 +8,29 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
+#ifdef __APPLE__
+#include <CoreVideo/CoreVideo.h>
+#endif
+
+static enum AVPixelFormat getHwFormat(AVCodecContext *, const enum AVPixelFormat *pix_fmts) {
+    for (auto p = pix_fmts; *p != AV_PIX_FMT_NONE; p++) {
+        if (*p == AV_PIX_FMT_VIDEOTOOLBOX)
+            return AV_PIX_FMT_VIDEOTOOLBOX;
+    }
+    return pix_fmts[0];
+}
+
 namespace vp {
+
+void VideoFrame::releaseNative() {
+#ifdef __APPLE__
+    if (native_buf) {
+        CVPixelBufferRelease(static_cast<CVPixelBufferRef>(native_buf));
+        native_buf = nullptr;
+    }
+#endif
+    hw = false;
+}
 
 VideoDecoder::VideoDecoder() {
     packet_ = av_packet_alloc();
@@ -91,12 +113,20 @@ bool VideoDecoder::open(const std::string &path) {
         return false;
     }
 
-    // VP9: 启用 Alpha 解码
+    // H.264/HEVC（无 alpha）：尝试 VideoToolbox 硬件解码
+    if (!has_alpha_ && (codecpar->codec_id == AV_CODEC_ID_H264 || codecpar->codec_id == AV_CODEC_ID_HEVC)) {
+        if (av_hwdevice_ctx_create(&hw_device_ctx_, AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+                                   nullptr, nullptr, 0)
+            == 0) {
+            codec_ctx_->hw_device_ctx = av_buffer_ref(hw_device_ctx_);
+            codec_ctx_->get_format = getHwFormat;
+            hw_accel_ = true;
+        }
+    }
+
     AVDictionary *opts = nullptr;
     if (codecpar->codec_id == AV_CODEC_ID_VP9) {
-        // 请求输出 YUVA420P 格式（包含 alpha 通道）
         codec_ctx_->request_sample_fmt = AV_SAMPLE_FMT_NONE;
-        // 强制解码 alpha 通道
         av_dict_set(&opts, "apply_cropping", "0", 0);
     }
 
@@ -125,32 +155,8 @@ bool VideoDecoder::open(const std::string &path) {
         frame_rate_ = 25.0;
     }
 
-    // 创建格式转换上下文
-    // 如果有 alpha，尝试使用 yuva420p 作为源格式
-    AVPixelFormat src_fmt = has_alpha_ ? AV_PIX_FMT_YUVA420P : codec_ctx_->pix_fmt;
+    // sws_ctx_ 在 convertToRGBA 中按实际帧格式惰性创建
 
-    sws_ctx_ = sws_getContext(
-        width_, height_, src_fmt,
-        width_, height_, AV_PIX_FMT_RGBA,
-        SWS_BILINEAR, nullptr, nullptr, nullptr);
-    if (!sws_ctx_) {
-        close();
-        return false;
-    }
-
-    // 根据解码器报告的色彩范围设置转换参数
-    // 注意：实际数据是 limited range (16-235)
-    int src_range = (codec_ctx_->color_range == AVCOL_RANGE_JPEG) ? 1 : 0;
-    int dst_range = 1; // RGBA 总是 full range
-
-    // 使用 BT.709 色彩空间（现代视频标准）
-    const int *inv_table = sws_getCoefficients(SWS_CS_ITU709);
-    sws_setColorspaceDetails(sws_ctx_,
-                             inv_table, src_range,
-                             inv_table, dst_range,
-                             0, 1 << 16, 1 << 16);
-
-    // 分配 RGBA 缓冲区
     int buffer_size = av_image_get_buffer_size(AV_PIX_FMT_RGBA, width_, height_, 1);
     rgba_buffer_ = (uint8_t *)av_malloc(buffer_size);
 
@@ -183,6 +189,13 @@ void VideoDecoder::close() {
         rgba_buffer_ = nullptr;
     }
 
+    if (hw_device_ctx_) {
+        av_buffer_unref(&hw_device_ctx_);
+        hw_device_ctx_ = nullptr;
+    }
+    hw_accel_ = false;
+    sws_src_fmt_ = -1;
+
     video_stream_idx_ = -1;
     width_ = height_ = 0;
     duration_ms_ = 0;
@@ -207,7 +220,7 @@ bool VideoDecoder::decodeFrameAt(TimeMs time_ms, VideoFrame &out) {
     } else if (time_ms < last_decoded_ms_ && (last_decoded_ms_ - time_ms) > frame_interval) {
         // 倒退超过一帧间隔才seek（容错视频帧PTS的时间戳偏差）
         need_seek = true;
-    } else if (last_decoded_ms_ != kInvalidTime && time_ms > last_decoded_ms_ && (time_ms - last_decoded_ms_) > frame_interval * 10) {
+    } else if (last_decoded_ms_ != kInvalidTime && time_ms > last_decoded_ms_ && (time_ms - last_decoded_ms_) > frame_interval * 20) {
         need_seek = true;
     }
 
@@ -272,32 +285,71 @@ bool VideoDecoder::decodeNextFrame(VideoFrame &out) {
     }
 }
 
-void VideoDecoder::convertToRGBA(AVFrame *frame, VideoFrame &out) {
-    // 检查实际的 frame 格式
-    AVPixelFormat actual_fmt = (AVPixelFormat)frame->format;
-    bool frame_has_alpha = (actual_fmt == AV_PIX_FMT_YUVA420P || actual_fmt == AV_PIX_FMT_YUVA420P10LE || actual_fmt == AV_PIX_FMT_YUVA420P10BE);
+void VideoDecoder::ensureSwsContext(int src_fmt) {
+    if (sws_ctx_ && sws_src_fmt_ == src_fmt)
+        return;
 
-    // 如果 sws_context 的格式与实际 frame 格式不匹配，重新创建
-    if (has_alpha_ && !frame_has_alpha) {
-        // 元数据说有 alpha，但实际解码没有 alpha（FFmpeg bug）
-        // 使用实际格式重新创建 sws_context
+    if (sws_ctx_)
         sws_freeContext(sws_ctx_);
-        sws_ctx_ = sws_getContext(
-            width_, height_, actual_fmt,
-            width_, height_, AV_PIX_FMT_RGBA,
-            SWS_BILINEAR, nullptr, nullptr, nullptr);
 
-        has_alpha_ = false; // 更新标记
+    sws_ctx_ = sws_getContext(
+        width_, height_, (AVPixelFormat)src_fmt,
+        width_, height_, AV_PIX_FMT_RGBA,
+        SWS_BILINEAR, nullptr, nullptr, nullptr);
+
+    if (!sws_ctx_)
+        return;
+
+    int src_range = (codec_ctx_ && codec_ctx_->color_range == AVCOL_RANGE_JPEG) ? 1 : 0;
+    const int *coeff = sws_getCoefficients(SWS_CS_ITU709);
+    sws_setColorspaceDetails(sws_ctx_,
+                             coeff, src_range,
+                             coeff, 1,
+                             0, 1 << 16, 1 << 16);
+    sws_src_fmt_ = src_fmt;
+}
+
+void VideoDecoder::convertToRGBA(AVFrame *frame, VideoFrame &out) {
+    out.releaseNative();
+
+#ifdef __APPLE__
+    if (hw_accel_ && frame->format == AV_PIX_FMT_VIDEOTOOLBOX) {
+        auto pixbuf = reinterpret_cast<CVPixelBufferRef>(frame->data[3]);
+        CVPixelBufferRetain(pixbuf);
+        out.native_buf = pixbuf;
+        out.hw = true;
+        out.data = nullptr;
+        out.width = width_;
+        out.height = height_;
+        out.pts_ms = ptsToMs(frame->pts);
+        out.valid = true;
+        return;
+    }
+#endif
+
+    // 软件路径
+    AVPixelFormat actual_fmt = (AVPixelFormat)frame->format;
+
+    if (has_alpha_) {
+        bool frame_has_alpha = (actual_fmt == AV_PIX_FMT_YUVA420P || actual_fmt == AV_PIX_FMT_YUVA420P10LE || actual_fmt == AV_PIX_FMT_YUVA420P10BE);
+        if (!frame_has_alpha)
+            has_alpha_ = false;
     }
 
-    // CPU解码：YUV(A)转RGBA
-    sws_scale(
-        sws_ctx_,
-        frame->data, frame->linesize,
-        0, height_,
-        frame_rgba_->data, frame_rgba_->linesize);
+    ensureSwsContext((int)actual_fmt);
+
+    if (!sws_ctx_) {
+        out.valid = false;
+        return;
+    }
+
+    sws_scale(sws_ctx_,
+              frame->data, frame->linesize,
+              0, height_,
+              frame_rgba_->data, frame_rgba_->linesize);
 
     out.data = rgba_buffer_;
+    out.hw = false;
     out.width = width_;
     out.height = height_;
     out.pts_ms = ptsToMs(frame->pts);

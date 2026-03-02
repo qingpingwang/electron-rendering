@@ -61,13 +61,13 @@ bool VideoLayer::load(const json &config, const std::string &base_path) {
         return false;
     }
 
-    // 解析源视频时间范围，必须有
+    // source_timerange 由基类解析，duration=0 表示使用完整源视频时长
     if (!config.contains("source_timerange")) {
         setError("source_timerange is required");
         return false;
     }
-    source_start_ms_ = config["source_timerange"].value("start", 0);
-    source_duration_ms_ = config["source_timerange"].value("duration", video_duration_ms_);
+    if (source_range_.duration == 0)
+        source_range_.duration = video_duration_ms_;
 
     // 创建纹理
     texture_ = gl::createTexture(video_width_, video_height_);
@@ -95,14 +95,12 @@ bool VideoLayer::renderContent(const gl::FBO &fbo, TimeMs time_ms) {
     if (!decoder_->decodeFrameAt(frame_time, current_frame_))
         return true;
 
-    // 检查当前帧是否有效
-    if (!current_frame_.valid || !current_frame_.data)
+    if (!current_frame_.valid)
         return true;
 
-    // 更新纹理（仅在帧变化时）
     if (current_frame_.pts_ms != uploaded_pts_) {
-        if (!gl::updateTexture(texture_, current_frame_.data, current_frame_.width, current_frame_.height))
-            return false;
+        bool ok = current_frame_.hw ? gl::updateTextureFromNativeBuffer(texture_, current_frame_.native_buf) : gl::updateTexture(texture_, current_frame_.data, current_frame_.width, current_frame_.height);
+        if (!ok) return false;
         uploaded_pts_ = current_frame_.pts_ms;
     }
 
@@ -120,16 +118,16 @@ bool VideoLayer::isLoaded() const {
 }
 
 TimeMs VideoLayer::calculateFrameTime(TimeMs time_ms) const {
-    if (time_ms < start_time_ms_)
+    if (time_ms < target_range_.start)
         return kInvalidTime;
 
-    TimeMs layer_time = time_ms - start_time_ms_;
-    TimeMs layer_duration = end_time_ms_ - start_time_ms_;
+    TimeMs layer_time = time_ms - target_range_.start;
+    TimeMs layer_duration = target_range_.duration;
     if (layer_time >= layer_duration)
         return kInvalidTime;
 
     double progress = static_cast<double>(layer_time) / static_cast<double>(layer_duration);
-    return source_start_ms_ + static_cast<TimeMs>(progress * source_duration_ms_);
+    return source_range_.start + static_cast<TimeMs>(progress * source_range_.duration);
 }
 
 } // namespace vp

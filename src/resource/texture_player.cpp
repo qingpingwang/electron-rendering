@@ -294,8 +294,11 @@ gl::Texture VideoTexture::play(TimeMs time_ms) {
         return texture_;
     }
 
-    // 更新纹理数据
-    gl::updateTexture(texture_, frame.data, frame.width, frame.height);
+    if (frame.hw)
+        gl::updateTextureFromNativeBuffer(texture_, frame.native_buf);
+    else
+        gl::updateTexture(texture_, frame.data, frame.width, frame.height);
+    frame.releaseNative();
 
     return texture_;
 }

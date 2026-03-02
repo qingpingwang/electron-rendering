@@ -33,10 +33,6 @@ private:
     int video_height_ = 0;
     TimeMs video_duration_ms_ = 0;
 
-    // 源视频时间范围（从源视频的哪个位置开始解码）
-    TimeMs source_start_ms_ = 0;    // 源视频的开始时间
-    TimeMs source_duration_ms_ = 0; // 从源视频解码的时长
-
     // 渲染资源
     gl::Texture texture_ = gl::Texture{}; // 自己的纹理
     gl::QuadMesh quad_;                    // 长边适配后的顶点网格

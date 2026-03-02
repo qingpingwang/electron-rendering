@@ -32,4 +32,10 @@ private:
 
     Napi::Value GetVideoFrameRate(const Napi::CallbackInfo &info);
     Napi::Value GetVideoLoaded(const Napi::CallbackInfo &info);
+
+    Napi::Value GetVolume(const Napi::CallbackInfo &info);
+    Napi::Value GetAudioPath(const Napi::CallbackInfo &info);
+    Napi::Value GetAudioName(const Napi::CallbackInfo &info);
+    Napi::Value GetSourceStart(const Napi::CallbackInfo &info);
+    Napi::Value GetSourceDuration(const Napi::CallbackInfo &info);
 };
