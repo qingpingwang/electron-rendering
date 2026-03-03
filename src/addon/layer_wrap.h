@@ -3,13 +3,15 @@
 #include <napi.h>
 #include <cstdint>
 
-namespace vp { class Layer; }
+namespace vp {
+class Layer;
+}
 
 class LayerWrap : public Napi::ObjectWrap<LayerWrap> {
 public:
     static Napi::Function GetClass(Napi::Env env);
     static Napi::Object NewInstance(Napi::Env env, vp::Layer *layer,
-                                     Napi::Object root_obj, uint32_t gen);
+                                    Napi::Object root_obj, uint32_t gen);
 
     LayerWrap(const Napi::CallbackInfo &info);
 
@@ -32,6 +34,12 @@ private:
 
     Napi::Value GetVideoFrameRate(const Napi::CallbackInfo &info);
     Napi::Value GetVideoLoaded(const Napi::CallbackInfo &info);
+
+    Napi::Value GetVisible(const Napi::CallbackInfo &info);
+    void SetVisible(const Napi::CallbackInfo &info, const Napi::Value &value);
+
+    Napi::Value GetMuted(const Napi::CallbackInfo &info);
+    void SetMuted(const Napi::CallbackInfo &info, const Napi::Value &value);
 
     Napi::Value GetVolume(const Napi::CallbackInfo &info);
     Napi::Value GetAudioPath(const Napi::CallbackInfo &info);

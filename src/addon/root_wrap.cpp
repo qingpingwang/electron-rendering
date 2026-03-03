@@ -1,7 +1,9 @@
 #include "root_wrap.h"
+#include "group_layer_wrap.h"
 #include "layer_wrap.h"
 #include "../core/root_node.h"
-#include "../layer/layer.h"
+#include "../layer/group/group_layer.h"
+#include "../layer/base/layer.h"
 #include "../gl/types.h"
 #include <nlohmann/json.hpp>
 
@@ -16,7 +18,7 @@ Napi::Function RootWrap::GetClass(Napi::Env env) {
                                             InstanceMethod("setCurrentTime", &RootWrap::SetCurrentTime),
                                             InstanceMethod("isSameFrame", &RootWrap::IsSameFrame),
                                             InstanceMethod("draw", &RootWrap::Draw),
-                                            InstanceMethod("getLayers", &RootWrap::GetLayers),
+                                            InstanceMethod("getGroups", &RootWrap::GetGroups),
                                             InstanceMethod("getAudioInfos", &RootWrap::GetAudioInfos),
 
                                             InstanceAccessor("width", &RootWrap::GetWidth, nullptr),
@@ -112,7 +114,8 @@ Napi::Value RootWrap::Draw(const Napi::CallbackInfo &info) {
         pixel_ab_ = Napi::Persistent(Napi::ArrayBuffer::New(env, size));
 
     auto ab = pixel_ab_.Value();
-    int status = root_->draw(static_cast<uint8_t *>(ab.Data()), size);
+    bool force = info.Length() > 0 && info[0].IsBoolean() && info[0].As<Napi::Boolean>().Value();
+    int status = root_->draw(static_cast<uint8_t *>(ab.Data()), size, force);
     if (status < 0)
         return env.Null();
 
@@ -122,16 +125,16 @@ Napi::Value RootWrap::Draw(const Napi::CallbackInfo &info) {
     return result;
 }
 
-Napi::Value RootWrap::GetLayers(const Napi::CallbackInfo &info) {
+Napi::Value RootWrap::GetGroups(const Napi::CallbackInfo &info) {
     Napi::Env env = info.Env();
-    const auto &layers = root_->getLayers();
+    const auto &groups = root_->getGroups();
 
-    Napi::Array arr = Napi::Array::New(env, layers.size());
+    Napi::Array arr = Napi::Array::New(env, groups.size());
     Napi::Object self = info.This().As<Napi::Object>();
 
-    for (size_t i = 0; i < layers.size(); ++i)
+    for (size_t i = 0; i < groups.size(); ++i)
         arr.Set(static_cast<uint32_t>(i),
-                LayerWrap::NewInstance(env, layers[i].get(), self, gen_));
+                GroupLayerWrap::NewInstance(env, groups[i].get(), self, gen_));
 
     return arr;
 }

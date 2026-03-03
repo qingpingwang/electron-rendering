@@ -1,8 +1,6 @@
 #include "root_node.h"
-#include "../layer/layer.h"
-#include "../layer/video_layer.h"
-#include "../layer/text_layer.h"
-#include "../layer/audio_layer.h"
+#include "../layer/group/group_layer.h"
+#include "../layer/base/layer.h"
 #include "../gl/shader.h"
 #include <algorithm>
 #include <cstring>
@@ -90,38 +88,20 @@ bool RootNode::isSameFrame(TimeMs time_ms) const {
 // ========== 渲染 ==========
 
 bool RootNode::renderFrame(TimeMs time_ms, uint8_t *out_buffer) {
-    if (layers_.empty()) {
+    if (groups_.empty())
         return true;
-    }
 
     gl::makeCurrent(gl_ctx_);
 
-    // 渲染所有图层到 render_fbo_
     gl::bindFBO(render_fbo_);
     gl::cleanColor();
 
-    for (size_t i = 0; i < layers_.size(); i++) {
+    for (auto &group : groups_) {
         if (cancel_flag_) {
             gl::unbindFBO();
             return false;
         }
-        auto &layer = layers_[i];
-        // 音频图层不渲染
-        if (layer->getMaterialType() == MATERIAL_TYPE_AUDIO) {
-            continue;
-        }
-        auto *transition = layer->getActiveTransition(time_ms);
-        // 不是最后一个图层
-        if (!transition || i == layers_.size() - 1) {
-            if (!layer->draw(render_fbo_, time_ms)) {
-                gl::unbindFBO();
-                return false;
-            }
-            continue;
-        }
-
-        auto &nextLayer = layers_[++i];
-        if (!renderTransition(layer.get(), nextLayer.get(), transition, time_ms)) {
+        if (!group->draw(render_fbo_, time_ms)) {
             gl::unbindFBO();
             return false;
         }
@@ -130,43 +110,9 @@ bool RootNode::renderFrame(TimeMs time_ms, uint8_t *out_buffer) {
     if (cancel_flag_)
         return false;
 
-    // 读取像素数据
     if (!gl::readPixels(render_fbo_, out_buffer, static_cast<int>(canvas_.width * canvas_.height * 4)))
         return false;
 
-    return true;
-}
-
-bool RootNode::renderTransition(Layer *from, Layer *to, Effect *transition, TimeMs time_ms) {
-    gl::FBO fbo0 = fbo_pool_.acquire(canvas_.width, canvas_.height);
-    gl::FBO fbo1 = fbo_pool_.acquire(canvas_.width, canvas_.height);
-    if (!fbo0.isValid() || !fbo1.isValid()) {
-        fbo_pool_.release(fbo0);
-        fbo_pool_.release(fbo1);
-        return false;
-    }
-
-    TimeMs t0 = time_ms >= from->getEndTime() ? from->getEndTime() - 1 : time_ms;
-    TimeMs t1 = time_ms < to->getStartTime() ? to->getStartTime() : time_ms;
-    if (!from->draw(fbo0, t0) || !to->draw(fbo1, t1)) {
-        fbo_pool_.release(fbo0);
-        fbo_pool_.release(fbo1);
-        return false;
-    }
-
-    TimeMs transitionTime = time_ms - from->getEndTime() + transition->getDurationMs() / 2;
-    gl::FBO effect_out = transition->apply({fbo0, fbo1}, transitionTime);
-    fbo_pool_.release(fbo0);
-    fbo_pool_.release(fbo1);
-
-    gl::drawTextureQuad(
-        render_fbo_,
-        gl::Texture{effect_out.texture, effect_out.width, effect_out.height},
-        getShader(),
-        0,
-        "uTex",
-        &quad_);
-    fbo_pool_.release(effect_out);
     return true;
 }
 
@@ -263,50 +209,17 @@ std::string RootNode::loadFromJson(const std::string &json_str) {
         if (!config.contains("tracks") || !config["tracks"].is_array())
             return "tracks is required";
 
-        // 创建图层
         for (const auto &track : config["tracks"]) {
-            std::string track_type = track.value("type", "");
-            if (!track.contains("segments"))
-                continue;
-
-            using LayerFactory = std::unique_ptr<Layer> (*)(RootNode *);
-            static const struct {
-                const char *type;
-                LayerFactory create;
-            } layer_types[] = {
-                {"video", [](RootNode *r) -> std::unique_ptr<Layer> { return std::make_unique<VideoLayer>(r); }},
-                {"text", [](RootNode *r) -> std::unique_ptr<Layer> { return std::make_unique<TextLayer>(r); }},
-                {"audio", [](RootNode *r) -> std::unique_ptr<Layer> { return std::make_unique<AudioLayer>(r); }},
-            };
-
-            LayerFactory factory = nullptr;
-            for (const auto &lt : layer_types) {
-                if (track_type == lt.type) {
-                    factory = lt.create;
-                    break;
-                }
-            }
-            if (!factory)
-                continue;
-
-            for (const auto &segment : track["segments"]) {
-                auto layer = factory(this);
-                if (!layer->load(segment))
-                    return "load layer failed: " + layer->getErrorMessage();
-                layers_.emplace_back(std::move(layer));
-            }
-            // 最后一个图层不能有转场
-            if (!layers_.empty() && layers_.back()->hasTransition()) {
-                return "last layer cannot have transition on track[" + track_type + "] segment[" + std::to_string(track["segments"].size()) + "]";
-            }
+            auto group = std::make_unique<GroupLayer>(this);
+            std::string err = group->load(track);
+            if (!err.empty())
+                return err;
+            groups_.emplace_back(std::move(group));
         }
 
-        if (layers_.empty() || canvas_.width == 0 || canvas_.height == 0) {
+        if (groups_.empty() || canvas_.width == 0 || canvas_.height == 0) {
             unload();
-            return "layers are empty";
-        }
-        for (auto &layer : layers_) {
-            layer->prepare();
+            return "no valid tracks";
         }
 
         // 创建 OpenGL 资源
@@ -342,7 +255,7 @@ std::string RootNode::loadFromJson(const std::string &json_str) {
 
 void RootNode::unload() {
     cancelPrepare();
-    layers_.clear();
+    groups_.clear();
     cache_data_.clear();
     cache_time_ms_ = kInvalidTime;
     current_time_ms_ = 0;
@@ -366,15 +279,15 @@ void RootNode::setCurrentTime(TimeMs time_ms) {
     current_time_ms_ = std::clamp(time_ms, TimeMs(0), duration_ms_);
 }
 
-int RootNode::draw(uint8_t *buffer, size_t buffer_size) {
-    if (layers_.empty() || !buffer)
+int RootNode::draw(uint8_t *buffer, size_t buffer_size, bool force) {
+    if (groups_.empty() || !buffer)
         return -1;
 
     size_t required = static_cast<size_t>(canvas_.width) * canvas_.height * 4;
     if (buffer_size < required)
         return -1;
 
-    int status = isCacheHit(current_time_ms_) ? 0 : 1;
+    int status = (!force && isCacheHit(current_time_ms_)) ? 0 : 1;
 
     if (status == 0) {
         if (prepare_thread_.joinable())
@@ -420,7 +333,7 @@ const CanvasConfig &RootNode::getCanvas() const {
 }
 
 bool RootNode::isLoaded() const {
-    return !layers_.empty();
+    return !groups_.empty();
 }
 
 std::string RootNode::getGPUInfo() const {
@@ -464,34 +377,37 @@ const std::vector<std::unique_ptr<Material>> &RootNode::getMaterialsByType(Mater
     return materials_[type];
 }
 
-const std::vector<std::unique_ptr<Layer>> &RootNode::getLayers() const {
-    return layers_;
+const std::vector<std::unique_ptr<GroupLayer>> &RootNode::getGroups() const {
+    return groups_;
 }
 
 nlohmann::json RootNode::getAudioInfos() const {
     json result = json::object();
 
-    for (const auto &layer : layers_) {
-        MaterialType type = layer->getMaterialType();
-        if (type != MATERIAL_TYPE_AUDIO && type != MATERIAL_TYPE_VIDEO)
-            continue;
-        if (layer->getVolume() <= 0.0f)
-            continue;
+    for (const auto &group : groups_) {
+        for (const auto &layer : group->getLayers()) {
+            MaterialType type = layer->getMaterialType();
+            if (type != MATERIAL_TYPE_AUDIO && type != MATERIAL_TYPE_VIDEO)
+                continue;
+            if (layer->getVolume() <= 0.0f)
+                continue;
 
-        Material *mat = layer->getMaterial();
-        if (!mat || mat->getPath().empty())
-            continue;
+            Material *mat = layer->getMaterial();
+            if (!mat || mat->getPath().empty())
+                continue;
 
-        const TimeRange &src = layer->getSourceRange();
-        const TimeRange &tgt = layer->getTargetRange();
+            const TimeRange &src = layer->getSourceRange();
+            const TimeRange &tgt = layer->getTargetRange();
 
-        result[layer->getName()] = {
-            {"path", mat->getPath()},
-            {"volume", layer->getVolume()},
-            {"layerType", (type == MATERIAL_TYPE_AUDIO) ? "audio" : "video"},
-            {"sourceRange", {{"start", src.start}, {"duration", src.duration}}},
-            {"targetRange", {{"start", tgt.start}, {"duration", tgt.duration}}},
-        };
+            result[layer->getName()] = {
+                {"path", mat->getPath()},
+                {"volume", layer->getVolume()},
+                {"layerType", (type == MATERIAL_TYPE_AUDIO) ? "audio" : "video"},
+                {"groupId", group->getId()},
+                {"sourceRange", {{"start", src.start}, {"duration", src.duration}}},
+                {"targetRange", {{"start", tgt.start}, {"duration", tgt.duration}}},
+            };
+        }
     }
 
     return result;

@@ -67,7 +67,7 @@
             "type": "text",
             "segments": [
                 {
-                    "id": "segment_1",
+                    "id": "segment_2",
                     "material_id": "material_text_0",
                     "target_timerange": {
                         "start": 0,
@@ -86,7 +86,7 @@
             "type": "audio",
             "segments": [
                 {
-                    "id": "segment_2",
+                    "id": "segment_3",
                     "material_id": "material_audio_0",
                     "target_timerange": {
                         "start": 0,

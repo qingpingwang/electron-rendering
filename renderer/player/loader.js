@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const player = require('../state');
-const { render, updateUI } = require('./renderer');
+const { updateUI } = require('./renderer');
 const { stop } = require('./controls');
 const { log, formatTime } = require('../utils/logger');
 
@@ -23,25 +23,23 @@ async function loadFromConfig(config) {
         }
         const t1 = performance.now();
 
-        player.width = player.root.width;
-        player.height = player.root.height;
-        player.duration = player.root.durationMs;
-        player.frameRate = player.root.frameRate;
-        player.currentTime = 0;
+        player.video.load(player.root);
+
+        const groups = player.root.getGroups();
+        if (player.timeline) player.timeline.load(config, groups);
 
         document.getElementById('file-info').textContent = '已加载';
-        document.getElementById('project-id').textContent = player.root.id ? `项目: ${player.root.id}` : '项目: -';
-        document.getElementById('gpu-info').textContent = `GPU: ${player.root.gpuInfo}`;
 
-        log(`✓ 加载成功 (${(t1-t0).toFixed(1)}ms) | ID: ${player.root.id || '-'} | ${player.root.width}×${player.root.height} | ${player.root.frameRate.toFixed(2)}fps | ${formatTime(player.root.durationMs)}`, 'ok');
-
-        const layers = player.root.getLayers();
-        log(`图层数量: ${layers.length}`, 'info');
-        layers.forEach((layer, i) => {
-            let info = `  [${i}] "${layer.name}" | ${layer.type} | ${formatTime(layer.startTime)}~${formatTime(layer.endTime)}`;
-            if (layer.type === 'text') info += ` | text="${layer.text}"`;
-            if (layer.type === 'video' && layer.videoFrameRate) info += ` | ${layer.videoFrameRate.toFixed(1)}fps`;
-            log(info, 'info');
+        log(`✓ 加载成功 (${(t1-t0).toFixed(1)}ms) | ID: ${player.root.id || '-'} | ${player.video.width}×${player.video.height} | ${player.video.frameRate.toFixed(2)}fps | ${formatTime(player.video.duration)}`, 'ok');
+        log(`轨道组: ${groups.length}`, 'info');
+        groups.forEach((g, gi) => {
+            log(`  [${gi}] "${g.id}" | ${g.type}`, 'info');
+            g.layers.forEach((layer, i) => {
+                let info = `    [${i}] "${layer.name}" | ${formatTime(layer.startTime)}~${formatTime(layer.endTime)}`;
+                if (g.type === 'text') info += ` | text="${layer.text}"`;
+                if (g.type === 'video' && layer.videoFrameRate) info += ` | ${layer.videoFrameRate.toFixed(1)}fps`;
+                log(info, 'info');
+            });
         });
 
         try {
@@ -62,7 +60,7 @@ async function loadFromConfig(config) {
             log(`⚠ 音频加载失败: ${e.message}`, 'warn');
         }
 
-        render(0);
+        player.video.render(0);
         updateUI();
 
     } catch (e) {

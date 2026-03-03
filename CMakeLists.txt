@@ -132,6 +132,7 @@ set_source_files_properties(${THIRD_PARTY_SOURCES} PROPERTIES
 add_library(${PROJECT_NAME} SHARED
     src/addon.cpp
     src/addon/root_wrap.cpp
+    src/addon/group_layer_wrap.cpp
     src/addon/layer_wrap.cpp
     $<TARGET_OBJECTS:video_player_core>
 )

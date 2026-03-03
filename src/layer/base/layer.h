@@ -1,10 +1,10 @@
 #pragma once
 
-#include "../core/loadable.h"
-#include "../core/types.h"
-#include "effect.h"
-#include "../gl/types.h"
-#include "material.h"
+#include "../../core/loadable.h"
+#include "../../core/types.h"
+#include "../material/effect.h"
+#include "../../gl/types.h"
+#include "../material/material.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -47,6 +47,12 @@ public:
     TimeMs getEndTime() const;
     bool isActive(TimeMs time_ms) const;
 
+    bool isVisible() const;
+    void setVisible(bool v);
+
+    bool isMuted() const;
+    void setMuted(bool m);
+
     float getVolume() const;
     const TimeRange &getTargetRange() const;
     const TimeRange &getSourceRange() const;
@@ -78,6 +84,8 @@ protected:
 
     RootNode *root_ = nullptr;
     Material *material_ = nullptr;
+    bool visible_ = true;
+    bool muted_ = false;
     Clip clip_;
     std::string name_;
     std::string material_id_;

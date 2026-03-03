@@ -1,31 +1,32 @@
 #include "layer_wrap.h"
 #include "root_wrap.h"
 #include "../core/root_node.h"
-#include "../layer/layer.h"
-#include "../layer/video_layer.h"
-#include "../layer/material.h"
+#include "../layer/base/layer.h"
+#include "../layer/video/video_layer.h"
+#include "../layer/material/material.h"
 
 static Napi::FunctionReference g_constructor;
 
 Napi::Function LayerWrap::GetClass(Napi::Env env) {
     auto cls = DefineClass(env, "Layer", {
-        InstanceAccessor("name", &LayerWrap::GetName, nullptr),
-        InstanceAccessor("type", &LayerWrap::GetType, nullptr),
-        InstanceAccessor("startTime", &LayerWrap::GetStartTime, nullptr),
-        InstanceAccessor("endTime", &LayerWrap::GetEndTime, nullptr),
-        InstanceAccessor("durationMs", &LayerWrap::GetDurationMs, nullptr),
-        InstanceAccessor("active", &LayerWrap::GetActive, nullptr),
-        InstanceAccessor("text", &LayerWrap::GetText, nullptr),
-        InstanceAccessor("alignment", &LayerWrap::GetAlignment, nullptr),
-        InstanceAccessor("videoFrameRate", &LayerWrap::GetVideoFrameRate, nullptr),
-        InstanceAccessor("videoLoaded", &LayerWrap::GetVideoLoaded, nullptr),
-
-        InstanceAccessor("volume", &LayerWrap::GetVolume, nullptr),
-        InstanceAccessor("audioPath", &LayerWrap::GetAudioPath, nullptr),
-        InstanceAccessor("audioName", &LayerWrap::GetAudioName, nullptr),
-        InstanceAccessor("sourceStart", &LayerWrap::GetSourceStart, nullptr),
-        InstanceAccessor("sourceDuration", &LayerWrap::GetSourceDuration, nullptr),
-    });
+                                             InstanceAccessor("name", &LayerWrap::GetName, nullptr),
+                                             InstanceAccessor("type", &LayerWrap::GetType, nullptr),
+                                             InstanceAccessor("startTime", &LayerWrap::GetStartTime, nullptr),
+                                             InstanceAccessor("endTime", &LayerWrap::GetEndTime, nullptr),
+                                             InstanceAccessor("durationMs", &LayerWrap::GetDurationMs, nullptr),
+                                             InstanceAccessor("active", &LayerWrap::GetActive, nullptr),
+                                             InstanceAccessor("text", &LayerWrap::GetText, nullptr),
+                                             InstanceAccessor("alignment", &LayerWrap::GetAlignment, nullptr),
+                                             InstanceAccessor("videoFrameRate", &LayerWrap::GetVideoFrameRate, nullptr),
+                                             InstanceAccessor("videoLoaded", &LayerWrap::GetVideoLoaded, nullptr),
+                                             InstanceAccessor("visible", &LayerWrap::GetVisible, &LayerWrap::SetVisible),
+                                             InstanceAccessor("muted", &LayerWrap::GetMuted, &LayerWrap::SetMuted),
+                                             InstanceAccessor("volume", &LayerWrap::GetVolume, nullptr),
+                                             InstanceAccessor("audioPath", &LayerWrap::GetAudioPath, nullptr),
+                                             InstanceAccessor("audioName", &LayerWrap::GetAudioName, nullptr),
+                                             InstanceAccessor("sourceStart", &LayerWrap::GetSourceStart, nullptr),
+                                             InstanceAccessor("sourceDuration", &LayerWrap::GetSourceDuration, nullptr),
+                                         });
 
     g_constructor = Napi::Persistent(cls);
     g_constructor.SuppressDestruct();
@@ -33,7 +34,7 @@ Napi::Function LayerWrap::GetClass(Napi::Env env) {
 }
 
 Napi::Object LayerWrap::NewInstance(Napi::Env env, vp::Layer *layer,
-                                     Napi::Object root_obj, uint32_t gen) {
+                                    Napi::Object root_obj, uint32_t gen) {
     Napi::Object obj = g_constructor.New({});
     auto *wrap = Napi::ObjectWrap<LayerWrap>::Unwrap(obj);
     wrap->layer_ = layer;
@@ -42,8 +43,9 @@ Napi::Object LayerWrap::NewInstance(Napi::Env env, vp::Layer *layer,
     return obj;
 }
 
-LayerWrap::LayerWrap(const Napi::CallbackInfo &info)
-    : Napi::ObjectWrap<LayerWrap>(info) {}
+LayerWrap::LayerWrap(const Napi::CallbackInfo &info) :
+    Napi::ObjectWrap<LayerWrap>(info) {
+}
 
 vp::Layer *LayerWrap::getLayer(Napi::Env env) {
     auto *root = RootWrap::Unwrap(root_ref_.Value().As<Napi::Object>());
@@ -66,29 +68,26 @@ Napi::Value LayerWrap::GetType(const Napi::CallbackInfo &info) {
     if (!l) return info.Env().Undefined();
 
     switch (l->getMaterialType()) {
-    case vp::MATERIAL_TYPE_TEXT:  return Napi::String::New(info.Env(), "text");
+    case vp::MATERIAL_TYPE_TEXT: return Napi::String::New(info.Env(), "text");
     case vp::MATERIAL_TYPE_VIDEO: return Napi::String::New(info.Env(), "video");
     case vp::MATERIAL_TYPE_AUDIO: return Napi::String::New(info.Env(), "audio");
-    default:                      return Napi::String::New(info.Env(), "unknown");
+    default: return Napi::String::New(info.Env(), "unknown");
     }
 }
 
 Napi::Value LayerWrap::GetStartTime(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    return l ? Napi::Number::New(info.Env(), static_cast<double>(l->getStartTime()))
-             : info.Env().Undefined();
+    return l ? Napi::Number::New(info.Env(), static_cast<double>(l->getStartTime())) : info.Env().Undefined();
 }
 
 Napi::Value LayerWrap::GetEndTime(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    return l ? Napi::Number::New(info.Env(), static_cast<double>(l->getEndTime()))
-             : info.Env().Undefined();
+    return l ? Napi::Number::New(info.Env(), static_cast<double>(l->getEndTime())) : info.Env().Undefined();
 }
 
 Napi::Value LayerWrap::GetDurationMs(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    return l ? Napi::Number::New(info.Env(), static_cast<double>(l->getDurationMs()))
-             : info.Env().Undefined();
+    return l ? Napi::Number::New(info.Env(), static_cast<double>(l->getDurationMs())) : info.Env().Undefined();
 }
 
 Napi::Value LayerWrap::GetActive(const Napi::CallbackInfo &info) {
@@ -106,8 +105,7 @@ Napi::Value LayerWrap::GetText(const Napi::CallbackInfo &info) {
         return info.Env().Undefined();
 
     auto *tm = dynamic_cast<vp::TextMaterial *>(l->getMaterial());
-    return tm ? Napi::String::New(info.Env(), tm->getText())
-              : info.Env().Undefined();
+    return tm ? Napi::String::New(info.Env(), tm->getText()) : info.Env().Undefined();
 }
 
 Napi::Value LayerWrap::GetAlignment(const Napi::CallbackInfo &info) {
@@ -120,8 +118,8 @@ Napi::Value LayerWrap::GetAlignment(const Napi::CallbackInfo &info) {
 
     switch (tm->getAlignment()) {
     case vp::TEXT_ALIGN_CENTER: return Napi::String::New(info.Env(), "center");
-    case vp::TEXT_ALIGN_RIGHT:  return Napi::String::New(info.Env(), "right");
-    default:                    return Napi::String::New(info.Env(), "left");
+    case vp::TEXT_ALIGN_RIGHT: return Napi::String::New(info.Env(), "right");
+    default: return Napi::String::New(info.Env(), "left");
     }
 }
 
@@ -133,8 +131,7 @@ Napi::Value LayerWrap::GetVideoFrameRate(const Napi::CallbackInfo &info) {
         return info.Env().Undefined();
 
     auto *vl = dynamic_cast<vp::VideoLayer *>(l);
-    return vl ? Napi::Number::New(info.Env(), vl->getFrameRate())
-              : info.Env().Undefined();
+    return vl ? Napi::Number::New(info.Env(), vl->getFrameRate()) : info.Env().Undefined();
 }
 
 Napi::Value LayerWrap::GetVideoLoaded(const Napi::CallbackInfo &info) {
@@ -143,16 +140,40 @@ Napi::Value LayerWrap::GetVideoLoaded(const Napi::CallbackInfo &info) {
         return info.Env().Undefined();
 
     auto *vl = dynamic_cast<vp::VideoLayer *>(l);
-    return vl ? Napi::Boolean::New(info.Env(), vl->isLoaded())
-              : info.Env().Undefined();
+    return vl ? Napi::Boolean::New(info.Env(), vl->isLoaded()) : info.Env().Undefined();
+}
+
+// ========== Visible (read/write) ==========
+
+Napi::Value LayerWrap::GetVisible(const Napi::CallbackInfo &info) {
+    auto *l = getLayer(info.Env());
+    return l ? Napi::Boolean::New(info.Env(), l->isVisible()) : info.Env().Undefined();
+}
+
+void LayerWrap::SetVisible(const Napi::CallbackInfo &info, const Napi::Value &value) {
+    auto *l = getLayer(info.Env());
+    if (l && value.IsBoolean())
+        l->setVisible(value.As<Napi::Boolean>().Value());
+}
+
+// ========== Muted (read/write) ==========
+
+Napi::Value LayerWrap::GetMuted(const Napi::CallbackInfo &info) {
+    auto *l = getLayer(info.Env());
+    return l ? Napi::Boolean::New(info.Env(), l->isMuted()) : info.Env().Undefined();
+}
+
+void LayerWrap::SetMuted(const Napi::CallbackInfo &info, const Napi::Value &value) {
+    auto *l = getLayer(info.Env());
+    if (l && value.IsBoolean())
+        l->setMuted(value.As<Napi::Boolean>().Value());
 }
 
 // ========== Common Getters (all layers) ==========
 
 Napi::Value LayerWrap::GetVolume(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    return l ? Napi::Number::New(info.Env(), l->getVolume())
-             : info.Env().Undefined();
+    return l ? Napi::Number::New(info.Env(), l->getVolume()) : info.Env().Undefined();
 }
 
 // ========== Audio Layer Getters ==========
@@ -163,8 +184,7 @@ Napi::Value LayerWrap::GetAudioPath(const Napi::CallbackInfo &info) {
         return info.Env().Undefined();
 
     auto *mat = dynamic_cast<vp::AudioMaterial *>(l->getMaterial());
-    return mat ? Napi::String::New(info.Env(), mat->getPath())
-               : info.Env().Undefined();
+    return mat ? Napi::String::New(info.Env(), mat->getPath()) : info.Env().Undefined();
 }
 
 Napi::Value LayerWrap::GetAudioName(const Napi::CallbackInfo &info) {
@@ -173,18 +193,15 @@ Napi::Value LayerWrap::GetAudioName(const Napi::CallbackInfo &info) {
         return info.Env().Undefined();
 
     auto *mat = dynamic_cast<vp::AudioMaterial *>(l->getMaterial());
-    return mat ? Napi::String::New(info.Env(), mat->getName())
-               : info.Env().Undefined();
+    return mat ? Napi::String::New(info.Env(), mat->getName()) : info.Env().Undefined();
 }
 
 Napi::Value LayerWrap::GetSourceStart(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    return l ? Napi::Number::New(info.Env(), static_cast<double>(l->getSourceRange().start))
-             : info.Env().Undefined();
+    return l ? Napi::Number::New(info.Env(), static_cast<double>(l->getSourceRange().start)) : info.Env().Undefined();
 }
 
 Napi::Value LayerWrap::GetSourceDuration(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    return l ? Napi::Number::New(info.Env(), static_cast<double>(l->getSourceRange().duration))
-             : info.Env().Undefined();
+    return l ? Napi::Number::New(info.Env(), static_cast<double>(l->getSourceRange().duration)) : info.Env().Undefined();
 }

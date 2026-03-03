@@ -1,5 +1,5 @@
 #include "effect.h"
-#include "../resource/render_resource.h"
+#include "../../resource/render_resource.h"
 
 namespace vp {
 

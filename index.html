@@ -6,46 +6,45 @@
     <link rel="stylesheet" href="renderer/index.css">
 </head>
 <body>
-    <div class="player-section">
-        <div class="video-wrapper">
-            <canvas id="canvas" width="640" height="360"></canvas>
-        </div>
-        
-        <div class="controls">
-            <div class="progress" id="progress">
-                <div class="progress-fill" id="progress-fill"></div>
+    <div class="main-area">
+        <div class="player-section" id="player-section">
+            <div class="video-wrapper">
+                <canvas id="canvas" width="640" height="360"></canvas>
             </div>
-            
-            <div class="controls-row">
-                <div class="btn-group">
-                    <button class="btn-play" id="btn-play" disabled>▶ 播放</button>
-                    <button class="btn-stop" id="btn-stop" disabled>■ 停止</button>
+
+            <div class="controls">
+                <div class="ctrl-left">
+                    <span class="tc tc-cur" id="time-current">00:00:00:00</span>
+                    <span class="tc-sep">/</span>
+                    <span class="tc" id="time-total">00:00:00:00</span>
                 </div>
-                <button class="btn-secondary" id="btn-load">📂 加载</button>
-                <button class="btn-secondary" id="btn-test">🧪 测试</button>
-                
-                <div class="time-display">
-                    <span class="current" id="time-current">00:00.000</span>
-                    <span style="color:#555"> / </span>
-                    <span id="time-total">00:00.000</span>
+                <div class="ctrl-center">
+                    <button class="btn-icon" id="btn-play" disabled title="播放/暂停">&#9654;</button>
+                </div>
+                <div class="ctrl-right">
+                    <button class="btn-icon" id="btn-test" title="加载测试项目">&#9881;</button>
                 </div>
             </div>
         </div>
         
-        <div class="info-bar">
-            <span id="video-info">尺寸: - | 帧率: -</span>
-            <span id="project-id">项目: -</span>
-            <span id="gpu-info">GPU: -</span>
+        <div class="divider-h" id="divider-h"></div>
+        <div id="timeline"></div>
+    </div>
+
+    <div class="divider-v" id="divider-v"></div>
+
+    <div class="log-section" id="log-section">
+        <div class="log-inner">
+            <div class="log-header">
+                <span>日志</span>
+                <span id="file-info">未加载</span>
+                <button class="log-fold" id="log-fold" title="折叠">&raquo;</button>
+            </div>
+            <div class="log-content" id="log-content"></div>
         </div>
     </div>
-    
-    <div class="log-section">
-        <div class="log-header">
-            <span>📋 日志</span>
-            <span id="file-info">未加载</span>
-        </div>
-        <div class="log-content" id="log-content"></div>
-    </div>
+
+    <button class="log-expand" id="log-expand" title="展开日志">&laquo;</button>
 
     <script>require('./renderer/main.js')</script>
 </body>

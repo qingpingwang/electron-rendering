@@ -4,7 +4,9 @@
 #include <memory>
 #include <cstdint>
 
-namespace vp { class RootNode; }
+namespace vp {
+class RootNode;
+}
 
 class RootWrap : public Napi::ObjectWrap<RootWrap> {
 public:
@@ -14,8 +16,12 @@ public:
     RootWrap(const Napi::CallbackInfo &info);
     ~RootWrap() override;
 
-    uint32_t gen() const { return gen_; }
-    vp::RootNode *root() const { return root_.get(); }
+    uint32_t gen() const {
+        return gen_;
+    }
+    vp::RootNode *root() const {
+        return root_.get();
+    }
 
 private:
     std::unique_ptr<vp::RootNode> root_;
@@ -31,7 +37,7 @@ private:
     Napi::Value SetCurrentTime(const Napi::CallbackInfo &info);
     Napi::Value IsSameFrame(const Napi::CallbackInfo &info);
     Napi::Value Draw(const Napi::CallbackInfo &info);
-    Napi::Value GetLayers(const Napi::CallbackInfo &info);
+    Napi::Value GetGroups(const Napi::CallbackInfo &info);
     Napi::Value GetAudioInfos(const Napi::CallbackInfo &info);
 
     Napi::Value GetWidth(const Napi::CallbackInfo &info);

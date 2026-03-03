@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../core/loadable.h"
-#include "../core/types.h"
+#include "../../core/loadable.h"
+#include "../../core/types.h"
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>

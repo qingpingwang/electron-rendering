@@ -1,5 +1,5 @@
 #include "audio_layer.h"
-#include "../core/root_node.h"
+#include "../../core/root_node.h"
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;

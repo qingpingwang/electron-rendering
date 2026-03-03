@@ -1,7 +1,7 @@
 #include "text_layer.h"
-#include "../core/font_manager.h"
-#include "../core/root_node.h"
-#include "material.h"
+#include "../../core/font_manager.h"
+#include "../../core/root_node.h"
+#include "../material/material.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
@@ -26,7 +26,7 @@ namespace {
 constexpr float kDegToRad = 3.14159265358979323846f / 180.0f;
 }
 
-#include "../gl/types.h"
+#include "../../gl/types.h"
 
 using json = nlohmann::json;
 using namespace skia::textlayout;

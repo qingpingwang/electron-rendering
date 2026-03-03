@@ -1,9 +1,15 @@
+function formatTimecode(ms, fps = 30) {
+    const totalSec = Math.max(0, ms) / 1000;
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = Math.floor(totalSec % 60);
+    const f = Math.floor((totalSec % 1) * fps);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${p(h)}:${p(m)}:${p(s)}:${p(f)}`;
+}
+
 function formatTime(ms) {
-    const sec = Math.floor(ms / 1000);
-    const min = Math.floor(sec / 60);
-    const s = sec % 60;
-    const m = Math.floor(ms % 1000);
-    return `${String(min).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(m).padStart(3, '0')}`;
+    return formatTimecode(ms);
 }
 
 function log(msg, type = 'info') {
@@ -13,4 +19,4 @@ function log(msg, type = 'info') {
     el.scrollTop = el.scrollHeight;
 }
 
-module.exports = { log, formatTime };
+module.exports = { log, formatTime, formatTimecode };

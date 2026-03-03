@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../core/types.h"
-#include "../layer/material.h"
+#include "../layer/material/material.h"
 #include "../gl/functions.h"
 #include "../gl/fbo_pool.h"
 #include <atomic>
@@ -20,6 +20,7 @@ class Shader;
 namespace vp {
 
 class Effect;
+class GroupLayer;
 class Layer;
 
 // Canvas 配置结构体
@@ -45,7 +46,7 @@ public:
 
     void setCurrentTime(TimeMs time_ms);
     bool isSameFrame(TimeMs time_ms) const;
-    int draw(uint8_t *buffer, size_t buffer_size);
+    int draw(uint8_t *buffer, size_t buffer_size, bool force = false);
 
     int getWidth() const;
     int getHeight() const;
@@ -76,8 +77,8 @@ public:
     // 按类型获取素材列表（直接数组访问，零开销）
     const std::vector<std::unique_ptr<Material>> &getMaterialsByType(MaterialType type) const;
 
-    // 获取图层列表
-    const std::vector<std::unique_ptr<Layer>> &getLayers() const;
+    // 获取轨道组列表
+    const std::vector<std::unique_ptr<GroupLayer>> &getGroups() const;
 
     // 获取所有含音频的图层信息（layerId → {path, volume, layerType, sourceRange, targetRange}）
     nlohmann::json getAudioInfos() const;
@@ -85,8 +86,6 @@ public:
 private:
     // 渲染一帧
     bool renderFrame(TimeMs time_ms, uint8_t *out_buffer);
-    // 渲染转场（两层混合）
-    bool renderTransition(Layer *from, Layer *to, Effect *transition, TimeMs time_ms);
     // 异步准备
     void startPrepareNextFrame(TimeMs next_time_ms);
     void cancelPrepare();
@@ -104,8 +103,8 @@ private:
     // Skia（文字渲染，共享 CGL 上下文）
     GrDirectContext *skia_context_ = nullptr;
 
-    // 图层
-    std::vector<std::unique_ptr<Layer>> layers_;
+    // 轨道组（每组包含若干图层）
+    std::vector<std::unique_ptr<GroupLayer>> groups_;
 
     // 素材管理（固定数组，按类型索引）
     std::vector<std::unique_ptr<Material>> materials_[MATERIAL_TYPE_COUNT];

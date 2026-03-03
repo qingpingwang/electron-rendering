@@ -1,9 +1,9 @@
 #pragma once
 
-#include "../core/types.h"
-#include "../codec/video_decoder.h"
-#include "../gl/types.h"
-#include "layer.h"
+#include "../../core/types.h"
+#include "../../codec/video_decoder.h"
+#include "../../gl/types.h"
+#include "../base/layer.h"
 #include <memory>
 
 namespace vp {

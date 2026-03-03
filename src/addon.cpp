@@ -1,5 +1,6 @@
 #include <napi.h>
 #include "addon/root_wrap.h"
+#include "addon/group_layer_wrap.h"
 #include "addon/layer_wrap.h"
 #include "codec/video_decoder.h"
 
@@ -38,6 +39,7 @@ static Napi::Value GetVideoInfo(const Napi::CallbackInfo &info) {
 
 Napi::Object InitModule(Napi::Env env, Napi::Object exports) {
     RootWrap::GetClass(env);
+    GroupLayerWrap::GetClass(env);
     LayerWrap::GetClass(env);
 
     exports.Set("createRoot", Napi::Function::New(env, CreateRoot));

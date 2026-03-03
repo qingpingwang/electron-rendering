@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../core/loadable.h"
-#include "../core/types.h"
-#include "../gl/types.h"
+#include "../../core/loadable.h"
+#include "../../core/types.h"
+#include "../../gl/types.h"
 #include <memory>
 #include <string>
 #include <vector>

@@ -1,9 +1,9 @@
 #include "layer.h"
-#include "../core/root_node.h"
-#include "effect.h"
-#include "../gl/functions.h"
-#include "../gl/shader.h"
-#include "../resource/render_resource.h"
+#include "../../core/root_node.h"
+#include "../material/effect.h"
+#include "../../gl/functions.h"
+#include "../../gl/shader.h"
+#include "../../resource/render_resource.h"
 #include <algorithm>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -126,6 +126,22 @@ Effect *Layer::getActiveTransition(TimeMs time_ms) const {
     return nullptr;
 }
 
+bool Layer::isVisible() const {
+    return visible_;
+}
+
+void Layer::setVisible(bool v) {
+    visible_ = v;
+}
+
+bool Layer::isMuted() const {
+    return muted_;
+}
+
+void Layer::setMuted(bool m) {
+    muted_ = m;
+}
+
 const std::string &Layer::getName() const {
     return name_;
 }
@@ -201,6 +217,9 @@ static void resetClipUniforms(gl::Shader *shader) {
 }
 
 bool Layer::draw(const gl::FBO &target, TimeMs time_ms) {
+    if (!isVisible())
+        return true;
+
     if (getMaterialType() == MATERIAL_TYPE_AUDIO)
         return true;
 

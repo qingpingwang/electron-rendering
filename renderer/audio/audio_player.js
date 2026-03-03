@@ -37,7 +37,10 @@ class AudioPlayer {
             loadPromises.push(
                 this._decodeFile(filePath).then(buffer => {
                     if (buffer) {
-                        this.tracks.set(layerId, { buffer, volume: info.volume, info });
+                        this.tracks.set(layerId, {
+                            buffer, volume: info.volume, info,
+                            groupId: info.groupId, muted: false,
+                        });
                     }
                 }).catch(e => {
                     console.warn(`[AudioPlayer] skip ${layerId}: ${e.message}`);
@@ -87,6 +90,18 @@ class AudioPlayer {
         this.ctx.close();
     }
 
+    muteGroup(groupId, muted) {
+        for (const [, track] of this.tracks) {
+            if (track.groupId !== groupId) continue;
+            track.muted = muted;
+        }
+        for (const src of this.activeSources) {
+            if (src.groupId === groupId) {
+                src.gain.gain.value = muted ? 0 : src.volume;
+            }
+        }
+    }
+
     // ========== internal ==========
 
     async _decodeFile(filePath) {
@@ -103,7 +118,7 @@ class AudioPlayer {
         this._playStartCtxTime = this.ctx.currentTime;
 
         for (const [, track] of this.tracks) {
-            const { buffer, volume, info } = track;
+            const { buffer, volume, info, groupId, muted } = track;
             const tStart = info.targetRange.start;
             const tDur = info.targetRange.duration;
             const tEnd = tStart + tDur;
@@ -114,7 +129,7 @@ class AudioPlayer {
             source.buffer = buffer;
 
             const gain = this.ctx.createGain();
-            gain.gain.value = volume;
+            gain.gain.value = muted ? 0 : volume;
             source.connect(gain);
             gain.connect(this.masterGain);
 
@@ -131,7 +146,7 @@ class AudioPlayer {
                 source.start(0, offsetSec, Math.max(0, remainSec));
             }
 
-            this.activeSources.push({ source, gain });
+            this.activeSources.push({ source, gain, groupId, volume });
         }
     }
 

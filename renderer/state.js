@@ -1,18 +1,21 @@
 const AudioPlayer = require('./audio/audio_player');
+const VideoPlayer = require('./video/video_player');
+const Timeline = require('./timeline/timeline');
 
 const player = {
     addon: null,
     root: null,
-    canvas: null,
-    ctx: null,
-    currentTime: 0,
-    duration: 0,
-    frameRate: 0,
-    width: 0,
-    height: 0,
-    frameCount: 0,
-    animationId: null,
-    audio: new AudioPlayer()
+    video: null,
+    audio: new AudioPlayer(),
+    timeline: null,
+};
+
+player.initCanvas = function (canvas) {
+    player.video = new VideoPlayer(canvas);
+};
+
+player.initTimeline = function (container) {
+    player.timeline = new Timeline(container);
 };
 
 module.exports = player;
