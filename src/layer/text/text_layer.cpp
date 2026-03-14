@@ -166,6 +166,29 @@ bool TextLayer::renderContent(const gl::FBO &fbo, TimeMs /* time_ms */) {
     if (!surface) return false;
 
     SkCanvas *canvas = surface->getCanvas();
+
+    // ---- clip_ 变换: 归一化坐标 → 像素 ----
+    float cx = fbo.width * 0.5f;
+    float cy = fbo.height * 0.5f;
+    float tx = clip_.transform_x * cx;
+    float ty = clip_.transform_y * cy;
+    float sx = clip_.flip_h ? -clip_.scale_x : clip_.scale_x;
+    float sy = clip_.flip_v ? -clip_.scale_y : clip_.scale_y;
+
+    canvas->save();
+
+    if (clip_.alpha < 1.0f) {
+        SkPaint alphaPaint;
+        alphaPaint.setAlphaf(std::max(0.0f, std::min(1.0f, clip_.alpha)));
+        canvas->saveLayer(nullptr, &alphaPaint);
+    }
+
+    canvas->translate(cx + tx, cy + ty);
+    canvas->rotate(-clip_.rotation);
+    canvas->scale(sx, sy);
+    canvas->translate(-cx, -cy);
+
+    // ---- 文字内容绘制 ----
     TextAlignment alignment = text_material_->getAlignment();
     SkScalar w = static_cast<SkScalar>(fbo.width);
 
@@ -178,10 +201,14 @@ bool TextLayer::renderContent(const gl::FBO &fbo, TimeMs /* time_ms */) {
     };
 
     auto probe = buildParagraph(runs, text, alignment, w, fillStyle);
-    if (!probe) return false;
+    if (!probe) {
+        if (clip_.alpha < 1.0f) canvas->restore();
+        canvas->restore();
+        ctx->flushAndSubmit();
+        return false;
+    }
     float y = (fbo.height - probe->getHeight()) * 0.5f;
 
-    // 绘制全部层（描边 + 填充），visible_run < 0 表示全部可见
     auto paintLayers = [&](int visible_run) {
         auto maskStyle = [visible_run](auto applyVisible) {
             return [=](skia::textlayout::TextStyle &s, const TextStyleRun &sr, size_t ri) {
@@ -224,6 +251,9 @@ bool TextLayer::renderContent(const gl::FBO &fbo, TimeMs /* time_ms */) {
 
     // 2. 实际内容
     paintLayers(-1);
+
+    if (clip_.alpha < 1.0f) canvas->restore();
+    canvas->restore();
 
     ctx->flushAndSubmit();
     return true;

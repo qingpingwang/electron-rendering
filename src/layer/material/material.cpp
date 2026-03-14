@@ -198,6 +198,47 @@ bool TextMaterial::load(const json &config, const std::string &base_path) {
 const std::string &TextMaterial::getText() const {
     return text_;
 }
+
+void TextMaterial::setText(const std::string &text) {
+    text_ = text;
+    adjustRunsToText();
+}
+
+int TextMaterial::utf8Length(const std::string &s) {
+    int n = 0;
+    for (size_t i = 0; i < s.size(); ++n) {
+        unsigned char c = s[i];
+        if (c < 0x80) i += 1;
+        else if ((c >> 5) == 0x06) i += 2;
+        else if ((c >> 4) == 0x0E) i += 3;
+        else if ((c >> 3) == 0x1E) i += 4;
+        else i += 1;
+    }
+    return n;
+}
+
+void TextMaterial::adjustRunsToText() {
+    int len = utf8Length(text_);
+
+    // Remove runs from the back whose range_start >= len (no characters left)
+    while (style_runs_.size() > 1 && style_runs_.back().range_start >= len)
+        style_runs_.pop_back();
+
+    // Clamp remaining runs' range_end
+    for (auto &r : style_runs_) {
+        if (r.range_start > len) r.range_start = len;
+        if (r.range_end > len) r.range_end = len;
+    }
+
+    // Remove trailing runs with zero-length ranges, keep at least 1
+    while (style_runs_.size() > 1 && style_runs_.back().range_start >= style_runs_.back().range_end)
+        style_runs_.pop_back();
+
+    // Extend last run to cover all characters
+    if (!style_runs_.empty())
+        style_runs_.back().range_end = len;
+}
+
 TextAlignment TextMaterial::getAlignment() const {
     return alignment_;
 }

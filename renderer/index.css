@@ -361,6 +361,48 @@ body.resizing-h *, body.resizing-v * { pointer-events: none !important; }
     flex: 1;
     overflow: hidden;
     min-height: 0;
+    position: relative;
+}
+
+.tl-thumb-old {
+    width: 100%;
+    height: 100%;
+    display: block;
+    opacity: 0.5;
+    filter: brightness(0.7);
+}
+
+.tl-seg-strip::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: tl-shimmer 1.8s ease-in-out infinite;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.tl-seg-strip:has(.tl-thumb-old)::after {
+    opacity: 1;
+}
+
+@keyframes tl-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+@keyframes tl-thumb-fadein {
+    from { opacity: 0.5; }
+    to   { opacity: 1; }
+}
+
+.tl-thumb-new {
+    animation: tl-thumb-fadein 0.25s ease-out;
 }
 
 .tl-seg-pad {
@@ -422,23 +464,43 @@ body.resizing-h *, body.resizing-v * { pointer-events: none !important; }
 }
 
 /* ============================================================
-   右侧日志边栏 (可折叠)
+   右侧面板 (属性检查器 + 折叠日志)
    ============================================================ */
-.log-section {
-    position: relative;
+.right-section {
     width: 280px;
     flex-shrink: 0;
     display: flex;
-    flex-direction: row;
-    transition: width 0.25s ease, opacity 0.2s ease;
+    flex-direction: column;
+    transition: width 0.25s ease;
     overflow: hidden;
+    background: #14142a;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.log-section.collapsed {
-    width: 0;
+.right-section.collapsed { width: 0; }
+
+/* ---- 属性检查器 ---- */
+.inspector {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
 
-.log-fold {
+.inspector-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: #1a1a2e;
+    font-size: 0.7rem;
+    color: #4ecdc4;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+}
+
+.inspector-header span { flex: 1; }
+
+.inspector-fold {
     background: none;
     border: none;
     color: #555;
@@ -448,15 +510,165 @@ body.resizing-h *, body.resizing-v * { pointer-events: none !important; }
     line-height: 1;
     border-radius: 3px;
     transition: color 0.15s, background 0.12s;
-    margin-left: auto;
 }
 
-.log-fold:hover {
+.inspector-fold:hover {
     color: #ccc;
     background: rgba(255, 255, 255, 0.08);
 }
 
-.log-expand {
+.inspector-content {
+    flex: 1;
+    overflow-y: auto;
+    min-width: 280px;
+}
+
+.insp-empty {
+    padding: 32px 12px;
+    color: #444;
+    font-size: 0.72rem;
+    text-align: center;
+}
+
+.insp-section {
+    padding: 8px 12px 4px;
+    font-size: 0.58rem;
+    color: #4ecdc4;
+    letter-spacing: 0.5px;
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.insp-section:first-child { border-top: none; }
+
+.insp-row {
+    display: flex;
+    align-items: center;
+    padding: 4px 12px;
+    font-size: 0.68rem;
+    min-height: 26px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.insp-label {
+    width: 56px;
+    flex-shrink: 0;
+    color: #555;
+}
+
+.insp-value {
+    flex: 1;
+    color: #ccc;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.insp-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 3px;
+    font-size: 0.6rem;
+    color: #fff;
+}
+
+.insp-badge.video { background: #1B9C8F; }
+.insp-badge.text  { background: #D4605A; }
+.insp-badge.audio { background: #7B5DB8; }
+
+.insp-toggle {
+    width: 28px;
+    height: 14px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #333;
+    border-radius: 7px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+    outline: none;
+    border: none;
+}
+
+.insp-toggle:checked { background: #4ecdc4; }
+
+.insp-toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.15s;
+}
+
+.insp-toggle:checked::after { transform: translateX(14px); }
+
+/* ---- 底部日志 (默认折叠) ---- */
+.log-wrap {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.log-bar {
+    display: flex;
+    align-items: center;
+    padding: 4px 12px;
+    background: #181830;
+    font-size: 0.65rem;
+    color: #555;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    flex-shrink: 0;
+    gap: 6px;
+    user-select: none;
+}
+
+.log-bar:hover { background: #1c1c38; }
+.log-bar span:first-child { color: #666; }
+
+.log-bar-btn {
+    background: none;
+    border: none;
+    color: #555;
+    font-size: 0.7rem;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+    margin-left: auto;
+    transition: transform 0.2s;
+}
+
+.log-wrap.expanded .log-bar-btn { transform: rotate(180deg); }
+
+.log-content {
+    overflow-y: auto;
+    padding: 6px 10px;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 0.62rem;
+    line-height: 1.5;
+    max-height: 0;
+    transition: max-height 0.25s ease;
+}
+
+.log-wrap.expanded .log-content { max-height: 200px; }
+
+.log-content div {
+    padding: 2px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    word-break: break-all;
+}
+
+.log-ok { color: #4ecdc4; }
+.log-err { color: #ff6b6b; }
+.log-warn { color: #f1c40f; }
+.log-info { color: #777; }
+
+/* ---- 面板展开按钮 ---- */
+.panel-expand {
     position: fixed;
     right: 0;
     top: 50%;
@@ -478,54 +690,342 @@ body.resizing-h *, body.resizing-v * { pointer-events: none !important; }
     padding: 0;
 }
 
-.log-expand:hover {
+.panel-expand:hover {
     color: #fff;
     background: rgba(40, 40, 70, 0.95);
 }
 
-.log-expand.visible {
-    display: flex;
+.panel-expand.visible { display: flex; }
+
+/* ---- 轨道选中高亮 ---- */
+.tl-segment.selected {
+    outline: 2px solid #4ecdc4;
+    outline-offset: -2px;
+    z-index: 3;
 }
 
-.log-inner {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 280px;
-    background: #14142a;
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
+/* ============================================================
+   属性滑动条组件 (PropControls)
+   ============================================================ */
+body.prop-dragging,
+body.prop-dragging * {
+    cursor: ew-resize !important;
+    user-select: none !important;
 }
 
-.log-header {
+.prop-row {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 8px 12px;
-    background: #1a1a2e;
-    font-size: 0.7rem;
-    color: #666;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    flex-shrink: 0;
-}
-
-.log-header span { color: #4ecdc4; }
-
-.log-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 6px 10px;
-    font-family: 'SF Mono', 'Menlo', monospace;
-    font-size: 0.62rem;
-    line-height: 1.5;
-}
-
-.log-content div {
-    padding: 2px 0;
+    padding: 3px 12px;
+    gap: 8px;
+    min-height: 28px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-    word-break: break-all;
 }
 
-.log-ok { color: #4ecdc4; }
-.log-err { color: #ff6b6b; }
-.log-warn { color: #f1c40f; }
-.log-info { color: #777; }
+.prop-row.prop-readonly {
+    gap: 0;
+}
+
+.prop-label {
+    width: 48px;
+    flex-shrink: 0;
+    font-size: 0.64rem;
+    color: #666;
+    white-space: nowrap;
+}
+
+/* ---- Custom track/fill/thumb ---- */
+.prop-track {
+    flex: 1;
+    height: 4px;
+    background: #2a2a40;
+    border-radius: 2px;
+    position: relative;
+    cursor: ew-resize;
+    min-width: 60px;
+    transition: background 0.12s;
+}
+
+.prop-track:hover {
+    background: #333350;
+}
+
+.prop-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #4ecdc4, #56d8c0);
+    pointer-events: none;
+    transition: width 0.06s ease-out;
+}
+
+.prop-thumb {
+    position: absolute;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 4px rgba(78, 205, 196, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    transition: left 0.06s ease-out, box-shadow 0.15s;
+}
+
+.prop-track:hover .prop-thumb {
+    box-shadow: 0 0 8px rgba(78, 205, 196, 0.7), 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+body.prop-dragging .prop-thumb {
+    box-shadow: 0 0 12px rgba(78, 205, 196, 0.8), 0 1px 4px rgba(0, 0, 0, 0.6);
+    transition: none;
+}
+
+body.prop-dragging .prop-fill,
+body.prop-dragging .prop-thumb {
+    transition: none;
+}
+
+/* ---- Value input ---- */
+.prop-val {
+    width: 52px;
+    flex-shrink: 0;
+    background: #222238;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+    color: #bbb;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 0.6rem;
+    text-align: right;
+    padding: 2px 6px;
+    outline: none;
+    transition: border-color 0.15s, background 0.12s;
+}
+
+.prop-val:focus {
+    border-color: #4ecdc4;
+    background: #1a1a30;
+    color: #fff;
+}
+
+.prop-val:hover:not(:focus) {
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* ---- Readonly value text ---- */
+.prop-val-text {
+    flex: 1;
+    font-size: 0.64rem;
+    color: #aaa;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ---- Toggle inside prop-row ---- */
+.prop-row .prop-val-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+}
+
+/* ---- Textarea block ---- */
+.prop-block {
+    padding: 4px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.prop-block-label {
+    display: block;
+    font-size: 0.6rem;
+    color: #555;
+    margin-bottom: 4px;
+}
+
+.prop-textarea {
+    width: 100%;
+    background: #222238;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    color: #ccc;
+    font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+    font-size: 0.68rem;
+    padding: 6px 8px;
+    resize: vertical;
+    outline: none;
+    line-height: 1.5;
+    transition: border-color 0.15s;
+}
+
+.prop-textarea:focus {
+    border-color: #4ecdc4;
+    color: #fff;
+}
+
+/* ---- Button group ---- */
+.prop-btn-group {
+    flex: 1;
+    display: flex;
+    gap: 2px;
+    background: #1e1e34;
+    border-radius: 4px;
+    padding: 2px;
+}
+
+.prop-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #777;
+    font-size: 0.62rem;
+    padding: 3px 0;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+}
+
+.prop-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #bbb;
+}
+
+.prop-btn.active {
+    background: #4ecdc4;
+    color: #111;
+    font-weight: 600;
+}
+
+/* ---- Color input (Pickr-based) ---- */
+.prop-color-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.prop-color-swatch {
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
+    border: 1.5px solid rgba(255, 255, 255, 0.15);
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: box-shadow 0.15s, border-color 0.15s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.prop-color-swatch:hover {
+    border-color: #4ecdc4;
+    box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.35), 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.prop-color-hex-text {
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 0.6rem;
+    color: #999;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    user-select: all;
+}
+
+/* ---- Pickr dark-theme overrides ---- */
+.pickr .pcr-button {
+    display: none !important;
+}
+
+.pcr-app {
+    background: #1e1e34 !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(78, 205, 196, 0.15) !important;
+}
+
+.pcr-app .pcr-selection .pcr-color-preview {
+    border-radius: 6px;
+}
+
+.pcr-app .pcr-interaction input {
+    background: #282845 !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: #ccc !important;
+    border-radius: 4px !important;
+    font-family: 'SF Mono', 'Menlo', monospace !important;
+    font-size: 0.62rem !important;
+}
+
+.pcr-app .pcr-interaction input:focus {
+    border-color: #4ecdc4 !important;
+    box-shadow: none !important;
+}
+
+.pcr-app .pcr-interaction .pcr-save {
+    background: #4ecdc4 !important;
+    color: #111 !important;
+    border-radius: 4px !important;
+    font-size: 0.6rem !important;
+    font-weight: 600;
+}
+
+.pcr-app .pcr-interaction .pcr-save:hover {
+    background: #56d8c0 !important;
+}
+
+.pcr-app .pcr-interaction .pcr-type {
+    color: #888 !important;
+    font-size: 0.55rem !important;
+}
+
+.pcr-app .pcr-interaction .pcr-type.active {
+    color: #4ecdc4 !important;
+}
+
+.pcr-app .pcr-selection .pcr-picker {
+    border: 2px solid #fff;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+}
+
+.pcr-app .pcr-selection .pcr-color-palette,
+.pcr-app .pcr-selection .pcr-color-chooser,
+.pcr-app .pcr-selection .pcr-color-opacity {
+    border-radius: 4px;
+}
+
+/* ============================================================
+   属性分组容器 (PropControls.group)
+   ============================================================ */
+.prop-group {
+    margin: 4px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.015);
+}
+
+.prop-group-title {
+    font-size: 0.56rem;
+    color: #4ecdc4;
+    padding: 4px 10px 2px;
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    letter-spacing: 0.3px;
+}
+
+.prop-group-body {
+    padding: 2px 0;
+}
+
+.prop-group-body .prop-row {
+    padding: 2px 10px;
+    min-height: 24px;
+    border-bottom: none;
+}
+
+.prop-group-body .prop-label {
+    width: 36px;
+    font-size: 0.6rem;
+}

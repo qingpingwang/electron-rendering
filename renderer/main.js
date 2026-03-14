@@ -4,6 +4,8 @@ const { play, seek } = require('./player/controls');
 const { loadTest } = require('./player/loader');
 const { updateUI } = require('./player/renderer');
 const { log } = require('./utils/logger');
+const { setupDivider } = require('./utils/divider');
+const Inspector = require('./panel/inspector');
 
 const ROOT_DIR = path.join(__dirname, '..');
 
@@ -29,42 +31,29 @@ function init() {
 
     player.initTimeline(document.getElementById('timeline'));
 
+    const inspector = new Inspector(document.getElementById('inspector-content'));
+    inspector.onChange = (prop) => {
+        if (player.timeline && player.timeline.onRefresh) {
+            player.timeline.onRefresh();
+        }
+    };
+
     player.video.onRender = () => {
         updateUI();
         if (player.timeline) player.timeline.setCurrentTime(player.video.currentTime);
     };
 
-    player.timeline.onSeek = (timeMs) => {
-        seek(timeMs / player.video.duration);
-    };
-
-    player.timeline.onTrackMute = (groupId, muted) => {
-        player.audio.muteGroup(groupId, muted);
-    };
-
+    player.timeline.onSeek = (timeMs) => seek(timeMs / player.video.duration);
+    player.timeline.onTrackMute = (groupId, muted) => player.audio.muteGroup(groupId, muted);
     player.timeline.onRefresh = () => {
-        if (!player.audio.playing) {
-            player.video.render(player.video.currentTime, true);
-        }
+        if (!player.audio.playing) player.video.render(player.video.currentTime, true, false);
     };
+    player.timeline.onSelectLayer = (info) => inspector.update(info);
 
     document.getElementById('btn-play').onclick = play;
     document.getElementById('btn-test').onclick = loadTest;
 
-    const logSection = document.getElementById('log-section');
-    const logFold = document.getElementById('log-fold');
-    const logExpand = document.getElementById('log-expand');
-    const divV = document.getElementById('divider-v');
-
-    function toggleLog() {
-        const collapsed = logSection.classList.toggle('collapsed');
-        divV.style.display = collapsed ? 'none' : '';
-        logExpand.classList.toggle('visible', collapsed);
-    }
-
-    logFold.onclick = toggleLog;
-    logExpand.onclick = toggleLog;
-
+    initRightPanel();
     initDividers();
 
     document.onkeydown = e => {
@@ -76,63 +65,47 @@ function init() {
     log('就绪', 'ok');
 }
 
+function initRightPanel() {
+    const section = document.getElementById('right-section');
+    const fold = document.getElementById('panel-fold');
+    const expand = document.getElementById('panel-expand');
+    const divV = document.getElementById('divider-v');
+    const logWrap = document.getElementById('log-wrap');
+
+    function togglePanel() {
+        const collapsed = section.classList.toggle('collapsed');
+        divV.style.display = collapsed ? 'none' : '';
+        expand.classList.toggle('visible', collapsed);
+    }
+
+    fold.onclick = togglePanel;
+    expand.onclick = togglePanel;
+    document.getElementById('log-bar').onclick = () => logWrap.classList.toggle('expanded');
+}
+
 function initDividers() {
     const playerSection = document.getElementById('player-section');
     const timeline = document.getElementById('timeline');
-    const logSection = document.getElementById('log-section');
+    const rightSection = document.getElementById('right-section');
     const divH = document.getElementById('divider-h');
     const divV = document.getElementById('divider-v');
 
     setupDivider(divH, {
         axis: 'y',
         onDrag(delta) {
-            const parent = playerSection.parentElement;
-            const total = parent.offsetHeight - divH.offsetHeight;
-            const curPlayerH = playerSection.offsetHeight;
-            const curTlH = timeline.offsetHeight;
-            const newPlayerH = Math.max(120, Math.min(total - 60, curPlayerH + delta));
-            const newTlH = total - newPlayerH;
+            const total = playerSection.parentElement.offsetHeight - divH.offsetHeight;
+            const newH = Math.max(120, Math.min(total - 60, playerSection.offsetHeight + delta));
             playerSection.style.flex = 'none';
-            playerSection.style.height = `${newPlayerH}px`;
-            timeline.style.height = `${newTlH}px`;
+            playerSection.style.height = `${newH}px`;
+            timeline.style.height = `${total - newH}px`;
         }
     });
 
     setupDivider(divV, {
         axis: 'x',
         onDrag(delta) {
-            const newW = Math.max(180, logSection.offsetWidth - delta);
-            logSection.style.width = `${newW}px`;
+            rightSection.style.width = `${Math.max(180, rightSection.offsetWidth - delta)}px`;
         }
-    });
-}
-
-function setupDivider(el, { axis, onDrag }) {
-    let startPos = 0;
-    const cls = axis === 'y' ? 'resizing-h' : 'resizing-v';
-
-    el.addEventListener('mousedown', e => {
-        e.preventDefault();
-        startPos = axis === 'y' ? e.clientY : e.clientX;
-        el.classList.add('active');
-        document.body.classList.add(cls);
-
-        const onMove = (e) => {
-            const cur = axis === 'y' ? e.clientY : e.clientX;
-            const delta = cur - startPos;
-            startPos = cur;
-            onDrag(delta);
-        };
-
-        const onUp = () => {
-            el.classList.remove('active');
-            document.body.classList.remove(cls);
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-        };
-
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
     });
 }
 

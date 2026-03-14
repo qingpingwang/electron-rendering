@@ -115,7 +115,8 @@ Napi::Value RootWrap::Draw(const Napi::CallbackInfo &info) {
 
     auto ab = pixel_ab_.Value();
     bool force = info.Length() > 0 && info[0].IsBoolean() && info[0].As<Napi::Boolean>().Value();
-    int status = root_->draw(static_cast<uint8_t *>(ab.Data()), size, force);
+    bool prepare_next = !(info.Length() > 1 && info[1].IsBoolean() && !info[1].As<Napi::Boolean>().Value());
+    int status = root_->draw(static_cast<uint8_t *>(ab.Data()), size, force, prepare_next);
     if (status < 0)
         return env.Null();
 

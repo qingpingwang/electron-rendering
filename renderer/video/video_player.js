@@ -35,14 +35,14 @@ class VideoPlayer {
         }
     }
 
-    render(timeMs, force = false) {
+    render(timeMs, force = false, prepareNext = true) {
         if (!this.root) return;
         if (timeMs !== undefined) this.currentTime = timeMs;
 
         const t0 = performance.now();
 
         this.root.setCurrentTime(this._snapToFrame(this.currentTime));
-        const result = this.root.draw(force);
+        const result = this.root.draw(force, prepareNext);
 
         const t1 = performance.now();
 

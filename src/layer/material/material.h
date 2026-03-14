@@ -135,10 +135,39 @@ public:
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
 
     const std::string &getText() const;
+    void setText(const std::string &text);
+
     TextAlignment getAlignment() const;
+    void setAlignment(TextAlignment a) { alignment_ = a; }
+
     const std::vector<TextStyleRun> &getStyleRuns() const;
+    size_t getRunCount() const { return style_runs_.size(); }
+
+    bool setRunFontSize(size_t idx, float v) { if (idx >= style_runs_.size()) return false; style_runs_[idx].font_size = v; return true; }
+    bool setRunLetterSpacing(size_t idx, float v) { if (idx >= style_runs_.size()) return false; style_runs_[idx].letter_spacing = v; return true; }
+    bool setRunLineHeight(size_t idx, float v) { if (idx >= style_runs_.size()) return false; style_runs_[idx].line_height = v; return true; }
+    bool setRunFill(size_t idx, float r, float g, float b, float a) {
+        if (idx >= style_runs_.size()) return false;
+        auto &f = style_runs_[idx].fill;
+        f.r = r; f.g = g; f.b = b; f.a = a;
+        return true;
+    }
+    bool setRunStrokeWidth(size_t ri, size_t si, float w) {
+        if (ri >= style_runs_.size() || si >= style_runs_[ri].strokes.size()) return false;
+        style_runs_[ri].strokes[si].width = w;
+        return true;
+    }
+    bool setRunStrokeColor(size_t ri, size_t si, float r, float g, float b, float a) {
+        if (ri >= style_runs_.size() || si >= style_runs_[ri].strokes.size()) return false;
+        auto &c = style_runs_[ri].strokes[si].color;
+        c.r = r; c.g = g; c.b = b; c.a = a;
+        return true;
+    }
 
 private:
+    void adjustRunsToText();
+    static int utf8Length(const std::string &s);
+
     std::string text_;
     TextAlignment alignment_ = TEXT_ALIGN_LEFT;
     std::vector<TextStyleRun> style_runs_;

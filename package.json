@@ -10,13 +10,14 @@
     "postinstall": "npm run build"
   },
   "dependencies": {
+    "@electron/remote": "^2.1.0",
+    "@simonwep/pickr": "^1.9.1",
     "node-addon-api": "^7.0.0",
-    "node-api-headers": "^1.1.0",
-    "@electron/remote": "^2.1.0"
+    "node-api-headers": "^1.1.0"
   },
   "devDependencies": {
-    "electron": "^28.0.0",
-    "cmake-js": "^7.2.1"
+    "cmake-js": "^7.2.1",
+    "electron": "^28.0.0"
   },
   "keywords": [
     "electron",

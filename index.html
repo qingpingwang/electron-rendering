@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>C++ 视频播放器</title>
+    <link rel="stylesheet" href="node_modules/@simonwep/pickr/dist/themes/nano.min.css">
     <link rel="stylesheet" href="renderer/index.css">
 </head>
 <body>
@@ -33,18 +34,27 @@
 
     <div class="divider-v" id="divider-v"></div>
 
-    <div class="log-section" id="log-section">
-        <div class="log-inner">
-            <div class="log-header">
+    <div class="right-section" id="right-section">
+        <div class="inspector">
+            <div class="inspector-header">
+                <span>属性</span>
+                <button class="inspector-fold" id="panel-fold" title="折叠面板">&raquo;</button>
+            </div>
+            <div class="inspector-content" id="inspector-content">
+                <div class="insp-empty">未选择图层</div>
+            </div>
+        </div>
+        <div class="log-wrap" id="log-wrap">
+            <div class="log-bar" id="log-bar">
                 <span>日志</span>
                 <span id="file-info">未加载</span>
-                <button class="log-fold" id="log-fold" title="折叠">&raquo;</button>
+                <button class="log-bar-btn" id="log-toggle-btn">&#9662;</button>
             </div>
             <div class="log-content" id="log-content"></div>
         </div>
     </div>
 
-    <button class="log-expand" id="log-expand" title="展开日志">&laquo;</button>
+    <button class="panel-expand" id="panel-expand" title="展开面板">&laquo;</button>
 
     <script>require('./renderer/main.js')</script>
 </body>

@@ -8,6 +8,7 @@ const TRACK_STYLE = {
 };
 
 const THUMB_PX = 80;
+const THUMB_RATIO = 1.8;
 const LABEL_W = 72;
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 20;
@@ -21,6 +22,7 @@ class Timeline {
         this.onSeek = null;
         this.onTrackMute = null;
         this.onRefresh = null;
+        this.onSelectLayer = null;
 
         this._materials = {};
         this._groups = [];
@@ -35,6 +37,8 @@ class Timeline {
         this._dragging = false;
         this._thumbTimer = null;
         this._thumbGen = 0;
+        this._stripCache = new Map();
+        this._frameCache = new Map();
 
         this._build();
         this._bindEvents();
@@ -49,6 +53,8 @@ class Timeline {
         this.currentTime = 0;
 
         this._materials = {};
+        this._stripCache.clear();
+        this._frameCache.clear();
         for (const v of (config.materials?.videos || [])) {
             this._materials[v.id] = {
                 path: path.resolve(v.path),
@@ -99,6 +105,8 @@ class Timeline {
         this.duration = 0;
         this.currentTime = 0;
         this._pxPerMs = 0;
+        this._stripCache.clear();
+        this._frameCache.clear();
         this._render();
     }
 
@@ -230,6 +238,25 @@ class Timeline {
         window.addEventListener('resize', () => {
             this._updatePlayhead();
         });
+
+        let clickPos = null;
+        this._body.addEventListener('mousedown', (e) => {
+            clickPos = { x: e.clientX, y: e.clientY };
+        });
+        this._body.addEventListener('click', (e) => {
+            if (clickPos) {
+                const dx = e.clientX - clickPos.x;
+                const dy = e.clientY - clickPos.y;
+                if (dx * dx + dy * dy > 25) return;
+            }
+            if (e.target.closest('.tl-label')) return;
+            const segEl = e.target.closest('.tl-segment');
+            if (segEl && segEl.dataset.trackIdx !== undefined) {
+                this._selectSegment(parseInt(segEl.dataset.trackIdx), parseInt(segEl.dataset.segIdx));
+            } else {
+                this._deselectSegment();
+            }
+        });
     }
 
     _updateZoomInput() {
@@ -249,6 +276,7 @@ class Timeline {
 
     _render() {
         this._renderRuler();
+        this._captureStrips();
         this._renderTracks();
         this._updatePlayhead();
     }
@@ -278,7 +306,8 @@ class Timeline {
         const totalPx = this._totalPx;
         this._body.style.width = `${LABEL_W + totalPx}px`;
 
-        for (const track of this.tracks) {
+        for (let trackIdx = 0; trackIdx < this.tracks.length; trackIdx++) {
+            const track = this.tracks[trackIdx];
             const style = TRACK_STYLE[track.type] || TRACK_STYLE.video;
 
             const row = document.createElement('div');
@@ -333,12 +362,15 @@ class Timeline {
             segsEl.className = 'tl-segments';
             segsEl.style.width = `${totalPx}px`;
 
-            for (const seg of track.segments) {
+            for (let segIdx = 0; segIdx < track.segments.length; segIdx++) {
+                const seg = track.segments[segIdx];
                 const leftPx = seg.start * this._pxPerMs;
                 const widthPx = seg.duration * this._pxPerMs;
 
                 const segEl = document.createElement('div');
                 segEl.className = `tl-segment tl-seg-${track.type}`;
+                segEl.dataset.trackIdx = trackIdx;
+                segEl.dataset.segIdx = segIdx;
                 segEl.style.left = `${leftPx}px`;
                 segEl.style.width = `${widthPx}px`;
                 segEl.style.background = style.bg;
@@ -360,6 +392,12 @@ class Timeline {
                     const stripWrap = document.createElement('div');
                     stripWrap.className = 'tl-seg-strip';
                     segEl.appendChild(stripWrap);
+
+                    const cachedStrip = this._stripCache.get(this._segKey(segEl.dataset));
+                    if (cachedStrip) {
+                        cachedStrip.classList.add('tl-thumb-old');
+                        stripWrap.appendChild(cachedStrip);
+                    }
 
                     const bottom = document.createElement('div');
                     bottom.className = 'tl-seg-pad';
@@ -415,6 +453,68 @@ class Timeline {
         return base;
     }
 
+    // ---- Selection ----
+
+    _selectSegment(trackIdx, segIdx) {
+        const old = this._body.querySelector('.tl-segment.selected');
+        if (old) old.classList.remove('selected');
+
+        const segEl = this._body.querySelector(
+            `.tl-segment[data-track-idx="${trackIdx}"][data-seg-idx="${segIdx}"]`);
+        if (segEl) segEl.classList.add('selected');
+
+        const track = this.tracks[trackIdx];
+        if (!track?.group) return;
+        const layers = track.group.layers;
+        if (!layers || segIdx >= layers.length) return;
+
+        if (this.onSelectLayer) {
+            this.onSelectLayer({
+                layer: layers[segIdx],
+                group: track.group,
+                trackType: track.type,
+                segName: track.segments[segIdx]?.name || '',
+            });
+        }
+    }
+
+    _deselectSegment() {
+        const old = this._body.querySelector('.tl-segment.selected');
+        if (old) old.classList.remove('selected');
+        if (this.onSelectLayer) this.onSelectLayer(null);
+    }
+
+    // ---- Strip & Frame Cache ----
+
+    _segKey(dataset) {
+        return `${dataset.videoPath}|${dataset.srcStart}|${dataset.srcDuration}`;
+    }
+
+    _frameCacheKey(videoPath, timeSec) {
+        const rt = Math.round(timeSec * 2) / 2;
+        return `${videoPath}@${rt.toFixed(1)}`;
+    }
+
+    _frameCacheStore(key, canvas) {
+        const MAX_FRAMES = 300;
+        this._frameCache.set(key, canvas);
+        if (this._frameCache.size > MAX_FRAMES) {
+            const oldest = this._frameCache.keys().next().value;
+            this._frameCache.delete(oldest);
+        }
+    }
+
+    _captureStrips() {
+        const segs = this._body.querySelectorAll('.tl-seg-video[data-video-path]');
+        for (const segEl of segs) {
+            const canvas = segEl.querySelector('.tl-seg-strip canvas');
+            if (!canvas || !canvas.width) continue;
+            canvas.classList.remove('tl-thumb-new');
+            canvas.style.cssText = '';
+            this._stripCache.set(this._segKey(segEl.dataset), canvas);
+        }
+    }
+
     // ---- Thumbnails ----
 
     _debouncedRefreshThumbs() {
@@ -426,8 +526,6 @@ class Timeline {
 
     _refreshThumbnails() {
         this._thumbGen++;
-        const strips = this._body.querySelectorAll('.tl-seg-strip');
-        for (const s of strips) s.innerHTML = '';
         this._generateThumbnails(this._thumbGen);
     }
 
@@ -474,6 +572,7 @@ class Timeline {
         const stripWrap = segEl.querySelector('.tl-seg-strip');
         if (!stripWrap) return;
 
+        const videoPath = segEl.dataset.videoPath;
         const srcStart = (parseFloat(segEl.dataset.srcStart) || 0) / 1000;
         const srcDur = (parseFloat(segEl.dataset.srcDuration) || 0) / 1000;
         const segW = stripWrap.offsetWidth;
@@ -481,39 +580,58 @@ class Timeline {
 
         if (segW <= 0 || srcDur <= 0 || segH <= 0) return;
 
-        const thumbW = THUMB_PX;
-        const count = Math.max(1, Math.ceil(segW / thumbW));
+        const thumbW = Math.round(segH * THUMB_RATIO);
+        const count = Math.max(1, Math.ceil(segW / THUMB_PX));
+        const canvasW = count * thumbW;
 
         const strip = document.createElement('canvas');
-        strip.width = segW;
+        strip.width = canvasW;
         strip.height = segH;
         const ctx = strip.getContext('2d');
 
         const vw = video.videoWidth;
         const vh = video.videoHeight;
-        const cellAspect = thumbW / segH;
         const vidAspect = vw / vh;
         let sx, sy, sw, sh;
-        if (vidAspect > cellAspect) {
-            sh = vh; sw = vh * cellAspect;
+        if (vidAspect > THUMB_RATIO) {
+            sh = vh; sw = vh * THUMB_RATIO;
             sx = (vw - sw) / 2; sy = 0;
         } else {
-            sw = vw; sh = vw / cellAspect;
+            sw = vw; sh = vw / THUMB_RATIO;
             sx = 0; sy = (vh - sh) / 2;
         }
 
         for (let i = 0; i < count; i++) {
             const dx = i * thumbW;
-            const dw = Math.min(thumbW, segW - dx);
+            const dw = Math.min(thumbW, canvasW - dx);
             const ratio = dw / thumbW;
             const t = srcStart + srcDur * (i + 0.5) / count;
-            video.currentTime = Math.min(t, video.duration - 0.01);
-            await new Promise(r => { video.onseeked = r; });
-            ctx.drawImage(video, sx, sy, sw * ratio, sh, dx, 0, dw, segH);
+            const fKey = this._frameCacheKey(videoPath, t);
+            const cached = this._frameCache.get(fKey);
+
+            if (cached) {
+                ctx.drawImage(cached, 0, 0, cached.width, cached.height, dx, 0, dw, segH);
+            } else {
+                video.currentTime = Math.min(t, video.duration - 0.01);
+                await new Promise(r => { video.onseeked = r; });
+                ctx.drawImage(video, sx, sy, sw * ratio, sh, dx, 0, dw, segH);
+
+                const fc = document.createElement('canvas');
+                fc.width = thumbW;
+                fc.height = segH;
+                fc.getContext('2d').drawImage(video, sx, sy, sw, sh, 0, 0, thumbW, segH);
+                this._frameCacheStore(fKey, fc);
+            }
         }
 
         strip.style.cssText = 'width:100%;height:100%;display:block;';
+        strip.classList.add('tl-thumb-new');
         stripWrap.appendChild(strip);
+
+        const old = stripWrap.querySelector('.tl-thumb-old');
+        if (old) old.remove();
+
+        this._stripCache.set(this._segKey(segEl.dataset), strip);
     }
 }
 

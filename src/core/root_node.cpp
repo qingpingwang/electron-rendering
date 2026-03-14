@@ -279,7 +279,7 @@ void RootNode::setCurrentTime(TimeMs time_ms) {
     current_time_ms_ = std::clamp(time_ms, TimeMs(0), duration_ms_);
 }
 
-int RootNode::draw(uint8_t *buffer, size_t buffer_size, bool force) {
+int RootNode::draw(uint8_t *buffer, size_t buffer_size, bool force, bool prepare_next) {
     if (groups_.empty() || !buffer)
         return -1;
 
@@ -300,8 +300,10 @@ int RootNode::draw(uint8_t *buffer, size_t buffer_size, bool force) {
         renderFrame(current_time_ms_, buffer);
     }
 
-    TimeMs next_time = current_time_ms_ + static_cast<TimeMs>(1000.0 / (frame_rate_ > 0 ? frame_rate_ : 25.0));
-    startPrepareNextFrame(next_time);
+    if (prepare_next) {
+        TimeMs next_time = current_time_ms_ + static_cast<TimeMs>(1000.0 / (frame_rate_ > 0 ? frame_rate_ : 25.0));
+        startPrepareNextFrame(next_time);
+    }
 
     return status;
 }

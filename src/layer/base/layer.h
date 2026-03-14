@@ -57,6 +57,19 @@ public:
     const TimeRange &getTargetRange() const;
     const TimeRange &getSourceRange() const;
 
+    float getAlpha() const { return clip_.alpha; }
+    void setAlpha(float a) { clip_.alpha = a; }
+    float getRotation() const { return clip_.rotation; }
+    void setRotation(float r) { clip_.rotation = r; }
+    float getScaleX() const { return clip_.scale_x; }
+    void setScaleX(float s) { clip_.scale_x = s; }
+    float getScaleY() const { return clip_.scale_y; }
+    void setScaleY(float s) { clip_.scale_y = s; }
+    float getTransformX() const { return clip_.transform_x; }
+    void setTransformX(float t) { clip_.transform_x = t; }
+    float getTransformY() const { return clip_.transform_y; }
+    void setTransformY(float t) { clip_.transform_y = t; }
+
     // 预备（子类实现：如视频解码到起始帧）
     virtual void prepare() = 0;
 

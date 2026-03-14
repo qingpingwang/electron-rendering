@@ -30,7 +30,18 @@ private:
     Napi::Value GetActive(const Napi::CallbackInfo &info);
 
     Napi::Value GetText(const Napi::CallbackInfo &info);
+    void SetText(const Napi::CallbackInfo &info, const Napi::Value &value);
     Napi::Value GetAlignment(const Napi::CallbackInfo &info);
+    void SetAlignment(const Napi::CallbackInfo &info, const Napi::Value &value);
+
+    Napi::Value GetStyleRunCount(const Napi::CallbackInfo &info);
+    Napi::Value JsGetStyleRun(const Napi::CallbackInfo &info);
+    Napi::Value JsSetStyleRunFontSize(const Napi::CallbackInfo &info);
+    Napi::Value JsSetStyleRunLetterSpacing(const Napi::CallbackInfo &info);
+    Napi::Value JsSetStyleRunLineHeight(const Napi::CallbackInfo &info);
+    Napi::Value JsSetStyleRunFill(const Napi::CallbackInfo &info);
+    Napi::Value JsSetStyleRunStrokeWidth(const Napi::CallbackInfo &info);
+    Napi::Value JsSetStyleRunStrokeColor(const Napi::CallbackInfo &info);
 
     Napi::Value GetVideoFrameRate(const Napi::CallbackInfo &info);
     Napi::Value GetVideoLoaded(const Napi::CallbackInfo &info);
@@ -46,4 +57,17 @@ private:
     Napi::Value GetAudioName(const Napi::CallbackInfo &info);
     Napi::Value GetSourceStart(const Napi::CallbackInfo &info);
     Napi::Value GetSourceDuration(const Napi::CallbackInfo &info);
+
+    Napi::Value GetAlpha(const Napi::CallbackInfo &info);
+    void SetAlpha(const Napi::CallbackInfo &info, const Napi::Value &value);
+    Napi::Value GetRotation(const Napi::CallbackInfo &info);
+    void SetRotation(const Napi::CallbackInfo &info, const Napi::Value &value);
+    Napi::Value GetScaleX(const Napi::CallbackInfo &info);
+    void SetScaleX(const Napi::CallbackInfo &info, const Napi::Value &value);
+    Napi::Value GetScaleY(const Napi::CallbackInfo &info);
+    void SetScaleY(const Napi::CallbackInfo &info, const Napi::Value &value);
+    Napi::Value GetTransformX(const Napi::CallbackInfo &info);
+    void SetTransformX(const Napi::CallbackInfo &info, const Napi::Value &value);
+    Napi::Value GetTransformY(const Napi::CallbackInfo &info);
+    void SetTransformY(const Napi::CallbackInfo &info, const Napi::Value &value);
 };

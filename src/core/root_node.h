@@ -46,7 +46,7 @@ public:
 
     void setCurrentTime(TimeMs time_ms);
     bool isSameFrame(TimeMs time_ms) const;
-    int draw(uint8_t *buffer, size_t buffer_size, bool force = false);
+    int draw(uint8_t *buffer, size_t buffer_size, bool force = false, bool prepare_next = true);
 
     int getWidth() const;
     int getHeight() const;
