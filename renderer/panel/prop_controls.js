@@ -270,42 +270,39 @@ const PropControls = {
 
         updateDisplay();
 
-        // Pickr is initialized lazily on first click to avoid performance overhead
         swatch.addEventListener('click', () => {
-            if (!pickr) {
-                pickr = Pickr.create({
-                    el: swatch,
-                    theme: 'nano',
-                    container: document.body,
-                    useAsButton: true,
-                    default: rgbaStr(),
-                    components: {
-                        preview: true,
-                        opacity: showAlpha,
-                        hue: true,
-                        interaction: {
-                            hex: true,
-                            rgba: showAlpha,
-                            input: true,
-                            save: true,
-                        },
+            if (pickr) return; // Pickr's useAsButton handles subsequent toggles
+            pickr = Pickr.create({
+                el: swatch,
+                theme: 'nano',
+                container: document.body,
+                useAsButton: true,
+                default: rgbaStr(),
+                components: {
+                    preview: true,
+                    opacity: showAlpha,
+                    hue: true,
+                    interaction: {
+                        hex: true,
+                        rgba: showAlpha,
+                        input: true,
+                        save: true,
                     },
-                });
+                },
+            });
 
-                pickr.on('change', (color) => {
-                    const rgba = color.toRGBA();
-                    cur.r = rgba[0] / 255;
-                    cur.g = rgba[1] / 255;
-                    cur.b = rgba[2] / 255;
-                    if (showAlpha) cur.a = rgba[3];
-                    updateDisplay();
-                    if (onChange) onChange(cur.r, cur.g, cur.b, cur.a);
-                });
+            pickr.on('change', (color) => {
+                const rgba = color.toRGBA();
+                cur.r = rgba[0] / 255;
+                cur.g = rgba[1] / 255;
+                cur.b = rgba[2] / 255;
+                if (showAlpha) cur.a = rgba[3];
+                updateDisplay();
+                if (onChange) onChange(cur.r, cur.g, cur.b, cur.a);
+            });
 
-                pickr.on('save', (color) => {
-                    pickr.hide();
-                });
-            }
+            pickr.on('save', () => pickr.hide());
+
             pickr.show();
         });
 

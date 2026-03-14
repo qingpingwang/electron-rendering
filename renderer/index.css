@@ -938,6 +938,10 @@ body.prop-dragging .prop-thumb {
     display: none !important;
 }
 
+.pcr-app[data-theme="nano"] {
+    width: 16rem !important;
+}
+
 .pcr-app {
     background: #1e1e34 !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
@@ -949,18 +953,37 @@ body.prop-dragging .prop-thumb {
     border-radius: 6px;
 }
 
-.pcr-app .pcr-interaction input {
+.pcr-app .pcr-interaction {
+    flex-wrap: wrap !important;
+    gap: 3px 4px !important;
+    padding: 0 8px 8px !important;
+}
+
+.pcr-app .pcr-interaction .pcr-result {
+    flex: 1 1 100% !important;
+    border-radius: 4px !important;
     background: #282845 !important;
     border: 1px solid rgba(255, 255, 255, 0.08) !important;
     color: #ccc !important;
-    border-radius: 4px !important;
     font-family: 'SF Mono', 'Menlo', monospace !important;
-    font-size: 0.62rem !important;
+    font-size: 0.65rem !important;
+    height: 24px !important;
+    line-height: 24px !important;
 }
 
-.pcr-app .pcr-interaction input:focus {
+.pcr-app .pcr-interaction .pcr-result:focus {
     border-color: #4ecdc4 !important;
     box-shadow: none !important;
+}
+
+.pcr-app .pcr-interaction .pcr-type {
+    color: #888 !important;
+    font-size: 0.55rem !important;
+    border-radius: 3px !important;
+}
+
+.pcr-app .pcr-interaction .pcr-type.active {
+    color: #4ecdc4 !important;
 }
 
 .pcr-app .pcr-interaction .pcr-save {
@@ -973,15 +996,6 @@ body.prop-dragging .prop-thumb {
 
 .pcr-app .pcr-interaction .pcr-save:hover {
     background: #56d8c0 !important;
-}
-
-.pcr-app .pcr-interaction .pcr-type {
-    color: #888 !important;
-    font-size: 0.55rem !important;
-}
-
-.pcr-app .pcr-interaction .pcr-type.active {
-    color: #4ecdc4 !important;
 }
 
 .pcr-app .pcr-selection .pcr-picker {
