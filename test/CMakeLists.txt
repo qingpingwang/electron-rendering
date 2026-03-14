@@ -31,7 +31,10 @@ set(COMMON_LIBRARIES
     "-framework CoreGraphics"
     "-framework CoreText"
     "-framework AppKit"
+    "-framework CoreVideo"
+    "-framework IOSurface"
 )
+
 
 if(EXISTS ${SKIA_LIB})
     list(APPEND COMMON_LIBRARIES

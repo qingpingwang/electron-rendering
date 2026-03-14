@@ -141,8 +141,8 @@ int main(int argc, char *argv[]) {
     while (time_ms < duration_ms) {
         // 设置当前时间并渲染
         root.setCurrentTime(time_ms);
-        bool success = root.draw(frame_buffer.data(), frame_buffer.size());
-        if (!success) {
+        int status = root.draw(frame_buffer.data(), frame_buffer.size());
+        if (status < 0) {
             std::cerr << "Failed to render frame at time " << time_ms << " ms" << std::endl;
             time_ms += frame_duration_ms;
             continue;
