@@ -287,6 +287,10 @@ int RootNode::draw(uint8_t *buffer, size_t buffer_size, bool force, bool prepare
     if (buffer_size < required)
         return -1;
 
+    if (force) {
+        cache_time_ms_ = kInvalidTime;
+    }
+
     int status = (!force && isCacheHit(current_time_ms_)) ? 0 : 1;
 
     if (status == 0) {

@@ -26,3 +26,4 @@ Thumbs.db
 *.node
 
 *.mp4
+.cache/

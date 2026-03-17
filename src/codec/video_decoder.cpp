@@ -157,20 +157,50 @@ bool VideoDecoder::open(const std::string &path) {
 
     // sws_ctx_ 在 convertToRGBA 中按实际帧格式惰性创建
 
-    int buffer_size = av_image_get_buffer_size(AV_PIX_FMT_RGBA, width_, height_, 1);
-    rgba_buffer_ = (uint8_t *)av_malloc(buffer_size);
+    if (!hw_accel_) {
+        int buffer_size = av_image_get_buffer_size(AV_PIX_FMT_RGBA, width_, height_, 1);
+        rgba_buffers_[0] = (uint8_t *)av_malloc(buffer_size);
+        rgba_buffers_[1] = (uint8_t *)av_malloc(buffer_size);
+        active_buf_ = 0;
 
-    av_image_fill_arrays(
-        frame_rgba_->data, frame_rgba_->linesize,
-        rgba_buffer_, AV_PIX_FMT_RGBA,
-        width_, height_, 1);
+        av_image_fill_arrays(
+            frame_rgba_->data, frame_rgba_->linesize,
+            rgba_buffers_[0], AV_PIX_FMT_RGBA,
+            width_, height_, 1);
+    }
 
     last_decoded_ms_ = kInvalidTime;
+    prev_frame_ = VideoFrame{};
+    prev_buf_idx_ = -1;
     return true;
 }
 
 bool VideoDecoder::hasAlpha() const {
     return has_alpha_;
+}
+
+void VideoDecoder::savePrevFrame(const VideoFrame &current) {
+    if (!current.valid) return;
+    prev_frame_.releaseNative();
+    prev_frame_ = current;
+    prev_buf_idx_ = active_buf_;
+#ifdef __APPLE__
+    if (current.hw && current.native_buf)
+        CVPixelBufferRetain(static_cast<CVPixelBufferRef>(current.native_buf));
+#endif
+}
+
+bool VideoDecoder::restorePrevFrame(VideoFrame &out) {
+    if (!prev_frame_.valid) return false;
+    out.releaseNative();
+    out = prev_frame_;
+#ifdef __APPLE__
+    if (prev_frame_.hw && prev_frame_.native_buf)
+        CVPixelBufferRetain(static_cast<CVPixelBufferRef>(prev_frame_.native_buf));
+#endif
+    active_buf_ = prev_buf_idx_;
+    last_decoded_ms_ = prev_frame_.pts_ms;
+    return true;
 }
 
 void VideoDecoder::close() {
@@ -184,10 +214,17 @@ void VideoDecoder::close() {
     if (format_ctx_) {
         avformat_close_input(&format_ctx_);
     }
-    if (rgba_buffer_) {
-        av_free(rgba_buffer_);
-        rgba_buffer_ = nullptr;
+    for (int i = 0; i < 2; i++) {
+        if (rgba_buffers_[i]) {
+            av_free(rgba_buffers_[i]);
+            rgba_buffers_[i] = nullptr;
+        }
     }
+    active_buf_ = 0;
+
+    prev_frame_.releaseNative();
+    prev_frame_ = VideoFrame{};
+    prev_buf_idx_ = -1;
 
     if (hw_device_ctx_) {
         av_buffer_unref(&hw_device_ctx_);
@@ -210,35 +247,47 @@ bool VideoDecoder::decodeFrameAt(TimeMs time_ms, VideoFrame &out) {
     if (time_ms >= duration_ms_)
         time_ms = duration_ms_ - 1;
 
-    // 计算帧间隔
     TimeMs frame_interval = (frame_rate_ > 0) ? (TimeMs)(1000.0 / frame_rate_) : 40;
+    TimeMs half_frame = frame_interval / 2;
+
+    // 回退时检查 prev 缓存：如果 prev 比 current 更接近目标，直接返回
+    if (last_decoded_ms_ != kInvalidTime && last_decoded_ms_ > time_ms && prev_frame_.valid) {
+        TimeMs cur_diff = last_decoded_ms_ - time_ms;
+        TimeMs prev_pts = prev_frame_.pts_ms;
+        TimeMs prev_diff = (time_ms >= prev_pts) ? (time_ms - prev_pts) : (prev_pts - time_ms);
+        if (prev_diff <= half_frame || prev_diff < cur_diff) {
+            return restorePrevFrame(out);
+        }
+    }
 
     // 判断是否需要 seek
     bool need_seek = false;
     if (last_decoded_ms_ == kInvalidTime) {
         need_seek = true;
     } else if (time_ms < last_decoded_ms_ && (last_decoded_ms_ - time_ms) > frame_interval) {
-        // 倒退超过一帧间隔才seek（容错视频帧PTS的时间戳偏差）
         need_seek = true;
     } else if (last_decoded_ms_ != kInvalidTime && time_ms > last_decoded_ms_ && (time_ms - last_decoded_ms_) > frame_interval * 20) {
         need_seek = true;
     }
 
-    // 如果需要seek，先跳转
     if (need_seek) {
         int64_t target_pts = msToPts(time_ms);
         if (av_seek_frame(format_ctx_, video_stream_idx_, target_pts, AVSEEK_FLAG_BACKWARD) < 0)
             return false;
         avcodec_flush_buffers(codec_ctx_);
-        last_decoded_ms_ = kInvalidTime; // 重置，强制解码
+        last_decoded_ms_ = kInvalidTime;
+        prev_frame_.releaseNative();
+        prev_frame_.valid = false;
     }
 
-    // 已经在目标时间或之后，直接返回（避免重复解码）
+    // 已经在目标时间或之后，直接返回
     if (last_decoded_ms_ != kInvalidTime && last_decoded_ms_ >= time_ms)
         return true;
 
-    // 解码直到目标时间（seek和顺序解码共用此逻辑）
+    // 解码直到目标时间
     while (last_decoded_ms_ == kInvalidTime || last_decoded_ms_ < time_ms) {
+        if (out.valid) savePrevFrame(out);
+        active_buf_ = 1 - active_buf_;
         if (!decodeNextFrame(out))
             return false;
         last_decoded_ms_ = out.pts_ms;
@@ -343,12 +392,14 @@ void VideoDecoder::convertToRGBA(AVFrame *frame, VideoFrame &out) {
         return;
     }
 
+    frame_rgba_->data[0] = rgba_buffers_[active_buf_];
+
     sws_scale(sws_ctx_,
               frame->data, frame->linesize,
               0, height_,
               frame_rgba_->data, frame_rgba_->linesize);
 
-    out.data = rgba_buffer_;
+    out.data = rgba_buffers_[active_buf_];
     out.hw = false;
     out.width = width_;
     out.height = height_;

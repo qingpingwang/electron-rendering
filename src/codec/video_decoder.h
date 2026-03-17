@@ -60,6 +60,9 @@ private:
     TimeMs ptsToMs(int64_t pts) const;
     int64_t msToPts(TimeMs ms) const;
 
+    void savePrevFrame(const VideoFrame &current);
+    bool restorePrevFrame(VideoFrame &out);
+
     AVFormatContext *format_ctx_ = nullptr;
     AVCodecContext *codec_ctx_ = nullptr;
     SwsContext *sws_ctx_ = nullptr;
@@ -78,7 +81,11 @@ private:
     bool hw_accel_ = false;
     int sws_src_fmt_ = -1;
 
-    uint8_t *rgba_buffer_ = nullptr;
+    uint8_t *rgba_buffers_[2] = {nullptr, nullptr};
+    int active_buf_ = 0;
+    VideoFrame prev_frame_;
+    int prev_buf_idx_ = -1;
+
     TimeMs last_decoded_ms_ = kInvalidTime;
     std::string path_;
     bool has_alpha_ = false;
