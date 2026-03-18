@@ -1,0 +1,234 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
+
+body {
+    font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+}
+
+.home-page {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.home-page::-webkit-scrollbar { width: 6px; }
+.home-page::-webkit-scrollbar-track { background: transparent; }
+.home-page::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+.home-page::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+
+.home-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    width: 100%;
+    max-width: 860px;
+    margin: auto;
+    padding: 48px 40px;
+}
+
+/* ---- Header ---- */
+
+.home-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: #e0e0e0;
+    letter-spacing: 1px;
+}
+
+.home-subtitle {
+    font-size: 13px;
+    color: #666;
+    margin-top: -10px;
+}
+
+/* ---- Presets ---- */
+
+.home-presets {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+}
+
+.home-preset {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 20px 24px;
+    background: #222240;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    flex: 1;
+    min-width: 140px;
+    max-width: 220px;
+}
+
+.home-preset:hover {
+    background: #2a2a50;
+    border-color: #4ecdc4;
+    transform: translateY(-2px);
+}
+
+.home-preset:active {
+    transform: translateY(0);
+}
+
+.home-preset-icon {
+    width: 40px;
+    height: 40px;
+    border: 2px solid #555;
+    border-radius: 4px;
+}
+
+.home-preset-icon.landscape { width: 52px; height: 32px; }
+.home-preset-icon.portrait  { width: 32px; height: 52px; }
+.home-preset-icon.square    { width: 40px; height: 40px; }
+
+.home-preset-name {
+    font-size: 13px;
+    color: #ccc;
+    font-weight: 500;
+}
+
+.home-preset-size {
+    font-size: 11px;
+    color: #666;
+    font-family: 'SF Mono', Menlo, monospace;
+}
+
+/* ---- Custom Input ---- */
+
+.home-custom {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: #1e1e36;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.04);
+}
+
+.home-custom-label {
+    font-size: 12px;
+    color: #666;
+    flex-shrink: 0;
+}
+
+.home-input {
+    width: 72px;
+    background: #222240;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 4px;
+    color: #ccc;
+    font-family: 'SF Mono', Menlo, monospace;
+    font-size: 12px;
+    text-align: center;
+    padding: 4px 6px;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.home-input:focus {
+    border-color: #4ecdc4;
+    color: #fff;
+}
+
+.home-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+.home-x {
+    font-size: 12px;
+    color: #555;
+}
+
+.home-btn {
+    padding: 5px 16px;
+    background: #4ecdc4;
+    border: none;
+    border-radius: 5px;
+    color: #111;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.home-btn:hover { background: #56d8c0; }
+.home-btn:active { background: #44b8b0; }
+
+/* ---- History ---- */
+
+.home-history-section {
+    width: 100%;
+    margin-top: 8px;
+}
+
+.home-history-title {
+    font-size: 12px;
+    color: #555;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    margin-bottom: 4px;
+}
+
+.home-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.home-history-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.12s;
+}
+
+.home-history-item:hover {
+    background: rgba(255,255,255,0.04);
+}
+
+.home-history-label {
+    font-size: 13px;
+    color: #ccc;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.home-history-duration {
+    font-size: 11px;
+    color: #888;
+    font-family: 'SF Mono', Menlo, monospace;
+    flex-shrink: 0;
+}
+
+.home-history-date {
+    font-size: 11px;
+    color: #555;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.home-history-empty {
+    padding: 16px 0;
+    text-align: center;
+    font-size: 12px;
+    color: #444;
+}

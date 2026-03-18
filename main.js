@@ -1,39 +1,110 @@
-const { app, BrowserWindow } = require('electron');
+const { app, ipcMain, Menu } = require('electron');
 
-let win = null;
 
-app.commandLine.appendSwitch('ignore-gpu-blacklist');
+let wm = null;
+let media = null;
+let agentReady = false;
+let _quitting = false;
 
-function createWindow() {
-    win = new BrowserWindow({
-        width: 800,
-        height: 600,
-        minWidth: 640,
-        minHeight: 480,
-        webPreferences: {
-            contextIsolation: false,
-            nodeIntegration: true,
-            enableRemoteModule: true
-        }
-    });
-    
-    // 启用 @electron/remote
+app.whenReady().then(() => {
     try {
         require('@electron/remote/main').initialize();
-        require('@electron/remote/main').enable(win.webContents);
-    } catch (e) {
-        console.log('remote module not available:', e.message);
-    }
-    
-    win.loadFile('index.html');
-}
+    } catch { }
 
-app.whenReady().then(createWindow);
+    const template = [
+        ...(process.platform === 'darwin' ? [{
+            label: app.name,
+            submenu: [
+                { role: 'about' },
+                { type: 'separator' },
+                { role: 'hide' },
+                { role: 'hideOthers' },
+                { role: 'unhide' },
+                { type: 'separator' },
+                { role: 'quit' },
+            ],
+        }] : []),
+        {
+            label: '编辑', submenu: [
+                { role: 'undo' }, { role: 'redo' }, { type: 'separator' },
+                { role: 'cut' }, { role: 'copy' }, { role: 'paste' },
+                { role: 'selectAll' },
+            ]
+        },
+        {
+            label: '窗口', submenu: [
+                { role: 'minimize' }, { role: 'zoom' }, { role: 'close' },
+                ...(process.platform === 'darwin' ? [
+                    { type: 'separator' }, { role: 'front' },
+                ] : []),
+            ]
+        },
+    ];
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+
+    const db = require('./db');
+    const WindowManager = require('./window/window_manager');
+    const MediaManager = require('./media/media_manager');
+    const { initAgent, updateWebContents, onProjectOpened } = require('./agent');
+
+    db.init();
+
+    wm = new WindowManager();
+    media = new MediaManager();
+    media.registerIPC();
+
+    wm.showHome();
+
+    ipcMain.on('open-project', (_event, { uuid, configPath }) => {
+        if (!wm.mainWindow) {
+            wm.createMainWindow();
+
+            wm.mainWindow.on('closed', () => {
+                wm.closeEditor();
+                if (!_quitting) wm.showHome();
+            });
+        }
+
+        wm.closeHome();
+        media.setProject(uuid);
+
+        const editorWC = wm.getEditorWebContents();
+        const chatWC = wm.getChatWebContents();
+
+        if (!agentReady && editorWC && chatWC) {
+            initAgent(editorWC, chatWC);
+            agentReady = true;
+        } else if (agentReady && editorWC && chatWC) {
+            updateWebContents(editorWC, chatWC);
+        }
+
+        const sendLoad = () => {
+            editorWC.send('load-project', { uuid, configPath });
+            onProjectOpened(uuid);
+        };
+
+        if (editorWC.isLoading()) {
+            editorWC.once('did-finish-load', sendLoad);
+        } else {
+            sendLoad();
+        }
+    });
+});
 
 app.on('window-all-closed', () => {
-    app.quit();
+    if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('activate', () => {
-    if (!win) createWindow();
+    if (wm && !wm.homeWindow && !wm.mainWindow) {
+        wm.showHome();
+    }
+});
+
+app.on('before-quit', () => {
+    _quitting = true;
+});
+
+app.on('will-quit', () => {
+    try { require('./db').close(); } catch { }
 });

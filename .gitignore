@@ -27,3 +27,19 @@ Thumbs.db
 
 *.mp4
 .cache/
+
+# Environment
+.env
+
+# Chat history (per-project)
+test/chat_history/
+
+# Dynamic project configs (keep test.json)
+test/project_*.json
+
+# Legacy JSON metadata (migrated to SQLite)
+test/media_meta_*.json
+test/history.json
+
+# SQLite database
+data/

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>视频编辑器</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 12px;
+    user-select: none;
+    background: #1e1e1e;
+}
+
+.tab-bar {
+    -webkit-app-region: drag;
+    display: flex;
+    align-items: center;
+    height: 36px;
+    padding: 4px 8px 0 80px;
+    gap: 2px;
+    background: #1e1e1e;
+}
+
+.tab-bar.hidden {
+    visibility: hidden;
+}
+
+.tab {
+    -webkit-app-region: no-drag;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 14px;
+    border-radius: 6px 6px 0 0;
+    background: #2d2d2d;
+    color: #999;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+
+.tab:hover { background: #3a3a3a; color: #ccc; }
+.tab.active { background: #252526; color: #e0e0e0; }
+
+.tab-icon { font-size: 13px; }
+
+.tab-action {
+    -webkit-app-region: no-drag;
+    display: none;
+    width: 16px;
+    height: 16px;
+    border: none;
+    background: transparent;
+    color: #888;
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: 3px;
+    line-height: 16px;
+    text-align: center;
+}
+
+.tab:hover .tab-action { display: inline-block; }
+.tab-action:hover { background: #555; color: #fff; }
+</style>
+</head>
+<body>
+<div class="tab-bar" id="tabBar">
+    <div class="tab active" data-tab="editor" id="tab-editor">
+        <span class="tab-icon">🎬</span>
+        <span>编辑器</span>
+    </div>
+    <div class="tab" data-tab="chat" id="tab-chat">
+        <span class="tab-icon">💬</span>
+        <span>聊天</span>
+        <button class="tab-action" id="btn-detach" title="弹出为独立窗口">⧉</button>
+    </div>
+</div>
+
+<script>
+const { ipcRenderer } = require('electron');
+
+document.getElementById('tab-editor').addEventListener('click', () => {
+    ipcRenderer.send('tab-switch', 'editor');
+});
+
+document.getElementById('tab-chat').addEventListener('click', (e) => {
+    if (e.target.id === 'btn-detach') return;
+    ipcRenderer.send('tab-switch', 'chat');
+});
+
+document.getElementById('btn-detach').addEventListener('click', (e) => {
+    e.stopPropagation();
+    ipcRenderer.send('tab-detach-chat');
+});
+
+ipcRenderer.on('tab-state', (_event, state) => {
+    const tabBar = document.getElementById('tabBar');
+    const editorTab = document.getElementById('tab-editor');
+    const chatTab = document.getElementById('tab-chat');
+
+    tabBar.classList.toggle('hidden', state.chatDetached);
+    editorTab.classList.toggle('active', state.activeTab === 'editor');
+    chatTab.classList.toggle('active', state.activeTab === 'chat');
+});
+</script>
+</body>
+</html>

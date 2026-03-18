@@ -1,11 +1,8 @@
 const path = require('path');
-const fs = require('fs');
 const player = require('../state');
 const { updateUI } = require('./renderer');
 const { stop } = require('./controls');
 const { log, formatTime } = require('../utils/logger');
-
-const ROOT_DIR = path.join(__dirname, '..', '..');
 
 async function loadFromConfig(config) {
     document.getElementById('file-info').textContent = '加载中...';
@@ -128,20 +125,4 @@ async function loadVideo() {
     await loadFromConfig(config);
 }
 
-async function loadTest() {
-    try {
-        const testPath = path.join(ROOT_DIR, 'test', 'test.json');
-        log(`加载测试: ${testPath}`, 'info');
-
-        const jsonStr = fs.readFileSync(testPath, 'utf8');
-        const config = JSON.parse(jsonStr);
-
-        await loadFromConfig(config);
-
-    } catch (e) {
-        log(`✗ 测试加载失败: ${e.message}`, 'err');
-        console.error(e);
-    }
-}
-
-module.exports = { loadFromConfig, loadVideo, loadTest };
+module.exports = { loadFromConfig, loadVideo };

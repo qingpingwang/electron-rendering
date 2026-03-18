@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>视频编辑器</title>
+    <link rel="stylesheet" href="home.css">
+</head>
+<body>
+    <div class="home-page">
+        <div class="home-inner">
+            <div class="home-title">视频编辑器</div>
+            <div class="home-subtitle">创建新项目</div>
+
+            <div class="home-presets" id="home-presets"></div>
+
+            <div class="home-custom">
+                <span class="home-custom-label">自定义</span>
+                <input type="number" class="home-input" id="home-w" value="1920" min="1" max="7680">
+                <span class="home-x">x</span>
+                <input type="number" class="home-input" id="home-h" value="1080" min="1" max="7680">
+                <button class="home-btn" id="home-create">创建</button>
+            </div>
+
+            <div class="home-history-section" id="home-history-section">
+                <div class="home-history-title">最近项目</div>
+                <div class="home-history-list" id="home-history-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>require('./home.js')</script>
+</body>
+</html>

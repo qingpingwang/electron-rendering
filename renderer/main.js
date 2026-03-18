@@ -1,13 +1,21 @@
+const fs = require('fs');
 const path = require('path');
+const { ipcRenderer } = require('electron');
 const player = require('./state');
 const { play, seek } = require('./player/controls');
-const { loadTest } = require('./player/loader');
+const { loadFromConfig } = require('./player/loader');
 const { updateUI } = require('./player/renderer');
 const { log } = require('./utils/logger');
 const { setupDivider } = require('./utils/divider');
 const Inspector = require('./panel/inspector');
+const { initToolHandler } = require('./agent/tool_handler');
+const db = require('../db');
+db.init();
 
 const ROOT_DIR = path.join(__dirname, '..');
+
+let _currentUUID = null;
+let _currentConfigPath = null;
 
 function init() {
     const canvas = document.getElementById('canvas');
@@ -32,7 +40,7 @@ function init() {
     player.initTimeline(document.getElementById('timeline'));
 
     const inspector = new Inspector(document.getElementById('inspector-content'));
-    inspector.onChange = (prop) => {
+    inspector.onChange = () => {
         if (player.timeline && player.timeline.onRefresh) {
             player.timeline.onRefresh();
         }
@@ -51,7 +59,6 @@ function init() {
     player.timeline.onSelectLayer = (info) => inspector.update(info);
 
     document.getElementById('btn-play').onclick = play;
-    document.getElementById('btn-test').onclick = loadTest;
 
     initRightPanel();
     initDividers();
@@ -61,8 +68,54 @@ function init() {
         else if (e.code === 'Escape') stop();
     };
 
+    initToolHandler();
+    _setupProjectIPC();
+
     updateUI();
     log('就绪', 'ok');
+}
+
+function _setupProjectIPC() {
+    ipcRenderer.on('load-project', async (_event, { uuid, configPath }) => {
+        _currentUUID = uuid;
+        _currentConfigPath = configPath;
+
+        const absPath = path.resolve(ROOT_DIR, configPath);
+        try {
+            const jsonStr = fs.readFileSync(absPath, 'utf-8');
+            const config = JSON.parse(jsonStr);
+            await loadFromConfig(config);
+            log(`项目已加载: ${configPath}`, 'ok');
+        } catch (e) {
+            log(`项目加载失败: ${e.message}`, 'err');
+            console.error(e);
+        }
+    });
+
+    ipcRenderer.on('save-project', (_event) => {
+        _saveCurrentProject();
+        ipcRenderer.send('project-saved');
+    });
+}
+
+function _saveCurrentProject() {
+    if (!_currentUUID) return;
+
+    const fields = { updatedAt: new Date().toISOString() };
+    if (player.root && player.root.loaded && player.root.durationMs) {
+        fields.duration = player.root.durationMs;
+    }
+    try { db.projects.update(_currentUUID, fields); } catch {}
+
+    if (_currentConfigPath && player.root && player.root.loaded) {
+        try {
+            const configStr = player.root.exportConfig?.();
+            if (configStr) {
+                const absPath = path.resolve(ROOT_DIR, _currentConfigPath);
+                fs.writeFileSync(absPath, configStr, 'utf-8');
+            }
+        } catch { /* exportConfig may not exist yet */ }
+    }
 }
 
 function initRightPanel() {
@@ -111,6 +164,7 @@ function initDividers() {
 
 window.onload = init;
 window.onbeforeunload = () => {
+    _saveCurrentProject();
     player.audio.dispose();
     player.root?.cleanup();
 };

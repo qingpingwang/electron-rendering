@@ -88,8 +88,10 @@ bool RootNode::isSameFrame(TimeMs time_ms) const {
 // ========== 渲染 ==========
 
 bool RootNode::renderFrame(TimeMs time_ms, uint8_t *out_buffer) {
-    if (groups_.empty())
+    if (groups_.empty()) {
+        std::memset(out_buffer, 0, static_cast<size_t>(canvas_.width) * canvas_.height * 4);
         return true;
+    }
 
     gl::makeCurrent(gl_ctx_);
 
@@ -206,20 +208,19 @@ std::string RootNode::loadFromJson(const std::string &json_str) {
             }
         }
 
-        if (!config.contains("tracks") || !config["tracks"].is_array())
-            return "tracks is required";
-
-        for (const auto &track : config["tracks"]) {
-            auto group = std::make_unique<GroupLayer>(this);
-            std::string err = group->load(track);
-            if (!err.empty())
-                return err;
-            groups_.emplace_back(std::move(group));
+        if (config.contains("tracks") && config["tracks"].is_array()) {
+            for (const auto &track : config["tracks"]) {
+                auto group = std::make_unique<GroupLayer>(this);
+                std::string err = group->load(track);
+                if (!err.empty())
+                    return err;
+                groups_.emplace_back(std::move(group));
+            }
         }
 
-        if (groups_.empty() || canvas_.width == 0 || canvas_.height == 0) {
+        if (canvas_.width <= 0 || canvas_.height <= 0) {
             unload();
-            return "no valid tracks";
+            return "canvas_config is invalid";
         }
 
         // 创建 OpenGL 资源
@@ -280,7 +281,7 @@ void RootNode::setCurrentTime(TimeMs time_ms) {
 }
 
 int RootNode::draw(uint8_t *buffer, size_t buffer_size, bool force, bool prepare_next) {
-    if (groups_.empty() || !buffer)
+    if (!buffer)
         return -1;
 
     size_t required = static_cast<size_t>(canvas_.width) * canvas_.height * 4;
@@ -339,7 +340,7 @@ const CanvasConfig &RootNode::getCanvas() const {
 }
 
 bool RootNode::isLoaded() const {
-    return !groups_.empty();
+    return canvas_.width > 0 && canvas_.height > 0 && render_fbo_.isValid();
 }
 
 std::string RootNode::getGPUInfo() const {
