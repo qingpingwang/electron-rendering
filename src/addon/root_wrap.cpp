@@ -6,6 +6,9 @@
 #include "../layer/base/layer.h"
 #include "../gl/types.h"
 #include <nlohmann/json.hpp>
+#include <fstream>
+#include <sstream>
+#include <filesystem>
 
 static Napi::FunctionReference g_constructor;
 
@@ -13,6 +16,7 @@ Napi::Function RootWrap::GetClass(Napi::Env env) {
     auto cls = DefineClass(env, "Root", {
                                             InstanceMethod("init", &RootWrap::Init),
                                             InstanceMethod("load", &RootWrap::Load),
+                                            InstanceMethod("exportConfig", &RootWrap::ExportConfig),
                                             InstanceMethod("unload", &RootWrap::Unload),
                                             InstanceMethod("cleanup", &RootWrap::Cleanup),
                                             InstanceMethod("setCurrentTime", &RootWrap::SetCurrentTime),
@@ -55,18 +59,51 @@ Napi::Value RootWrap::Init(const Napi::CallbackInfo &info) {
 Napi::Value RootWrap::Load(const Napi::CallbackInfo &info) {
     Napi::Env env = info.Env();
     if (info.Length() < 1 || !info[0].IsString()) {
-        Napi::TypeError::New(env, "expected JSON string").ThrowAsJavaScriptException();
+        Napi::TypeError::New(env, "expected config json string (first arg)").ThrowAsJavaScriptException();
         return env.Null();
     }
 
     ++gen_;
-    std::string error = root_->loadFromJson(info[0].As<Napi::String>().Utf8Value());
-
+    // 传入协议文件路径：读取文件、解析 JSON，协议所在目录作为 base_path 传入
     Napi::Object result = Napi::Object::New(env);
-    result.Set("success", Napi::Boolean::New(env, error.empty()));
-    if (!error.empty())
-        result.Set("error", Napi::String::New(env, error));
+    result.Set("success", Napi::Boolean::New(env, false));
+
+    const std::string json_str = info[0].As<Napi::String>().Utf8Value();
+    const std::string base_path = info.Length() > 1 ? info[1].As<Napi::String>().Utf8Value() : "";
+
+    try {
+        const auto config = nlohmann::json::parse(json_str);
+
+        if (!config.is_object()) {
+            result.Set("success", Napi::Boolean::New(env, false));
+            result.Set("error", Napi::String::New(env, "config json must be an object"));
+            return result;
+        }
+
+        bool success = root_->load(config, base_path);
+        result.Set("success", Napi::Boolean::New(env, success));
+        if (!success) {
+            const std::string error = root_->getErrorMessage();
+            result.Set("error", Napi::String::New(env, error.empty() ? "load from json failed" : error));
+        }
+    } catch (const nlohmann::json::parse_error &e) {
+        result.Set("error", Napi::String::New(env, e.what()));
+    } catch (const nlohmann::detail::type_error &e) {
+        result.Set("error", Napi::String::New(env, e.what()));
+    } catch (const std::exception &e) {
+        result.Set("error", Napi::String::New(env, e.what()));
+    } catch (...) {
+        result.Set("error", Napi::String::New(env, "unknown error"));
+    }
     return result;
+}
+
+Napi::Value RootWrap::ExportConfig(const Napi::CallbackInfo &info) {
+    Napi::Env env = info.Env();
+    if (!root_->isLoaded())
+        return env.Null();
+
+    return Napi::String::New(env, root_->dump().dump(2));
 }
 
 Napi::Value RootWrap::Unload(const Napi::CallbackInfo &info) {

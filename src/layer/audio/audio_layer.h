@@ -12,11 +12,17 @@ public:
     ~AudioLayer() override = default;
 
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
-    void prepare() override {}
+
+    nlohmann::json dump() const override;
+
+    void prepare() override {
+    }
 
 protected:
     bool renderContent(const gl::FBO &fbo, TimeMs time_ms) override;
-    MaterialType getMaterialType() const override { return MATERIAL_TYPE_AUDIO; }
+    MaterialType getMaterialType() const override {
+        return MATERIAL_TYPE_AUDIO;
+    }
 };
 
 } // namespace vp

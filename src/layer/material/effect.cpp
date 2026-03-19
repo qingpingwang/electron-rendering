@@ -25,6 +25,10 @@ const RenderResource *Effect::getRenderResource() const {
     return nullptr;
 }
 
+nlohmann::json Effect::dump() const {
+    return nlohmann::json::object();
+}
+
 // ========== ResourceEffect 实现 ==========
 
 ResourceEffect::ResourceEffect(RootNode *root) :
@@ -36,12 +40,12 @@ ResourceEffect::~ResourceEffect() = default;
 
 bool ResourceEffect::load(const nlohmann::json &config, const std::string &base_path) {
     // 从 JSON 加载资源路径
-    if (!config.contains("resourcePath")) {
-        setError("resourcePath is required");
+    if (!config.contains("path")) {
+        setError("path is required");
         return false;
     }
 
-    std::string resource_path = config["resourcePath"];
+    std::string resource_path = config["path"];
     return loadFromFolder(resource_path);
 }
 
@@ -59,6 +63,15 @@ bool ResourceEffect::loadFromFolder(const std::string &folder_path) {
 
     name_ = resource_->getName();
     return true;
+}
+
+// 将特效配置导出为 JSON（至少保证字段可用于再次 load）
+nlohmann::json ResourceEffect::dump() const {
+    nlohmann::json j = nlohmann::json::object();
+    j["type"] = getType();
+    // load() 依赖的字段
+    j["name"] = name_;
+    return j;
 }
 
 gl::FBO ResourceEffect::apply(const std::vector<gl::FBO> &inputs, TimeMs time_ms) {

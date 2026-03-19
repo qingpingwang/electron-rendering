@@ -173,4 +173,8 @@ void UniformParam::applyToShader(gl::Shader *shader) const {
     shader->unuse();
 }
 
+nlohmann::json UniformParam::dump() const {
+    return nlohmann::json::object();
+}
+
 } // namespace vp

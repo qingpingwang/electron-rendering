@@ -145,6 +145,13 @@ bool TextLayer::load(const json &config, const std::string &base_path) {
     return true;
 }
 
+json TextLayer::dump() const {
+    json j = Layer::dump();
+    j["clip"] = Layer::dumpClip();
+    j["visible"] = isVisible();
+    return j;
+}
+
 bool TextLayer::renderContent(const gl::FBO &fbo, TimeMs /* time_ms */) {
     GrDirectContext *ctx = root_->getSkiaContext();
     if (!ctx || !text_material_)

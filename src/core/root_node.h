@@ -30,7 +30,7 @@ struct CanvasConfig {
     std::string ratio;
 };
 
-class RootNode {
+class RootNode : public Loadable {
 public:
     RootNode();
     ~RootNode();
@@ -41,7 +41,8 @@ public:
     bool init();
     void cleanup();
 
-    std::string loadFromJson(const std::string &json_str);
+    bool load(const nlohmann::json &config, const std::string &base_path = "") override;
+    nlohmann::json dump() const override;
     void unload();
 
     void setCurrentTime(TimeMs time_ms);

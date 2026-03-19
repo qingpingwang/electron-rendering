@@ -24,6 +24,11 @@ struct Clip {
     float transform_y = 0.0f;
 };
 
+struct EffectInfo {
+    EffectMaterial *material = nullptr;
+    std::unique_ptr<Effect> effect = nullptr;
+};
+
 // 图层基类
 class Layer : public Loadable {
 public:
@@ -35,6 +40,7 @@ public:
 
     // 从 JSON 加载图层基础配置（解析通用属性）
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
+    nlohmann::json dump() const override;
 
     // 绘制图层到目标 FBO
     // 流程：检查特效 → 选择中间/直出 → renderContent() → 应用特效 → blit 到 target
@@ -57,18 +63,46 @@ public:
     const TimeRange &getTargetRange() const;
     const TimeRange &getSourceRange() const;
 
-    float getAlpha() const { return clip_.alpha; }
-    void setAlpha(float a) { clip_.alpha = a; }
-    float getRotation() const { return clip_.rotation; }
-    void setRotation(float r) { clip_.rotation = r; }
-    float getScaleX() const { return clip_.scale_x; }
-    void setScaleX(float s) { clip_.scale_x = s; }
-    float getScaleY() const { return clip_.scale_y; }
-    void setScaleY(float s) { clip_.scale_y = s; }
-    float getTransformX() const { return clip_.transform_x; }
-    void setTransformX(float t) { clip_.transform_x = t; }
-    float getTransformY() const { return clip_.transform_y; }
-    void setTransformY(float t) { clip_.transform_y = t; }
+    nlohmann::json dumpClip() const;
+
+    nlohmann::json dumpSourceRange() const;
+
+    float getAlpha() const {
+        return clip_.alpha;
+    }
+    void setAlpha(float a) {
+        clip_.alpha = a;
+    }
+    float getRotation() const {
+        return clip_.rotation;
+    }
+    void setRotation(float r) {
+        clip_.rotation = r;
+    }
+    float getScaleX() const {
+        return clip_.scale_x;
+    }
+    void setScaleX(float s) {
+        clip_.scale_x = s;
+    }
+    float getScaleY() const {
+        return clip_.scale_y;
+    }
+    void setScaleY(float s) {
+        clip_.scale_y = s;
+    }
+    float getTransformX() const {
+        return clip_.transform_x;
+    }
+    void setTransformX(float t) {
+        clip_.transform_x = t;
+    }
+    float getTransformY() const {
+        return clip_.transform_y;
+    }
+    void setTransformY(float t) {
+        clip_.transform_y = t;
+    }
 
     // 预备（子类实现：如视频解码到起始帧）
     virtual void prepare() = 0;
@@ -101,14 +135,13 @@ protected:
     bool muted_ = false;
     Clip clip_;
     std::string name_;
-    std::string material_id_;
     float volume_ = 1.0f;
     TimeRange target_range_;
     TimeRange source_range_;
 
     // 特效 & 转场
-    std::vector<std::unique_ptr<Effect>> effects_;
-    std::vector<std::unique_ptr<Effect>> transitions_;
+    std::vector<EffectInfo> effects_;
+    std::vector<EffectInfo> transitions_;
 };
 
 } // namespace vp

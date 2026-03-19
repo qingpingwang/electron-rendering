@@ -165,4 +165,8 @@ std::unique_ptr<UniformParam> ResourceAnimation::convertToUniformParam(TimeMs ti
     return std::make_unique<UniformParam>(name_, type, std::move(values), "", apply_to_all, render_pass_index_list_);
 }
 
+nlohmann::json ResourceAnimation::dump() const {
+    return nlohmann::json::object();
+}
+
 } // namespace vp

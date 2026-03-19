@@ -4,7 +4,7 @@ const { updateUI } = require('./renderer');
 const { stop } = require('./controls');
 const { log, formatTime } = require('../utils/logger');
 
-async function loadFromConfig(config) {
+async function loadFromConfig(config, protocolPath = '') {
     document.getElementById('file-info').textContent = '加载中...';
 
     try {
@@ -14,7 +14,7 @@ async function loadFromConfig(config) {
         log(`加载配置: ${config.tracks?.length || 0} 轨道`, 'info');
 
         const t0 = performance.now();
-        const result = player.root.load(jsonStr);
+        const result = player.root.load(jsonStr, protocolPath);
         if (!result.success) {
             throw new Error(`C++ 加载失败: ${result.error}`);
         }

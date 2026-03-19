@@ -25,16 +25,6 @@ function init() {
         mediaItems = items || [];
         renderMediaList();
     });
-    ipcRenderer.on('media:import-result', (_e, newItems) => {
-        if (newItems && newItems.length) {
-            mediaItems.push(...newItems);
-            renderMediaList();
-        }
-    });
-    ipcRenderer.on('media:delete-result', (_e, { id }) => {
-        mediaItems = mediaItems.filter(m => m.id !== id);
-        renderMediaList();
-    });
 }
 
 function renderPanelStructure() {

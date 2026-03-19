@@ -12,15 +12,30 @@ const std::string &Material::getPath() const {
     return path_;
 }
 
-bool VideoMaterial::load(const json &config, const std::string &base_path) {
+bool Material::load(const json &config, const std::string &base_path) {
     id_ = config.value("id", "");
     path_ = config.value("path", "");
-    width_ = config.value("width", 0);
-    height_ = config.value("height", 0);
-    duration_ = config.value("duration", 0);
-
+    type_ = config.value("type", "");
+    name_ = config.value("name", "");
     if (id_.empty()) {
-        setError("video material: id is required");
+        setError("material: id is required");
+        return false;
+    }
+    return true;
+}
+
+json Material::dump() const {
+    return {
+        {"id", id_},
+        {"path", path_},
+        {"type", type_},
+        {"name", name_},
+    };
+}
+
+bool VideoMaterial::load(const json &config, const std::string &base_path) {
+    if (!Material::load(config, base_path)) {
+        setError("video material: " + getErrorMessage());
         return false;
     }
     if (path_.empty()) {
@@ -28,7 +43,19 @@ bool VideoMaterial::load(const json &config, const std::string &base_path) {
         return false;
     }
 
+    width_ = config.value("width", 0);
+    height_ = config.value("height", 0);
+    duration_ = config.value("duration", 0);
+
     return true;
+}
+
+json VideoMaterial::dump() const {
+    json j = Material::dump();
+    j["width"] = width_;
+    j["height"] = height_;
+    j["duration"] = duration_;
+    return j;
 }
 
 int VideoMaterial::getWidth() const {
@@ -43,22 +70,26 @@ TimeMs VideoMaterial::getDuration() const {
     return duration_;
 }
 
+void VideoMaterial::updateWHAndDuration(int width, int height, TimeMs duration) {
+    width_ = width;
+    height_ = height;
+    duration_ = duration;
+}
+
 // ========== EffectMaterial 实现 ==========
 
 bool EffectMaterial::load(const json &config, const std::string &base_path) {
-    id_ = config.value("id", "");
-    type_ = config.value("type", "effect");
-
-    if (id_.empty()) {
-        setError("effect material: id is required");
+    if (!Material::load(config, base_path)) {
+        setError("effect material: " + getErrorMessage());
         return false;
     }
 
-    path_ = config.value("resource_path", "");
     if (path_.empty()) {
-        setError("effect material[" + id_ + "]: resource_path is required for type 'resource'");
+        setError("effect material[" + id_ + "]: path is required");
         return false;
     }
+
+    effect_name_ = config.value("name", "");
 
     // 存储额外配置（如果有）
     if (config.contains("config")) {
@@ -68,12 +99,12 @@ bool EffectMaterial::load(const json &config, const std::string &base_path) {
     return true;
 }
 
-const std::string &EffectMaterial::getType() const {
-    return type_;
-}
-
-const std::string &EffectMaterial::getResourcePath() const {
-    return path_;
+json EffectMaterial::dump() const {
+    json j = Material::dump();
+    if (!config_.is_null()) {
+        j["config"] = config_;
+    }
+    return j;
 }
 
 const std::string &EffectMaterial::getEffectName() const {
@@ -150,9 +181,8 @@ static bool parseStyleRun(const json &style, TextStyleRun &run) {
 }
 
 bool TextMaterial::load(const json &config, const std::string &base_path) {
-    id_ = config.value("id", "");
-    if (id_.empty()) {
-        setError("text material: id is required");
+    if (!Material::load(config, base_path)) {
+        setError("text material: " + getErrorMessage());
         return false;
     }
 
@@ -195,6 +225,58 @@ bool TextMaterial::load(const json &config, const std::string &base_path) {
     return true;
 }
 
+static json dumpSolidColor(const Color4f &c) {
+    return {{"content", {{"solid", {{"color", {c.r, c.g, c.b}}, {"alpha", c.a}}}}}};
+}
+
+static json dumpStyleRun(const TextStyleRun &run) {
+    json s;
+    s["range"] = {run.range_start, run.range_end};
+    s["size"] = run.font_size;
+    s["letter_spacing"] = run.letter_spacing;
+    s["line_height"] = run.line_height;
+
+    if (!run.font_id.empty() || !run.font_path.empty())
+        s["font"] = {{"id", run.font_id}, {"path", run.font_path}};
+
+    s["fill"] = dumpSolidColor(run.fill);
+
+    if (!run.strokes.empty()) {
+        auto &arr = s["strokes"] = json::array();
+        for (const auto &st : run.strokes) {
+            json sj = dumpSolidColor(st.color);
+            sj["width"] = st.width;
+            arr.push_back(sj);
+        }
+    }
+    if (!run.shadows.empty()) {
+        auto &arr = s["shadows"] = json::array();
+        for (const auto &sh : run.shadows) {
+            json sj = dumpSolidColor(sh.color);
+            sj["alpha"] = sh.color.a;
+            sj["angle"] = sh.angle;
+            sj["distance"] = sh.distance;
+            sj["diffuse"] = sh.diffuse;
+            arr.push_back(sj);
+        }
+    }
+    return s;
+}
+
+json TextMaterial::dump() const {
+    json content;
+    content["text"] = text_;
+    auto &styles = content["styles"] = json::array();
+    for (const auto &run : style_runs_)
+        styles.push_back(dumpStyleRun(run));
+
+    return {
+        {"id", id_},
+        {"alignment", static_cast<int>(alignment_)},
+        {"content", content.dump()},
+    };
+}
+
 const std::string &TextMaterial::getText() const {
     return text_;
 }
@@ -208,11 +290,16 @@ int TextMaterial::utf8Length(const std::string &s) {
     int n = 0;
     for (size_t i = 0; i < s.size(); ++n) {
         unsigned char c = s[i];
-        if (c < 0x80) i += 1;
-        else if ((c >> 5) == 0x06) i += 2;
-        else if ((c >> 4) == 0x0E) i += 3;
-        else if ((c >> 3) == 0x1E) i += 4;
-        else i += 1;
+        if (c < 0x80)
+            i += 1;
+        else if ((c >> 5) == 0x06)
+            i += 2;
+        else if ((c >> 4) == 0x0E)
+            i += 3;
+        else if ((c >> 3) == 0x1E)
+            i += 4;
+        else
+            i += 1;
     }
     return n;
 }
@@ -247,6 +334,11 @@ const std::vector<TextStyleRun> &TextMaterial::getStyleRuns() const {
 }
 
 bool TransitionMaterial::load(const json &config, const std::string &base_path) {
+    if (!EffectMaterial::load(config, base_path)) {
+        setError("transition material: " + getErrorMessage());
+        return false;
+    }
+
     duration_ms_ = config.value("duration", 0);
     if (duration_ms_ == 0) {
         setError("transition material[" + id_ + "]: duration is required");
@@ -256,6 +348,12 @@ bool TransitionMaterial::load(const json &config, const std::string &base_path) 
     return EffectMaterial::load(config, base_path);
 }
 
+json TransitionMaterial::dump() const {
+    json j = EffectMaterial::dump();
+    j["duration"] = duration_ms_;
+    return j;
+}
+
 TimeMs TransitionMaterial::getDuration() const {
     return duration_ms_;
 }
@@ -263,14 +361,11 @@ TimeMs TransitionMaterial::getDuration() const {
 // ========== AudioMaterial 实现 ==========
 
 bool AudioMaterial::load(const json &config, const std::string &base_path) {
-    id_ = config.value("id", "");
-    name_ = config.value("name", "");
-    path_ = config.value("path", "");
-
-    if (id_.empty()) {
-        setError("audio material: id is required");
+    if (!Material::load(config, base_path)) {
+        setError("audio material: " + getErrorMessage());
         return false;
     }
+
     if (path_.empty()) {
         setError("audio material[" + id_ + "]: path is required");
         return false;
@@ -279,8 +374,8 @@ bool AudioMaterial::load(const json &config, const std::string &base_path) {
     return true;
 }
 
-const std::string &AudioMaterial::getName() const {
-    return name_;
+json AudioMaterial::dump() const {
+    return Material::dump();
 }
 
 } // namespace vp

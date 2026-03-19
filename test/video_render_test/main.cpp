@@ -94,9 +94,10 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    std::string error_message = root.loadFromJson(json_str);
-    if (!error_message.empty()) {
-        std::cerr << "Failed to load RootNode from JSON: " << error_message << std::endl;
+    nlohmann::json protocol = nlohmann::json::parse(json_str);
+
+    if (!root.load(protocol, "")) {
+        std::cerr << "Failed to load RootNode from JSON: " << root.getErrorMessage() << std::endl;
         return 1;
     }
 

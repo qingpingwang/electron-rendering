@@ -9,70 +9,109 @@
 
 namespace vp {
 
-GroupLayer::GroupLayer(RootNode *root) : root_(root) {}
+GroupLayer::GroupLayer(RootNode *root) :
+    root_(root) {
+}
 
 void GroupLayer::addLayer(std::unique_ptr<Layer> layer) {
     layers_.emplace_back(std::move(layer));
 }
 
-std::string GroupLayer::load(const nlohmann::json &track_config) {
+bool GroupLayer::load(const nlohmann::json &track_config, const std::string &base_path) {
+    clearError();
     id_ = track_config.value("id", "");
     type_ = track_config.value("type", "");
+    visible_ = track_config.value("visible", true);
+    muted_ = track_config.value("muted", false);
 
-    if (!track_config.contains("segments"))
-        return "segments is required";
+    if (!track_config.contains("segments")) {
+        setError("segments is required");
+        return false;
+    }
 
     using Factory = std::unique_ptr<Layer> (*)(RootNode *);
-    static const struct { const char *type; Factory fn; } factories[] = {
+    static const struct {
+        const char *type;
+        Factory fn;
+    } factories[] = {
         {"video", [](RootNode *r) -> std::unique_ptr<Layer> { return std::make_unique<VideoLayer>(r); }},
-        {"text",  [](RootNode *r) -> std::unique_ptr<Layer> { return std::make_unique<TextLayer>(r); }},
+        {"text", [](RootNode *r) -> std::unique_ptr<Layer> { return std::make_unique<TextLayer>(r); }},
         {"audio", [](RootNode *r) -> std::unique_ptr<Layer> { return std::make_unique<AudioLayer>(r); }},
     };
 
     Factory factory = nullptr;
     for (const auto &f : factories) {
-        if (type_ == f.type) { factory = f.fn; break; }
+        if (type_ == f.type) {
+            factory = f.fn;
+            break;
+        }
     }
-    if (!factory)
-        return "unknown track type: " + type_;
+    if (!factory) {
+        setError("unknown track type: " + type_);
+        return false;
+    }
 
     const auto &segments = track_config["segments"];
     layers_.reserve(segments.size());
     for (const auto &segment : segments) {
         auto layer = factory(root_);
-        if (!layer->load(segment))
-            return "load layer failed: " + layer->getErrorMessage();
+        if (!layer->load(segment)) {
+            setError("load layer failed: " + layer->getErrorMessage());
+            return false;
+        }
         layers_.emplace_back(std::move(layer));
     }
 
-    if (!layers_.empty() && layers_.back()->hasTransition())
-        return "last layer cannot have transition";
+    if (!layers_.empty() && layers_.back()->hasTransition()) {
+        setError("last layer cannot have transition");
+        return false;
+    }
 
-    for (auto &layer : layers_)
+    for (auto &layer : layers_) {
         layer->prepare();
+    }
 
-    return "";
+    return true;
+}
+
+nlohmann::json GroupLayer::dump() const {
+    nlohmann::json j;
+    j["id"] = id_;
+    j["type"] = type_;
+
+    auto &segments = j["segments"] = nlohmann::json::array();
+    for (const auto &layer : layers_) {
+        segments.push_back(layer->dump());
+    }
+
+    j["visible"] = isVisible();
+    j["muted"] = isMuted();
+    return j;
 }
 
 bool GroupLayer::draw(const gl::FBO &target, TimeMs time_ms) {
-    if (!visible_)
+    if (!visible_) {
         return true;
+    }
 
     for (size_t i = 0; i < layers_.size(); i++) {
         auto &layer = layers_[i];
-        if (layer->getMaterialType() == MATERIAL_TYPE_AUDIO)
+        if (layer->getMaterialType() == MATERIAL_TYPE_AUDIO) {
             continue;
+        }
 
         auto *transition = layer->getActiveTransition(time_ms);
         if (!transition || i == layers_.size() - 1) {
-            if (!layer->draw(target, time_ms))
+            if (!layer->draw(target, time_ms)) {
                 return false;
+            }
             continue;
         }
 
         auto &next = layers_[++i];
-        if (!renderTransition(layer.get(), next.get(), transition, time_ms, target))
+        if (!renderTransition(layer.get(), next.get(), transition, time_ms, target)) {
             return false;
+        }
     }
     return true;
 }

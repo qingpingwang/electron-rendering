@@ -84,7 +84,9 @@ function _setupProjectIPC() {
         try {
             const jsonStr = fs.readFileSync(absPath, 'utf-8');
             const config = JSON.parse(jsonStr);
-            await loadFromConfig(config);
+            // 协议所在目录作为 base_path，供 C++ 解析/拼接资源路径
+            const protocolPath = path.dirname(absPath);
+            await loadFromConfig(config, protocolPath);
             log(`项目已加载: ${configPath}`, 'ok');
         } catch (e) {
             log(`项目加载失败: ${e.message}`, 'err');
@@ -92,10 +94,6 @@ function _setupProjectIPC() {
         }
     });
 
-    ipcRenderer.on('save-project', (_event) => {
-        _saveCurrentProject();
-        ipcRenderer.send('project-saved');
-    });
 }
 
 function _saveCurrentProject() {

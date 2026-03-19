@@ -75,12 +75,7 @@ int main(int argc, char *argv[]) {
     std::cout << std::endl;
 
     // 1. 确定测试基础路径
-    fs::path test_base_path;
-    if (argc > 1) {
-        test_base_path = fs::path(argv[1]);
-    } else {
-        test_base_path = "../../../test/resources";
-    }
+    fs::path test_base_path = "./test/resources";
 
     std::cout << "Test base path: \"" << test_base_path.string() << "\"" << std::endl;
     std::cout << std::endl;

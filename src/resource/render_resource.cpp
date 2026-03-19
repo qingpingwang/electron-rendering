@@ -312,4 +312,8 @@ void RenderResource::setResourceDuration(TimeMs duration_ms) {
     resource_duration_ms_ = duration_ms;
 }
 
+nlohmann::json RenderResource::dump() const {
+    return nlohmann::json::object();
+}
+
 } // namespace vp

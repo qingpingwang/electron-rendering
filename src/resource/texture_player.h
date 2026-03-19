@@ -22,6 +22,7 @@ public:
 
     // 从配置加载
     bool load(const nlohmann::json &config, const std::string &base_path) override;
+    nlohmann::json dump() const override;
 
     // 播放（获取指定时间的纹理）
     virtual gl::Texture play(TimeMs time_ms) = 0;

@@ -17,6 +17,14 @@ body {
     display: flex;
     flex-direction: column;
     overflow-y: auto;
+    -webkit-app-region: drag;
+}
+
+.home-page button,
+.home-page input,
+.home-page .home-preset,
+.home-page .home-history-item {
+    -webkit-app-region: no-drag;
 }
 
 .home-page::-webkit-scrollbar { width: 6px; }

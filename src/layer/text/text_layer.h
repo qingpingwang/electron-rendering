@@ -12,11 +12,17 @@ public:
     ~TextLayer() override;
 
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
-    void prepare() override {}
+
+    nlohmann::json dump() const override;
+
+    void prepare() override {
+    }
 
 protected:
     bool renderContent(const gl::FBO &fbo, TimeMs time_ms) override;
-    MaterialType getMaterialType() const override { return MATERIAL_TYPE_TEXT; }
+    MaterialType getMaterialType() const override {
+        return MATERIAL_TYPE_TEXT;
+    }
 
 private:
     TextMaterial *text_material_ = nullptr;

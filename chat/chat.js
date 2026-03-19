@@ -37,19 +37,48 @@ function getMediaLibrary() {
     return mediaLib;
 }
 
-// ---- Message rendering ----
+// ---- Shared helpers ----
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 
 function formatTime(ts) {
     if (!ts) return '';
     const d = new Date(ts);
-    const hh = String(d.getHours()).padStart(2, '0');
-    const mm = String(d.getMinutes()).padStart(2, '0');
-    return `${hh}:${mm}`;
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-function addWelcomeMessage() {
-    addAIBubble(WELCOME_MESSAGE);
+function scrollToBottom() {
+    requestAnimationFrame(() => { messagesEl.scrollTop = messagesEl.scrollHeight; });
 }
+
+function updateSendButton() {
+    sendBtn.disabled = isStreaming || !inputEl.value.trim();
+}
+
+function _createAIBubbleEl(timestamp) {
+    const time = formatTime(timestamp || new Date());
+    const el = document.createElement('div');
+    el.className = 'flex justify-start gap-2 animate-[fade-in_0.2s_ease]';
+    el.innerHTML = `
+        <div class="w-8 h-8 rounded-full bg-slate-700/60 flex items-center justify-center shrink-0 mt-0.5">
+            <span class="material-symbols-rounded text-sm text-indigo-300">smart_toy</span>
+        </div>
+        <div class="max-w-[80%] flex flex-col">
+            <div class="msg-bubble bg-bubble-agent rounded-2xl rounded-bl-md px-4 py-2.5 text-sm leading-relaxed text-slate-200">
+                <div class="message-content"></div>
+            </div>
+            <span class="text-[10px] text-slate-600 mt-1 px-1">${time}</span>
+        </div>
+    `;
+    messagesEl.appendChild(el);
+    return el.querySelector('.message-content');
+}
+
+// ---- Message rendering ----
 
 function addUserMessage(text, timestamp) {
     const time = formatTime(timestamp || new Date());
@@ -57,34 +86,21 @@ function addUserMessage(text, timestamp) {
     el.className = 'flex justify-end gap-2 animate-[fade-in_0.2s_ease]';
     el.innerHTML = `
         <div class="max-w-[80%] flex flex-col items-end">
-            <div class="bg-bubble-user text-white rounded-2xl rounded-br-md px-4 py-2.5 text-sm leading-relaxed break-words">${escapeHtml(text)}</div>
+            <div class="bg-bubble-user text-white rounded-2xl rounded-br-md px-4 py-2.5 text-sm leading-relaxed break-words message-content"></div>
             <span class="text-[10px] text-slate-600 mt-1 px-1">${time}</span>
         </div>
         <div class="w-8 h-8 rounded-full bg-primary/80 flex items-center justify-center shrink-0 mt-0.5">
             <span class="material-symbols-rounded text-sm text-white">person</span>
         </div>
     `;
+    el.querySelector('.message-content').innerHTML = marked.parse(text);
     messagesEl.appendChild(el);
     scrollToBottom();
 }
 
 function addAIBubble(content, timestamp) {
-    const time = formatTime(timestamp || new Date());
-    const el = document.createElement('div');
-    el.className = 'flex justify-start gap-2 animate-[fade-in_0.2s_ease]';
-    el.innerHTML = `
-        <div class="w-8 h-8 rounded-full bg-slate-700/60 flex items-center justify-center shrink-0 mt-0.5">
-            <span class="material-symbols-rounded text-sm text-indigo-300">smart_toy</span>
-        </div>
-        <div class="max-w-[80%] flex flex-col">
-            <div class="msg-bubble bg-bubble-agent rounded-2xl rounded-bl-md px-4 py-2.5 text-sm leading-relaxed text-slate-200">
-                <div class="message-content"></div>
-            </div>
-            <span class="text-[10px] text-slate-600 mt-1 px-1">${time}</span>
-        </div>
-    `;
-    el.querySelector('.message-content').innerHTML = marked.parse(content);
-    messagesEl.appendChild(el);
+    const contentEl = _createAIBubbleEl(timestamp);
+    contentEl.innerHTML = marked.parse(content);
     scrollToBottom();
 }
 
@@ -92,23 +108,7 @@ function startAIMessage(timestamp) {
     removeThinking();
     currentTokens = '';
     isStreaming = true;
-
-    const time = formatTime(timestamp || new Date());
-    const el = document.createElement('div');
-    el.className = 'flex justify-start gap-2 animate-[fade-in_0.2s_ease]';
-    el.innerHTML = `
-        <div class="w-8 h-8 rounded-full bg-slate-700/60 flex items-center justify-center shrink-0 mt-0.5">
-            <span class="material-symbols-rounded text-sm text-indigo-300">smart_toy</span>
-        </div>
-        <div class="max-w-[80%] flex flex-col">
-            <div class="msg-bubble bg-bubble-agent rounded-2xl rounded-bl-md px-4 py-2.5 text-sm leading-relaxed text-slate-200">
-                <div class="message-content"></div>
-            </div>
-            <span class="text-[10px] text-slate-600 mt-1 px-1">${time}</span>
-        </div>
-    `;
-    messagesEl.appendChild(el);
-    currentAIBubble = el.querySelector('.message-content');
+    currentAIBubble = _createAIBubbleEl(timestamp);
     scrollToBottom();
 }
 
@@ -124,8 +124,7 @@ function finalizeMessage(fullMessage) {
     if (currentAIBubble) {
         currentAIBubble.innerHTML = marked.parse(text);
     } else if (text) {
-        startAIMessage();
-        currentAIBubble.innerHTML = marked.parse(text);
+        addAIBubble(text);
     }
 
     currentAIBubble = null;
@@ -203,32 +202,9 @@ function sendMessage() {
 
     addUserMessage(text);
     inputEl.value = '';
-    autoResize();
     updateSendButton();
 
     ipcRenderer.send('chat-message', { message: text });
-}
-
-// ---- Utilities ----
-
-function scrollToBottom() {
-    requestAnimationFrame(() => {
-        messagesEl.scrollTop = messagesEl.scrollHeight;
-    });
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function autoResize() {
-    // textarea fills the flex container, no manual height needed
-}
-
-function updateSendButton() {
-    sendBtn.disabled = isStreaming || !inputEl.value.trim();
 }
 
 // ---- IPC handlers ----
@@ -259,7 +235,7 @@ ipcRenderer.on('chat-history-loaded', (_event, { history }) => {
     currentTokens = '';
     isStreaming = false;
 
-    addWelcomeMessage();
+    addAIBubble(WELCOME_MESSAGE);
 
     if (history && history.length > 0) {
         for (const msg of history) {
@@ -286,10 +262,7 @@ inputEl.addEventListener('keydown', (e) => {
     }
 });
 
-inputEl.addEventListener('input', () => {
-    autoResize();
-    updateSendButton();
-});
+inputEl.addEventListener('input', updateSendButton);
 
 toggleMediaBtn.addEventListener('click', () => {
     getMediaLibrary().toggle();
@@ -297,7 +270,7 @@ toggleMediaBtn.addEventListener('click', () => {
 
 // ---- Resizer ----
 
-function initResizer() {
+(function initResizer() {
     const resizer = document.getElementById('resizer');
     const chatPanel = document.getElementById('chatPanel');
 
@@ -305,12 +278,12 @@ function initResizer() {
 
     let isResizing = false;
     let startY = 0;
-    let startMessagesHeight = 0;
+    let startH = 0;
 
     resizer.addEventListener('mousedown', (e) => {
         isResizing = true;
         startY = e.clientY;
-        startMessagesHeight = messagesEl.offsetHeight;
+        startH = messagesEl.offsetHeight;
         resizer.classList.add('dragging');
         document.body.style.cursor = 'ns-resize';
         document.body.style.userSelect = 'none';
@@ -319,33 +292,21 @@ function initResizer() {
 
     document.addEventListener('mousemove', (e) => {
         if (!isResizing) return;
-
-        const deltaY = e.clientY - startY;
-        const newHeight = startMessagesHeight + deltaY;
-
+        const newH = startH + (e.clientY - startY);
         const header = chatPanel.querySelector('header');
-        const headerH = header ? header.offsetHeight : 0;
-        const resizerH = resizer.offsetHeight;
-        const panelH = chatPanel.offsetHeight;
-        const available = panelH - headerH - resizerH;
-
-        const min = 100;
-        const max = available - 120;
-
-        if (newHeight >= min && newHeight <= max) {
-            messagesEl.style.height = newHeight + 'px';
+        const available = chatPanel.offsetHeight - (header ? header.offsetHeight : 0) - resizer.offsetHeight;
+        if (newH >= 100 && newH <= available - 120) {
+            messagesEl.style.height = newH + 'px';
         }
     });
 
     document.addEventListener('mouseup', () => {
-        if (isResizing) {
-            isResizing = false;
-            resizer.classList.remove('dragging');
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
-        }
+        if (!isResizing) return;
+        isResizing = false;
+        resizer.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
     });
-}
+})();
 
-initResizer();
 updateSendButton();

@@ -303,4 +303,8 @@ gl::Texture VideoTexture::play(TimeMs time_ms) {
     return texture_;
 }
 
+nlohmann::json TexturePlayer::dump() const {
+    return nlohmann::json::object();
+}
+
 } // namespace vp

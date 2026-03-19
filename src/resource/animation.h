@@ -21,6 +21,7 @@ public:
 
     // 从 JSON 加载
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
+    nlohmann::json dump() const override;
 
     // 获取指定时间、指定通道的值
     float getValueAt(TimeMs time_ms, int channel) const;

@@ -27,6 +27,15 @@ bool AudioLayer::load(const json &config, const std::string &base_path) {
     return true;
 }
 
+json AudioLayer::dump() const {
+    json j = Layer::dump();
+    // 声音相关
+    j["volume"] = getVolume();
+    j["muted_"] = isMuted();
+    j["source_timerange"] = Layer::dumpSourceRange();
+    return j;
+}
+
 bool AudioLayer::renderContent(const gl::FBO &, TimeMs) {
     return true;
 }

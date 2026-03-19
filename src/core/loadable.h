@@ -14,6 +14,9 @@ public:
     // base_path 参数可选（默认为空），不需要的子类可以忽略
     virtual bool load(const nlohmann::json &config, const std::string &base_path = "") = 0;
 
+    // 序列化当前状态为 JSON（与 load 对称）
+    virtual nlohmann::json dump() const = 0;
+
     // 获取错误信息
     const std::string &getErrorMessage() const {
         return error_message_;

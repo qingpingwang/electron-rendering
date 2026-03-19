@@ -28,6 +28,7 @@ public:
 
     // 从 JSON 加载配置
     bool load(const nlohmann::json &config, const std::string &base_path) override;
+    nlohmann::json dump() const override;
 
     // 执行渲染
     // inputs: 输入 FBO 数组（支持多输入，用于转场效果）

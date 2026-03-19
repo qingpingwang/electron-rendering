@@ -37,6 +37,7 @@ public:
     ~UniformParam();
 
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
+    nlohmann::json dump() const override;
 
     UniformType getType() const;
     const std::string &getName() const;          // 外部名称

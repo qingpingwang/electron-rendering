@@ -28,14 +28,19 @@ public:
     Material &operator=(const Material &) = delete;
 
     // 从 JSON 加载素材配置
-    bool load(const nlohmann::json &config, const std::string &base_path = "") override = 0;
+    bool load(const nlohmann::json &config, const std::string &base_path = "") override;
+    nlohmann::json dump() const override;
 
     const std::string &getId() const;
     const std::string &getPath() const;
+    const std::string &getType() const;
+    const std::string &getName() const;
 
 protected:
     std::string id_;
     std::string path_;
+    std::string type_;
+    std::string name_;
 };
 
 // 视频素材
@@ -45,10 +50,13 @@ public:
     ~VideoMaterial() override = default;
 
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
+    nlohmann::json dump() const override;
 
     int getWidth() const;
     int getHeight() const;
     TimeMs getDuration() const;
+
+    void updateWHAndDuration(int width, int height, TimeMs duration);
 
 private:
     int width_ = 0;
@@ -64,12 +72,10 @@ public:
     ~EffectMaterial() override = default;
 
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
+    nlohmann::json dump() const override;
 
     // 获取特效类型（"resource", "builtin", "lut" 等）
     const std::string &getType() const;
-
-    // 获取资源路径（对于 resource 类型）
-    const std::string &getResourcePath() const;
 
     // 获取特效名称（对于 builtin 类型）
     const std::string &getEffectName() const;
@@ -133,23 +139,43 @@ public:
     ~TextMaterial() override = default;
 
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
+    nlohmann::json dump() const override;
 
     const std::string &getText() const;
     void setText(const std::string &text);
 
     TextAlignment getAlignment() const;
-    void setAlignment(TextAlignment a) { alignment_ = a; }
+    void setAlignment(TextAlignment a) {
+        alignment_ = a;
+    }
 
     const std::vector<TextStyleRun> &getStyleRuns() const;
-    size_t getRunCount() const { return style_runs_.size(); }
+    size_t getRunCount() const {
+        return style_runs_.size();
+    }
 
-    bool setRunFontSize(size_t idx, float v) { if (idx >= style_runs_.size()) return false; style_runs_[idx].font_size = v; return true; }
-    bool setRunLetterSpacing(size_t idx, float v) { if (idx >= style_runs_.size()) return false; style_runs_[idx].letter_spacing = v; return true; }
-    bool setRunLineHeight(size_t idx, float v) { if (idx >= style_runs_.size()) return false; style_runs_[idx].line_height = v; return true; }
+    bool setRunFontSize(size_t idx, float v) {
+        if (idx >= style_runs_.size()) return false;
+        style_runs_[idx].font_size = v;
+        return true;
+    }
+    bool setRunLetterSpacing(size_t idx, float v) {
+        if (idx >= style_runs_.size()) return false;
+        style_runs_[idx].letter_spacing = v;
+        return true;
+    }
+    bool setRunLineHeight(size_t idx, float v) {
+        if (idx >= style_runs_.size()) return false;
+        style_runs_[idx].line_height = v;
+        return true;
+    }
     bool setRunFill(size_t idx, float r, float g, float b, float a) {
         if (idx >= style_runs_.size()) return false;
         auto &f = style_runs_[idx].fill;
-        f.r = r; f.g = g; f.b = b; f.a = a;
+        f.r = r;
+        f.g = g;
+        f.b = b;
+        f.a = a;
         return true;
     }
     bool setRunStrokeWidth(size_t ri, size_t si, float w) {
@@ -160,7 +186,10 @@ public:
     bool setRunStrokeColor(size_t ri, size_t si, float r, float g, float b, float a) {
         if (ri >= style_runs_.size() || si >= style_runs_[ri].strokes.size()) return false;
         auto &c = style_runs_[ri].strokes[si].color;
-        c.r = r; c.g = g; c.b = b; c.a = a;
+        c.r = r;
+        c.g = g;
+        c.b = b;
+        c.a = a;
         return true;
     }
 
@@ -180,6 +209,7 @@ public:
     ~TransitionMaterial() override = default;
 
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
+    nlohmann::json dump() const override;
 
     TimeMs getDuration() const;
 
@@ -194,11 +224,9 @@ public:
     ~AudioMaterial() override = default;
 
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
-
-    const std::string &getName() const;
+    nlohmann::json dump() const override;
 
 private:
-    std::string name_;
 };
 
 } // namespace vp

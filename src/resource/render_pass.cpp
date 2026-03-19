@@ -180,4 +180,8 @@ const std::vector<RenderPass::InputTexDef> &RenderPass::getAsInputTexList() cons
     return as_input_tex_list_;
 }
 
+nlohmann::json RenderPass::dump() const {
+    return nlohmann::json::object();
+}
+
 } // namespace vp

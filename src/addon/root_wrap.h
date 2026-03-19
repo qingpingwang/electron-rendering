@@ -32,6 +32,7 @@ private:
 
     Napi::Value Init(const Napi::CallbackInfo &info);
     Napi::Value Load(const Napi::CallbackInfo &info);
+    Napi::Value ExportConfig(const Napi::CallbackInfo &info);
     Napi::Value Unload(const Napi::CallbackInfo &info);
     Napi::Value Cleanup(const Napi::CallbackInfo &info);
     Napi::Value SetCurrentTime(const Napi::CallbackInfo &info);

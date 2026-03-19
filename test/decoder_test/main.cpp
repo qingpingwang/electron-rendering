@@ -10,7 +10,7 @@
 using namespace vp;
 
 int main(int argc, char *argv[]) {
-    std::string video_path = "../../test/resources/sprint_effect/textures/mask.webm";
+    std::string video_path = "./test/resources/sprint_effect/textures/mask.webm";
     if (argc > 1) {
         video_path = argv[1];
     }
@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
     int64_t frame_interval_ms = (fps > 0) ? (int64_t)(1000.0 / fps) : 33;
 
     std::cout << "Decoding: " << video_path << std::endl;
-    std::cout << "Resolution: " << decoder.getWidth() << "x" << decoder.getHeight() 
+    std::cout << "Resolution: " << decoder.getWidth() << "x" << decoder.getHeight()
               << ", Duration: " << duration_ms << "ms, FPS: " << fps << std::endl;
 
     // 循环解码所有帧

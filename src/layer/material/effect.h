@@ -31,6 +31,8 @@ public:
     // 从 JSON 加载特效配置
     bool load(const nlohmann::json &config, const std::string &base_path = "") override = 0;
 
+    virtual nlohmann::json dump() const override;
+
     // 应用特效：输入 FBO 列表 → 返回输出 FBO
     // inputs: 输入 FBO 列表（特效传 1 个，转场传 2 个）
     // time_ms: 当前时间（用于动画特效）
@@ -62,6 +64,8 @@ public:
 
     // 从 JSON 加载（支持 "resourcePath" 字段）
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
+
+    nlohmann::json dump() const override;
 
     // 从文件夹路径直接加载
     bool loadFromFolder(const std::string &folder_path);

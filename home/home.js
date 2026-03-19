@@ -80,7 +80,10 @@ function openProject(item) {
 
 function createProject(width, height) {
     const uuid = crypto.randomUUID();
-    const configPath = `test/project_${uuid}.json`;
+    const configDir = path.resolve(ROOT_DIR, 'test_project');
+    if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
+
+    const configPath = `test_project/${uuid}.json`;
     const absPath = path.resolve(ROOT_DIR, configPath);
 
     const orientLabel = width > height ? '横屏' : (height > width ? '竖屏' : '方形');

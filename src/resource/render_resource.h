@@ -24,6 +24,7 @@ public:
 
     // 实现 Loadable::load - config 应该包含 {"path": "folder_path"}
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
+    nlohmann::json dump() const override;
 
     // 从文件夹加载资源
     bool loadFromFolder(const std::string &folder_path);

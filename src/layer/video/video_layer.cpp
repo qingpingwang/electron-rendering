@@ -52,6 +52,7 @@ bool VideoLayer::load(const json &config, const std::string &base_path) {
     video_width_ = decoder_->getWidth();
     video_height_ = decoder_->getHeight();
     video_duration_ms_ = decoder_->getDurationMs();
+    static_cast<VideoMaterial *>(material_)->updateWHAndDuration(video_width_, video_height_, video_duration_ms_);
 
     // 长边适配
     const auto &canvas = root_->getCanvas();
@@ -77,6 +78,17 @@ bool VideoLayer::load(const json &config, const std::string &base_path) {
     }
 
     return true;
+}
+
+json VideoLayer::dump() const {
+    json j = Layer::dump();
+    j["clip"] = Layer::dumpClip();
+    // 视频相关
+    j["muted"] = isMuted();
+    j["volume"] = getVolume();
+    j["visible"] = isVisible();
+    j["source_timerange"] = Layer::dumpSourceRange();
+    return j;
 }
 
 void VideoLayer::prepare() {

@@ -152,13 +152,11 @@ void RootNode::cancelPrepare() {
 }
 
 // ========== 加载 ==========
-
-std::string RootNode::loadFromJson(const std::string &json_str) {
+bool RootNode::load(const nlohmann::json &config, const std::string &base_path) {
+    clearError();
     unload();
 
     try {
-        json config = json::parse(json_str);
-
         // 加载项目基本信息
         id_ = config.value("id", "");
         duration_ms_ = config.value("duration", 0);
@@ -166,7 +164,8 @@ std::string RootNode::loadFromJson(const std::string &json_str) {
 
         // 加载 Canvas 配置
         if (!config.contains("canvas_config")) {
-            return "canvas_config is required";
+            setError("canvas_config is required");
+            return false;
         }
         auto &canvas_json = config["canvas_config"];
         canvas_.width = canvas_json.value("width", 0);
@@ -195,14 +194,17 @@ std::string RootNode::loadFromJson(const std::string &json_str) {
             };
 
             for (const auto &loader : loaders) {
-                if (!materials_json.contains(loader.key))
+                if (!materials_json.contains(loader.key)) {
                     continue;
+                }
                 const auto &arr = materials_json[loader.key];
                 materials_[loader.type].reserve(arr.size());
                 for (const auto &mat : arr) {
                     auto material = loader.create();
-                    if (!material->load(mat))
-                        return std::string("load ") + loader.key + " failed: " + material->getErrorMessage();
+                    if (!material->load(mat)) {
+                        setError("load " + std::string(loader.key) + " failed: " + material->getErrorMessage());
+                        return false;
+                    }
                     materials_[loader.type].emplace_back(std::move(material));
                 }
             }
@@ -211,9 +213,10 @@ std::string RootNode::loadFromJson(const std::string &json_str) {
         if (config.contains("tracks") && config["tracks"].is_array()) {
             for (const auto &track : config["tracks"]) {
                 auto group = std::make_unique<GroupLayer>(this);
-                std::string err = group->load(track);
-                if (!err.empty())
-                    return err;
+                if (!group->load(track)) {
+                    setError("load track failed: " + group->getErrorMessage());
+                    return false;
+                }
                 groups_.emplace_back(std::move(group));
             }
         }
@@ -236,7 +239,8 @@ std::string RootNode::loadFromJson(const std::string &json_str) {
 
         if (!render_fbo_.isValid() || !shader_->isValid() || !quad_.isValid()) {
             unload();
-            return "create OpenGL resources failed";
+            setError("create OpenGL resources failed");
+            return false;
         }
 
         // 初始化 shader uniform 默认值（GLSL uniform 默认全零）
@@ -247,11 +251,52 @@ std::string RootNode::loadFromJson(const std::string &json_str) {
         shader_->unuse();
 
         cache_data_.resize(static_cast<size_t>(canvas_.width) * canvas_.height * 4);
-        return "";
     } catch (...) {
         unload();
-        return "load from json failed";
+        setError("load from json failed");
+        return false;
     }
+    return true;
+}
+
+nlohmann::json RootNode::dump() const {
+    json config;
+    config["id"] = id_;
+    config["duration"] = duration_ms_;
+    config["fps"] = frame_rate_;
+    config["canvas_config"] = {
+        {"width", canvas_.width},
+        {"height", canvas_.height},
+        {"ratio", canvas_.ratio},
+    };
+
+    // 素材
+    json materials_json;
+    static const struct {
+        const char *key;
+        MaterialType type;
+    } mat_entries[] = {
+        {"videos", MATERIAL_TYPE_VIDEO},
+        {"effects", MATERIAL_TYPE_EFFECT},
+        {"texts", MATERIAL_TYPE_TEXT},
+        {"transitions", MATERIAL_TYPE_TRANSITION},
+        {"audios", MATERIAL_TYPE_AUDIO},
+    };
+    for (const auto &entry : mat_entries) {
+        auto &arr = materials_json[entry.key] = json::array();
+        for (const auto &mat : materials_[entry.type]) {
+            arr.push_back(mat->dump());
+        }
+    }
+    config["materials"] = materials_json;
+
+    // 轨道
+    auto &tracks = config["tracks"] = json::array();
+    for (const auto &group : groups_) {
+        tracks.push_back(group->dump());
+    }
+
+    return config;
 }
 
 void RootNode::unload() {
