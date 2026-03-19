@@ -1,34 +1,25 @@
 const { DynamicStructuredTool } = require('@langchain/core/tools');
 const { z } = require('zod');
-const { ipcMain } = require('electron');
+const { ipcRenderer } = require('electron');
 const crypto = require('crypto');
-
-let _editorWebContents = null;
-
-function setEditorWebContents(wc) {
-    _editorWebContents = wc;
-}
 
 function callEditor(action, params = {}) {
     return new Promise((resolve, reject) => {
-        if (!_editorWebContents || _editorWebContents.isDestroyed()) {
-            return reject(new Error('Editor not available'));
-        }
         const id = crypto.randomUUID();
         const timeout = setTimeout(() => {
-            ipcMain.removeListener('tool-result', handler);
+            ipcRenderer.removeListener('tool-result', handler);
             reject(new Error(`Tool call "${action}" timed out`));
         }, 15000);
 
         const handler = (_event, result) => {
             if (result.id === id) {
                 clearTimeout(timeout);
-                ipcMain.removeListener('tool-result', handler);
+                ipcRenderer.removeListener('tool-result', handler);
                 resolve(result.data);
             }
         };
-        ipcMain.on('tool-result', handler);
-        _editorWebContents.send('tool-call', { id, action, params });
+        ipcRenderer.on('tool-result', handler);
+        ipcRenderer.send('tool-call', { id, action, params });
     });
 }
 
@@ -88,4 +79,4 @@ function createEditorTools() {
     ];
 }
 
-module.exports = { createEditorTools, setEditorWebContents };
+module.exports = { createEditorTools };

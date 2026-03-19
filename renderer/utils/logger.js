@@ -1,3 +1,16 @@
+/** 时:分:秒.毫秒（不展示帧） */
+function formatTimeHMS(ms) {
+    const t = Math.max(0, Math.floor(Number(ms) || 0));
+    const h = Math.floor(t / 3600000);
+    const m = Math.floor((t % 3600000) / 60000);
+    const s = Math.floor((t % 60000) / 1000);
+    const milli = t % 1000;
+    const p2 = (n) => String(n).padStart(2, '0');
+    const p3 = (n) => String(n).padStart(3, '0');
+    return `${p2(h)}:${p2(m)}:${p2(s)}.${p3(milli)}`;
+}
+
+/** 时:分:秒:帧（需要帧号时用） */
 function formatTimecode(ms, fps = 30) {
     const totalSec = Math.max(0, ms) / 1000;
     const h = Math.floor(totalSec / 3600);
@@ -9,7 +22,7 @@ function formatTimecode(ms, fps = 30) {
 }
 
 function formatTime(ms) {
-    return formatTimecode(ms);
+    return formatTimeHMS(ms);
 }
 
 function log(msg, type = 'info') {
@@ -19,4 +32,4 @@ function log(msg, type = 'info') {
     el.scrollTop = el.scrollHeight;
 }
 
-module.exports = { log, formatTime, formatTimecode };
+module.exports = { log, formatTime, formatTimeHMS, formatTimecode };

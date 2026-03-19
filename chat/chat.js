@@ -1,5 +1,5 @@
-const { ipcRenderer } = require('electron');
 const { marked } = require('marked');
+const agentClient = require('./agent_client');
 
 marked.setOptions({ breaks: true, gfm: true });
 
@@ -24,6 +24,7 @@ const toggleMediaBtn = document.getElementById('btn-toggle-media');
 let currentAIBubble = null;
 let currentTokens = '';
 let isStreaming = false;
+let currentProjectUUID = null;
 
 // ---- Media Library (lazy loaded) ----
 let mediaLib = null;
@@ -33,6 +34,7 @@ function getMediaLibrary() {
         mediaLib = require('./media_library');
         mediaLib.setStreamingCheck(() => isStreaming);
         mediaLib.init();
+        if (currentProjectUUID) mediaLib.setProject(currentProjectUUID);
     }
     return mediaLib;
 }
@@ -204,32 +206,16 @@ function sendMessage() {
     inputEl.value = '';
     updateSendButton();
 
-    ipcRenderer.send('chat-message', { message: text });
+    agentClient.sendMessage(text, {
+        onThinking: showThinking,
+        onToken: appendToken,
+        onDone: finalizeMessage,
+    });
 }
 
-// ---- IPC handlers ----
+// ---- 历史记录 ----
 
-ipcRenderer.on('ai-status', (_event, { status }) => {
-    if (status === 'thinking') showThinking();
-});
-
-ipcRenderer.on('ai-token', (_event, { token }) => {
-    appendToken(token);
-});
-
-ipcRenderer.on('ai-tool-call', (_event, { toolName }) => {
-    showToolCall(toolName);
-});
-
-ipcRenderer.on('ai-tool-result', () => {
-    showToolResult();
-});
-
-ipcRenderer.on('ai-done', (_event, { fullMessage }) => {
-    finalizeMessage(fullMessage);
-});
-
-ipcRenderer.on('chat-history-loaded', (_event, { history }) => {
+agentClient.onHistoryLoaded((history) => {
     messagesEl.innerHTML = '';
     currentAIBubble = null;
     currentTokens = '';
@@ -249,6 +235,12 @@ ipcRenderer.on('chat-history-loaded', (_event, { history }) => {
     updateSendButton();
     scrollToBottom();
 });
+
+window.__onProjectOpened = function (uuid) {
+    currentProjectUUID = uuid;
+    agentClient.notifyProjectOpened(uuid);
+    if (mediaLib) mediaLib.setProject(uuid);
+};
 
 // ---- Event bindings ----
 

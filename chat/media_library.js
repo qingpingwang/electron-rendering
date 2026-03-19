@@ -1,4 +1,10 @@
-const { ipcRenderer } = require('electron');
+const { dialog, BrowserWindow } = require('@electron/remote');
+const MediaManager = require('../media/media_manager');
+const db = require('../db');
+
+db.init();
+
+const mediaManager = new MediaManager();
 
 const mediaPanel = document.getElementById('mediaPanel');
 const previewModal = document.getElementById('previewModal');
@@ -21,10 +27,12 @@ const FILTERS = [
 function init() {
     renderPanelStructure();
     bindEvents();
-    ipcRenderer.on('media:list-result', (_e, items) => {
-        mediaItems = items || [];
-        renderMediaList();
-    });
+}
+
+function setProject(uuid) {
+    mediaManager.setProject(uuid);
+    mediaItems = mediaManager.getItems();
+    if (isVisible) renderMediaList();
 }
 
 function renderPanelStructure() {
@@ -250,11 +258,26 @@ function importMedia() {
     const overlay = mediaPanel.querySelector('#upload-overlay');
     if (overlay) overlay.style.display = 'flex';
 
-    ipcRenderer.invoke('media:import').then(result => {
+    const win = BrowserWindow.getFocusedWindow();
+    dialog.showOpenDialog(win || undefined, {
+        title: '导入素材',
+        properties: ['openFile', 'multiSelections'],
+        filters: [
+            { name: '媒体文件', extensions: [
+                'mp4', 'mov', 'avi', 'mkv', 'webm',
+                'mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a',
+                'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg',
+            ]},
+            { name: '所有文件', extensions: ['*'] },
+        ],
+    }).then(result => {
         if (overlay) overlay.style.display = 'none';
-        if (result && result.length) {
-            mediaItems.push(...result);
-            renderMediaList();
+        if (!result.canceled && result.filePaths.length) {
+            const added = mediaManager.addItems(result.filePaths);
+            if (added.length) {
+                mediaItems.push(...added);
+                renderMediaList();
+            }
         }
     }).catch(() => {
         if (overlay) overlay.style.display = 'none';
@@ -264,12 +287,11 @@ function importMedia() {
 function deleteMedia(id) {
     if (_isStreamingFn && _isStreamingFn()) return;
 
-    ipcRenderer.invoke('media:delete', id).then(success => {
-        if (success) {
-            mediaItems = mediaItems.filter(m => m.id !== id);
-            renderMediaList();
-        }
-    });
+    const success = mediaManager.removeItem(id);
+    if (success) {
+        mediaItems = mediaItems.filter(m => m.id !== id);
+        renderMediaList();
+    }
 }
 
 function openPreview(id) {
@@ -309,7 +331,8 @@ function closePreview() {
 function show() {
     mediaPanel.style.display = 'flex';
     isVisible = true;
-    ipcRenderer.send('media:list');
+    mediaItems = mediaManager.getItems();
+    renderMediaList();
 }
 
 function hide() {
@@ -351,4 +374,4 @@ function setStreamingCheck(fn) {
     _isStreamingFn = fn;
 }
 
-module.exports = { init, show, hide, toggle, setStreamingCheck };
+module.exports = { init, show, hide, toggle, setStreamingCheck, setProject };

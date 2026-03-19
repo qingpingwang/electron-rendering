@@ -1,4 +1,3 @@
-const { ipcMain, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -20,7 +19,6 @@ class MediaManager {
     constructor() {
         this._uuid = null;
         this._items = [];
-        this._ipcRegistered = false;
     }
 
     setProject(uuid) {
@@ -66,41 +64,6 @@ class MediaManager {
             this._items = this._items.filter(m => m.id !== id);
         }
         return success;
-    }
-
-    registerIPC() {
-        if (this._ipcRegistered) return;
-        this._ipcRegistered = true;
-
-        ipcMain.on('media:list', (event) => {
-            if (this._uuid) {
-                this._items = db.media.list(this._uuid);
-            }
-            event.sender.send('media:list-result', this._items);
-        });
-
-        ipcMain.handle('media:import', async (event) => {
-            const win = require('electron').BrowserWindow.fromWebContents(event.sender);
-            const result = await dialog.showOpenDialog(win || undefined, {
-                title: '导入素材',
-                properties: ['openFile', 'multiSelections'],
-                filters: [
-                    { name: '媒体文件', extensions: [
-                        'mp4', 'mov', 'avi', 'mkv', 'webm',
-                        'mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a',
-                        'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg',
-                    ]},
-                    { name: '所有文件', extensions: ['*'] },
-                ],
-            });
-
-            if (result.canceled || !result.filePaths.length) return [];
-            return this.addItems(result.filePaths);
-        });
-
-        ipcMain.handle('media:delete', (_event, id) => {
-            return this.removeItem(id);
-        });
     }
 }
 

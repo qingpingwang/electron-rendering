@@ -1,5 +1,5 @@
 const path = require('path');
-const { formatTime, formatTimecode } = require('../utils/logger');
+const { formatTime } = require('../utils/logger');
 
 const TRACK_STYLE = {
     video: { bg: '#1B9C8F', accent: '#24C4B4', icon: '\u{1F3AC}', name: '视频' },
@@ -386,7 +386,7 @@ class Timeline {
                     info.className = 'tl-seg-info';
                     const fname = mat ? path.basename(mat.path) : seg.name;
                     const dur = mat ? mat.duration : seg.srcDuration;
-                    info.textContent = `${fname}  ${formatTimecode(dur)}`;
+                    info.textContent = `${fname}  ${formatTime(dur)}`;
                     segEl.appendChild(info);
 
                     const stripWrap = document.createElement('div');

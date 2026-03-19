@@ -2,8 +2,6 @@ const { app, ipcMain, Menu } = require('electron');
 
 
 let wm = null;
-let media = null;
-let agentReady = false;
 let _quitting = false;
 
 app.whenReady().then(() => {
@@ -44,16 +42,27 @@ app.whenReady().then(() => {
 
     const db = require('./db');
     const WindowManager = require('./window/window_manager');
-    const MediaManager = require('./media/media_manager');
-    const { initAgent, updateWebContents, onProjectOpened } = require('./agent');
 
     db.init();
 
     wm = new WindowManager();
-    media = new MediaManager();
-    media.registerIPC();
-
     wm.showHome();
+
+    // Tool-call relay: chat renderer → editor
+    ipcMain.on('tool-call', (_event, data) => {
+        const editorWC = wm.getEditorWebContents();
+        if (editorWC && !editorWC.isDestroyed()) {
+            editorWC.send('tool-call', data);
+        }
+    });
+
+    // Tool-result relay: editor → chat renderer
+    ipcMain.on('tool-result', (_event, result) => {
+        const chatWC = wm.getChatWebContents();
+        if (chatWC && !chatWC.isDestroyed()) {
+            chatWC.send('tool-result', result);
+        }
+    });
 
     ipcMain.on('open-project', (_event, { uuid, configPath }) => {
         if (!wm.mainWindow) {
@@ -66,27 +75,30 @@ app.whenReady().then(() => {
         }
 
         wm.closeHome();
-        media.setProject(uuid);
 
         const editorWC = wm.getEditorWebContents();
         const chatWC = wm.getChatWebContents();
 
-        if (!agentReady && editorWC && chatWC) {
-            initAgent(editorWC, chatWC);
-            agentReady = true;
-        } else if (agentReady && editorWC && chatWC) {
-            updateWebContents(editorWC, chatWC);
-        }
-
         const sendLoad = () => {
             editorWC.send('load-project', { uuid, configPath });
-            onProjectOpened(uuid);
+        };
+
+        const notifyChat = () => {
+            chatWC.executeJavaScript(
+                `window.__onProjectOpened && window.__onProjectOpened(${JSON.stringify(uuid)})`
+            );
         };
 
         if (editorWC.isLoading()) {
             editorWC.once('did-finish-load', sendLoad);
         } else {
             sendLoad();
+        }
+
+        if (chatWC.isLoading()) {
+            chatWC.once('did-finish-load', notifyChat);
+        } else {
+            notifyChat();
         }
     });
 });

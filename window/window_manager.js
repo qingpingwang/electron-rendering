@@ -147,10 +147,15 @@ class WindowManager {
             webPreferences: {
                 nodeIntegration: true,
                 contextIsolation: false,
+                enableRemoteModule: true,
             },
         });
         this.mainWindow.addBrowserView(this.chatView);
         this.chatView.webContents.loadFile(path.join(__dirname, '..', 'chat', 'index.html'));
+
+        try {
+            require('@electron/remote/main').enable(this.chatView.webContents);
+        } catch (_) {}
     }
 
     // ---- Layout ----

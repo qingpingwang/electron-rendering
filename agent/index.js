@@ -1,18 +1,13 @@
 const { ChatOpenAI } = require('@langchain/openai');
-const { HumanMessage, SystemMessage, AIMessage, ToolMessage } = require('@langchain/core/messages');
-const { ipcMain } = require('electron');
+const { SystemMessage } = require('@langchain/core/messages');
 const fs = require('fs');
 const path = require('path');
 
-const { createEditorTools, setEditorWebContents } = require('./tools');
 const { SYSTEM_PROMPT } = require('./prompts');
 const ChatManager = require('./chat_manager');
 
 let model = null;
-let tools = [];
-let toolMap = {};
 let chatManager = null;
-let _chatWebContents = null;
 
 function getConfig() {
     const dotenvPath = path.join(__dirname, '..', '.env');
@@ -32,19 +27,23 @@ function getConfig() {
     }
 }
 
-function initAgent(editorWebContents, chatWebContents) {
-    setEditorWebContents(editorWebContents);
-    _chatWebContents = chatWebContents;
+function initAgent() {
     chatManager = new ChatManager();
 
     const config = getConfig();
-    const apiKey = config.OPENAI_API_KEY || process.env.OPENAI_API_KEY || '';
+    const apiKey = config.OPENAI_API_KEY || process.env.OPENAI_API_KEY || undefined;
     const baseURL = config.OPENAI_BASE_URL || process.env.OPENAI_BASE_URL || undefined;
-    const modelName = config.OPENAI_MODEL_NAME || process.env.OPENAI_MODEL_NAME || 'gpt-4o-mini';
+    const modelName = config.OPENAI_MODEL_NAME || process.env.OPENAI_MODEL_NAME || undefined;
 
-    if (!apiKey) {
-        console.warn('[Agent] No OPENAI_API_KEY found. Set it in .env file.');
+    if (!apiKey || !modelName || !baseURL) {
+        console.warn('[Agent] No OPENAI_API_KEY, OPENAI_MODEL_NAME, or OPENAI_BASE_URL found. Set it in .env file.');
+        return;
     }
+
+    // 渲染进程的 process.env 默认没有 .env，LangChain 内部会读 process.env，这里同步一份
+    process.env.OPENAI_API_KEY = apiKey;
+    process.env.OPENAI_BASE_URL = baseURL;
+    process.env.OPENAI_MODEL_NAME = modelName;
 
     const llm = new ChatOpenAI({
         modelName,
@@ -54,32 +53,17 @@ function initAgent(editorWebContents, chatWebContents) {
         configuration: baseURL ? { baseURL } : undefined,
     });
 
-    tools = createEditorTools();
-    toolMap = {};
-    for (const t of tools) {
-        toolMap[t.name] = t;
-    }
-
-    model = llm.bindTools(tools);
-
-    _setupChatIPC();
+    model = llm;
     console.log('[Agent] Initialized with model:', modelName);
 }
 
-function _setupChatIPC() {
-    ipcMain.on('chat-message', async (_event, { message }) => {
-        if (!model || !_chatWebContents || _chatWebContents.isDestroyed()) return;
-        await handleUserMessage(message);
-    });
+async function handleUserMessage(userText, callbacks = {}) {
+    if (!model) initAgent();
 
-    ipcMain.on('project-opened', (_event, { uuid }) => {
-        onProjectOpened(uuid);
-    });
-}
+    const { onThinking, onToken, onDone } = callbacks;
 
-async function handleUserMessage(userText) {
     chatManager.addUserMessage(userText);
-    sendToChat('ai-status', { status: 'thinking' });
+    if (onThinking) onThinking();
 
     try {
         const messages = [
@@ -88,109 +72,29 @@ async function handleUserMessage(userText) {
         ];
 
         let aiResponse = '';
-        const MAX_ITERATIONS = 10;
+        const stream = await model.stream(messages);
 
-        for (let i = 0; i < MAX_ITERATIONS; i++) {
-            let fullContent = '';
-            let toolCalls = [];
-
-            const stream = await model.stream(messages);
-            let chunks = [];
-
-            for await (const chunk of stream) {
-                chunks.push(chunk);
-
-                if (chunk.content) {
-                    fullContent += chunk.content;
-                    sendToChat('ai-token', { token: chunk.content });
-                }
-
-                if (chunk.tool_call_chunks?.length) {
-                    for (const tc of chunk.tool_call_chunks) {
-                        if (tc.index !== undefined) {
-                            while (toolCalls.length <= tc.index) {
-                                toolCalls.push({ id: '', name: '', args: '' });
-                            }
-                            const entry = toolCalls[tc.index];
-                            if (tc.id) entry.id = tc.id;
-                            if (tc.name) entry.name += tc.name;
-                            if (tc.args) entry.args += tc.args;
-                        }
-                    }
-                }
-            }
-
-            const aiMsg = new AIMessage({
-                content: fullContent,
-                tool_calls: toolCalls.filter(tc => tc.name).map(tc => ({
-                    id: tc.id,
-                    name: tc.name,
-                    args: safeParseJSON(tc.args),
-                })),
-            });
-            messages.push(aiMsg);
-
-            const validToolCalls = aiMsg.tool_calls?.filter(tc => tc.name) || [];
-            if (validToolCalls.length === 0) {
-                aiResponse = fullContent;
-                break;
-            }
-
-            for (const tc of validToolCalls) {
-                sendToChat('ai-tool-call', { toolName: tc.name, args: JSON.stringify(tc.args) });
-
-                let result;
-                try {
-                    const tool = toolMap[tc.name];
-                    if (!tool) throw new Error(`Unknown tool: ${tc.name}`);
-                    result = await tool.invoke(tc.args);
-                } catch (err) {
-                    result = JSON.stringify({ error: err.message });
-                }
-
-                sendToChat('ai-tool-result', { output: result });
-                messages.push(new ToolMessage({ content: result, tool_call_id: tc.id }));
+        for await (const chunk of stream) {
+            if (chunk.content) {
+                aiResponse += chunk.content;
+                if (onToken) onToken(chunk.content);
             }
         }
 
         chatManager.addAIMessage(aiResponse);
-        sendToChat('ai-done', { fullMessage: aiResponse });
+        if (onDone) onDone(aiResponse);
     } catch (err) {
         console.error('[Agent] Error:', err);
         const errorMsg = `发生错误: ${err.message}`;
         chatManager.addAIMessage(errorMsg);
-        sendToChat('ai-done', { fullMessage: errorMsg });
-    }
-}
-
-function sendToChat(channel, data) {
-    if (_chatWebContents && !_chatWebContents.isDestroyed()) {
-        _chatWebContents.send(channel, data);
-    }
-}
-
-function safeParseJSON(str) {
-    try {
-        return JSON.parse(str);
-    } catch {
-        return {};
+        if (onDone) onDone(errorMsg);
     }
 }
 
 function onProjectOpened(uuid) {
-    if (!chatManager) return;
+    if (!chatManager) chatManager = new ChatManager();
     chatManager.loadSession(uuid);
-    if (_chatWebContents && !_chatWebContents.isDestroyed()) {
-        _chatWebContents.send('chat-history-loaded', {
-            uuid,
-            history: chatManager.getSerializedHistory(),
-        });
-    }
+    return chatManager.getSerializedHistory();
 }
 
-function updateWebContents(editorWebContents, chatWebContents) {
-    setEditorWebContents(editorWebContents);
-    _chatWebContents = chatWebContents;
-}
-
-module.exports = { initAgent, updateWebContents, onProjectOpened };
+module.exports = { initAgent, handleUserMessage, onProjectOpened };
