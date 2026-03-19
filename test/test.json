@@ -115,7 +115,7 @@
             {
                 "id": "effect_0",
                 "type": "effect",
-                "resource_path": "./test/resources/sprint_effect"
+                "path": "./test/resources/sprint_effect"
             }
         ],
         "texts": [
@@ -130,7 +130,7 @@
                 "id": "transition_0",
                 "type": "transition",
                 "duration": 1000,
-                "resource_path": "./test/resources/transition_test"
+                "path": "./test/resources/transition_test"
             }
         ],
         "audios": [
