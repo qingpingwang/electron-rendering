@@ -17,12 +17,14 @@ function _filePath(uuid) {
 class ChatManager {
     constructor() {
         this.history = [];
+        this._displayHistory = [];
         this._uuid = null;
     }
 
     loadSession(uuid) {
         this._uuid = uuid;
         this.history = [];
+        this._displayHistory = [];
 
         if (!uuid) return;
 
@@ -42,34 +44,60 @@ class ChatManager {
                     msg.additional_kwargs = { timestamp: entry.timestamp };
                     this.history.push(msg);
                 }
+                // tool_call / tool_result 不进 LangChain history，只进 displayHistory
+                if (['human', 'ai', 'tool_call', 'tool_result'].includes(entry.role)) {
+                    this._displayHistory.push(entry);
+                }
             }
         } catch {
             this.history = [];
+            this._displayHistory = [];
         }
     }
 
     _persist() {
         if (!this._uuid) return;
         _ensureDir();
-        const serialized = this.history.map(msg => ({
-            role: msg._getType(),
-            content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-            timestamp: msg.additional_kwargs?.timestamp || null,
-        }));
-        fs.writeFileSync(_filePath(this._uuid), JSON.stringify(serialized, null, 2), 'utf-8');
+        fs.writeFileSync(_filePath(this._uuid), JSON.stringify(this._displayHistory, null, 2), 'utf-8');
     }
 
     addUserMessage(text) {
+        const ts = new Date().toISOString();
         const msg = new HumanMessage(text);
-        msg.additional_kwargs = { timestamp: new Date().toISOString() };
+        msg.additional_kwargs = { timestamp: ts };
         this.history.push(msg);
+
+        this._displayHistory.push({ role: 'human', content: text, timestamp: ts });
         this._persist();
     }
 
     addAIMessage(text) {
+        const ts = new Date().toISOString();
         const msg = new AIMessage(text);
-        msg.additional_kwargs = { timestamp: new Date().toISOString() };
+        msg.additional_kwargs = { timestamp: ts };
         this.history.push(msg);
+
+        this._displayHistory.push({ role: 'ai', content: text, timestamp: ts });
+        this._persist();
+    }
+
+    addToolCall(toolName, args) {
+        this._displayHistory.push({
+            role: 'tool_call',
+            toolName,
+            args: typeof args === 'string' ? args : JSON.stringify(args),
+            timestamp: new Date().toISOString(),
+        });
+        this._persist();
+    }
+
+    addToolResult(toolName, result) {
+        this._displayHistory.push({
+            role: 'tool_result',
+            toolName,
+            result: typeof result === 'string' ? result : JSON.stringify(result),
+            timestamp: new Date().toISOString(),
+        });
         this._persist();
     }
 
@@ -78,13 +106,8 @@ class ChatManager {
     }
 
     getSerializedHistory() {
-        return this.history.map(msg => ({
-            role: msg._getType(),
-            content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-            timestamp: msg.additional_kwargs?.timestamp || null,
-        }));
+        return [...this._displayHistory];
     }
-
 }
 
 module.exports = ChatManager;

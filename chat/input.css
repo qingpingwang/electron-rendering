@@ -112,7 +112,7 @@
     .message-content h2 { font-size: 1.15em; }
     .message-content h3 { font-size: 1.05em; }
 
-    /* Tool status chip */
+    /* Tool status chip (legacy, kept for compat) */
     .tool-chip {
         display: inline-flex;
         align-items: center;
@@ -127,6 +127,86 @@
     .tool-chip.done {
         border-color: #22543d;
         color: #68d391;
+    }
+
+    /* Tool call block */
+    .tool-block {
+        background: #131726;
+        border: 1px solid #1e2340;
+        border-radius: 10px;
+        font-size: 12px;
+        overflow: hidden;
+        margin: 4px 0;
+        max-width: 88%;
+    }
+    .tool-block.done {
+        border-color: rgba(34, 84, 61, 0.6);
+    }
+    .tool-block.error {
+        border-color: rgba(127, 29, 29, 0.6);
+    }
+    .tool-block-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 12px;
+        color: #8b93b8;
+        cursor: pointer;
+        user-select: none;
+    }
+    .tool-block-header:hover {
+        background: rgba(255, 255, 255, 0.02);
+    }
+    .tool-block.done .tool-block-header {
+        color: #68d391;
+    }
+    .tool-block.error .tool-block-header {
+        color: #f87171;
+    }
+    .tool-block-name {
+        font-weight: 600;
+        font-family: "SF Mono", Monaco, Menlo, monospace;
+    }
+    .tool-block-toggle {
+        margin-left: auto;
+        font-size: 16px;
+        transition: transform 0.2s;
+        opacity: 0.5;
+    }
+    .tool-block.expanded .tool-block-toggle {
+        transform: rotate(180deg);
+    }
+    .tool-block-body {
+        display: none;
+        border-top: 1px solid #1e2340;
+    }
+    .tool-block.expanded .tool-block-body {
+        display: block;
+    }
+    .tool-block-section {
+        padding: 8px 12px;
+    }
+    .tool-block-section + .tool-block-section {
+        border-top: 1px solid rgba(30, 35, 64, 0.6);
+    }
+    .tool-block-label {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #555d80;
+        margin-bottom: 4px;
+    }
+    .tool-block-code {
+        background: rgba(0, 0, 0, 0.25);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-family: "SF Mono", Monaco, Menlo, monospace;
+        font-size: 11px;
+        color: #94a3b8;
+        white-space: pre-wrap;
+        word-break: break-all;
+        max-height: 200px;
+        overflow-y: auto;
     }
 
     /* Typing indicator dots */

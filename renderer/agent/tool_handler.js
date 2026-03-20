@@ -2,7 +2,9 @@ const { ipcRenderer } = require('electron');
 const player = require('../state');
 
 function initToolHandler() {
-    ipcRenderer.on('tool-call', (_event, { id, action, params }) => {
+    ipcRenderer.on('tool-call', async (_event, { id, action, params }) => {
+        // 等待 load-project / loadFromConfig 完成，否则 root.loaded 仍为 false
+        await player.whenProjectOpsIdle();
         let data;
         try {
             const result = executeAction(action, params);

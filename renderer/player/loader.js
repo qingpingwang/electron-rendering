@@ -5,66 +5,68 @@ const { stop } = require('./controls');
 const { log, formatTime } = require('../utils/logger');
 
 async function loadFromConfig(config, protocolPath = '') {
-    document.getElementById('file-info').textContent = '加载中...';
-
-    try {
-        stop();
-
-        const jsonStr = JSON.stringify(config);
-        log(`加载配置: ${config.tracks?.length || 0} 轨道`, 'info');
-
-        const t0 = performance.now();
-        const result = player.root.load(jsonStr, protocolPath);
-        if (!result.success) {
-            throw new Error(`C++ 加载失败: ${result.error}`);
-        }
-        const t1 = performance.now();
-
-        player.video.load(player.root);
-
-        const groups = player.root.getGroups();
-        if (player.timeline) player.timeline.load(config, groups);
-
-        document.getElementById('file-info').textContent = '已加载';
-
-        log(`✓ 加载成功 (${(t1-t0).toFixed(1)}ms) | ID: ${player.root.id || '-'} | ${player.video.width}×${player.video.height} | ${player.video.frameRate.toFixed(2)}fps | ${formatTime(player.video.duration)}`, 'ok');
-        log(`轨道组: ${groups.length}`, 'info');
-        groups.forEach((g, gi) => {
-            log(`  [${gi}] "${g.id}" | ${g.type}`, 'info');
-            g.layers.forEach((layer, i) => {
-                let info = `    [${i}] "${layer.name}" | ${formatTime(layer.startTime)}~${formatTime(layer.endTime)}`;
-                if (g.type === 'text') info += ` | text="${layer.text}"`;
-                if (g.type === 'video' && layer.videoFrameRate) info += ` | ${layer.videoFrameRate.toFixed(1)}fps`;
-                log(info, 'info');
-            });
-        });
+    return player.scheduleProjectOp(async () => {
+        document.getElementById('file-info').textContent = '加载中...';
 
         try {
-            const audioInfos = player.root.getAudioInfos();
-            const infoKeys = Object.keys(audioInfos);
-            log(`音频信息: ${infoKeys.length} 条 [${infoKeys.join(', ')}]`, 'info');
-            for (const [k, v] of Object.entries(audioInfos)) {
-                log(`  ${k}: vol=${v.volume} path=${v.path} type=${v.layerType}`, 'info');
+            stop();
+
+            const jsonStr = JSON.stringify(config);
+            log(`加载配置: ${config.tracks?.length || 0} 轨道`, 'info');
+
+            const t0 = performance.now();
+            const result = player.root.load(jsonStr, protocolPath);
+            if (!result.success) {
+                throw new Error(`C++ 加载失败: ${result.error}`);
+            }
+            const t1 = performance.now();
+
+            player.video.load(player.root);
+
+            const groups = player.root.getGroups();
+            if (player.timeline) player.timeline.load(config, groups);
+
+            document.getElementById('file-info').textContent = '已加载';
+
+            log(`✓ 加载成功 (${(t1-t0).toFixed(1)}ms) | ID: ${player.root.id || '-'} | ${player.video.width}×${player.video.height} | ${player.video.frameRate.toFixed(2)}fps | ${formatTime(player.video.duration)}`, 'ok');
+            log(`轨道组: ${groups.length}`, 'info');
+            groups.forEach((g, gi) => {
+                log(`  [${gi}] "${g.id}" | ${g.type}`, 'info');
+                g.layers.forEach((layer, i) => {
+                    let info = `    [${i}] "${layer.name}" | ${formatTime(layer.startTime)}~${formatTime(layer.endTime)}`;
+                    if (g.type === 'text') info += ` | text="${layer.text}"`;
+                    if (g.type === 'video' && layer.videoFrameRate) info += ` | ${layer.videoFrameRate.toFixed(1)}fps`;
+                    log(info, 'info');
+                });
+            });
+
+            try {
+                const audioInfos = player.root.getAudioInfos();
+                const infoKeys = Object.keys(audioInfos);
+                log(`音频信息: ${infoKeys.length} 条 [${infoKeys.join(', ')}]`, 'info');
+                for (const [k, v] of Object.entries(audioInfos)) {
+                    log(`  ${k}: vol=${v.volume} path=${v.path} type=${v.layerType}`, 'info');
+                }
+
+                const audioCount = await player.audio.load(player.root);
+                log(`✓ 音频解码: ${audioCount}/${infoKeys.length} 条成功 | ctx=${player.audio.ctx.state}`, audioCount > 0 ? 'ok' : 'warn');
+
+                for (const [id, track] of player.audio.tracks) {
+                    log(`  ${id}: ${track.buffer.duration.toFixed(2)}s ${track.buffer.numberOfChannels}ch ${track.buffer.sampleRate}Hz`, 'info');
+                }
+            } catch (e) {
+                log(`⚠ 音频加载失败: ${e.message}`, 'warn');
             }
 
-            const audioCount = await player.audio.load(player.root);
-            log(`✓ 音频解码: ${audioCount}/${infoKeys.length} 条成功 | ctx=${player.audio.ctx.state}`, audioCount > 0 ? 'ok' : 'warn');
+            player.video.render(0);
+            updateUI();
 
-            for (const [id, track] of player.audio.tracks) {
-                log(`  ${id}: ${track.buffer.duration.toFixed(2)}s ${track.buffer.numberOfChannels}ch ${track.buffer.sampleRate}Hz`, 'info');
-            }
         } catch (e) {
-            log(`⚠ 音频加载失败: ${e.message}`, 'warn');
+            document.getElementById('file-info').textContent = '错误';
+            log(`✗ ${e.message}`, 'err');
+            console.error(e);
         }
-
-        player.video.render(0);
-        updateUI();
-
-    } catch (e) {
-        document.getElementById('file-info').textContent = '错误';
-        log(`✗ ${e.message}`, 'err');
-        console.error(e);
-    }
+    });
 }
 
 async function loadVideo() {

@@ -1,12 +1,14 @@
 const { ChatOpenAI } = require('@langchain/openai');
-const { SystemMessage } = require('@langchain/core/messages');
+const { AIMessageChunk, ToolMessage } = require('@langchain/core/messages');
+const { createAgent } = require('langchain');
 const fs = require('fs');
 const path = require('path');
 
+const { createEditorTools } = require('./tools');
 const { SYSTEM_PROMPT } = require('./prompts');
 const ChatManager = require('./chat_manager');
 
-let model = null;
+let agent = null;
 let chatManager = null;
 
 function getConfig() {
@@ -32,50 +34,98 @@ function initAgent() {
 
     const config = getConfig();
     const apiKey = config.OPENAI_API_KEY || process.env.OPENAI_API_KEY || undefined;
-    const baseURL = config.OPENAI_BASE_URL || process.env.OPENAI_BASE_URL || undefined;
+    let baseURL = config.OPENAI_BASE_URL || process.env.OPENAI_BASE_URL || undefined;
     const modelName = config.OPENAI_MODEL_NAME || process.env.OPENAI_MODEL_NAME || undefined;
 
     if (!apiKey || !modelName || !baseURL) {
-        console.warn('[Agent] No OPENAI_API_KEY, OPENAI_MODEL_NAME, or OPENAI_BASE_URL found. Set it in .env file.');
+        console.warn('[Agent] Missing OPENAI_API_KEY / MODEL_NAME / BASE_URL in .env');
         return;
     }
 
-    // 渲染进程的 process.env 默认没有 .env，LangChain 内部会读 process.env，这里同步一份
+    if (baseURL) baseURL = baseURL.replace(/\/chat\/completions\/?$/i, '').replace(/\/$/, '');
+
     process.env.OPENAI_API_KEY = apiKey;
     process.env.OPENAI_BASE_URL = baseURL;
-    process.env.OPENAI_MODEL_NAME = modelName;
 
     const llm = new ChatOpenAI({
         modelName,
         temperature: 0.7,
-        streaming: true,
         openAIApiKey: apiKey,
         configuration: baseURL ? { baseURL } : undefined,
     });
 
-    model = llm;
+    const tools = createEditorTools();
+
+    agent = createAgent({
+        model: llm,
+        tools,
+        systemPrompt: SYSTEM_PROMPT,
+    });
+
     console.log('[Agent] Initialized with model:', modelName);
 }
 
 async function handleUserMessage(userText, callbacks = {}) {
-    if (!model) initAgent();
+    if (!agent) initAgent();
+    if (!agent) return;
 
-    const { onThinking, onToken, onDone } = callbacks;
+    const { onThinking, onToken, onToolCall, onToolResult, onDone } = callbacks;
 
     chatManager.addUserMessage(userText);
     if (onThinking) onThinking();
 
     try {
-        const messages = [
-            new SystemMessage(SYSTEM_PROMPT),
-            ...chatManager.getHistory(),
-        ];
+        const input = { messages: chatManager.getHistory() };
+        const stream = await agent.stream(input, { streamMode: 'messages' });
 
+        let currentMsgId = null;
+        let currentRole = null;
         let aiResponse = '';
-        const stream = await model.stream(messages);
+        let toolCallBuf = {};
 
-        for await (const chunk of stream) {
+        for await (const [chunk, metadata] of stream) {
+            if (chunk instanceof ToolMessage) {
+                if (onToolResult) onToolResult(chunk.name, chunk.content);
+                chatManager.addToolResult(chunk.name, chunk.content);
+                continue;
+            }
+
+            if (!(chunk instanceof AIMessageChunk)) continue;
+
+            // 新消息开始
+            if (chunk.id !== currentMsgId) {
+                currentMsgId = chunk.id;
+                currentRole = null;
+                toolCallBuf = {};
+            }
+
+            // tool call chunks
+            if (chunk.tool_call_chunks?.length) {
+                currentRole = 'tool_call';
+                for (const tc of chunk.tool_call_chunks) {
+                    if (tc.index === undefined) continue;
+                    if (!toolCallBuf[tc.index]) {
+                        toolCallBuf[tc.index] = { id: '', name: '', args: '' };
+                    }
+                    const entry = toolCallBuf[tc.index];
+                    if (tc.id) entry.id = tc.id;
+                    if (tc.name) entry.name += tc.name;
+                    if (tc.args) entry.args += tc.args;
+
+                    // 名字刚收齐时通知前端
+                    if (tc.name && entry.name) {
+                        let args = {};
+                        try { args = JSON.parse(entry.args); } catch {}
+                        if (onToolCall) onToolCall(entry.name, args);
+                        chatManager.addToolCall(entry.name, args);
+                    }
+                }
+                continue;
+            }
+
+            // 普通文本 token
             if (chunk.content) {
+                currentRole = 'ai';
                 aiResponse += chunk.content;
                 if (onToken) onToken(chunk.content);
             }

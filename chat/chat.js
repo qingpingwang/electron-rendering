@@ -169,30 +169,150 @@ function removeThinking() {
     document.getElementById('thinking')?.remove();
 }
 
-function showToolCall(toolName) {
-    removeThinking();
+function _formatArgs(args) {
+    if (!args || (typeof args === 'object' && Object.keys(args).length === 0)) return '{}';
+    if (typeof args === 'string') {
+        try { return JSON.stringify(JSON.parse(args), null, 2); } catch { return args; }
+    }
+    return JSON.stringify(args, null, 2);
+}
+
+function _formatResult(result) {
+    if (!result) return '';
+    if (typeof result === 'string') {
+        try { return JSON.stringify(JSON.parse(result), null, 2); } catch { return result; }
+    }
+    return JSON.stringify(result, null, 2);
+}
+
+function _createToolBlock(toolName, args, opts = {}) {
+    const { done = false, result = null, error = false } = opts;
     const el = document.createElement('div');
-    el.className = 'flex items-center gap-2 px-10 animate-[fade-in_0.2s_ease]';
-    el.innerHTML = `
-        <div class="tool-chip">
-            <div class="tool-spinner"></div>
-            <span>正在执行: ${escapeHtml(toolName)}</span>
+    el.className = 'flex px-10 animate-[fade-in_0.2s_ease]';
+
+    const stateClass = error ? 'error' : done ? 'done' : '';
+    const iconName = error ? 'error' : done ? 'check_circle' : '';
+    const iconColor = error ? 'text-red-400' : 'text-green-400';
+
+    const spinnerHtml = !done && !error
+        ? '<div class="tool-spinner"></div>'
+        : `<span class="material-symbols-rounded text-sm ${iconColor}">${iconName}</span>`;
+
+    let bodyHtml = `
+        <div class="tool-block-section">
+            <div class="tool-block-label">参数</div>
+            <div class="tool-block-code">${escapeHtml(_formatArgs(args))}</div>
         </div>
     `;
+    if (result !== null) {
+        bodyHtml += `
+            <div class="tool-block-section">
+                <div class="tool-block-label">结果</div>
+                <div class="tool-block-code">${escapeHtml(_formatResult(result))}</div>
+            </div>
+        `;
+    }
+
+    el.innerHTML = `
+        <div class="tool-block ${stateClass}">
+            <div class="tool-block-header">
+                ${spinnerHtml}
+                <span class="tool-block-name">${escapeHtml(toolName)}</span>
+                <span class="material-symbols-rounded tool-block-toggle">expand_more</span>
+            </div>
+            <div class="tool-block-body">${bodyHtml}</div>
+        </div>
+    `;
+
+    const block = el.querySelector('.tool-block');
+    block.querySelector('.tool-block-header').addEventListener('click', () => {
+        block.classList.toggle('expanded');
+    });
+
     messagesEl.appendChild(el);
+    scrollToBottom();
+    return block;
+}
+
+function showToolCall(toolName, args) {
+    removeThinking();
+    _createToolBlock(toolName, args);
+}
+
+function showToolResult(toolName, result) {
+    const pending = messagesEl.querySelectorAll('.tool-block:not(.done):not(.error)');
+    if (pending.length > 0) {
+        const block = pending[pending.length - 1];
+
+        let isError = false;
+        try {
+            const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+            isError = parsed && parsed.error;
+        } catch {}
+
+        block.classList.add(isError ? 'error' : 'done');
+
+        const header = block.querySelector('.tool-block-header');
+        const spinner = header.querySelector('.tool-spinner');
+        if (spinner) {
+            const icon = document.createElement('span');
+            icon.className = `material-symbols-rounded text-sm ${isError ? 'text-red-400' : 'text-green-400'}`;
+            icon.textContent = isError ? 'error' : 'check_circle';
+            spinner.replaceWith(icon);
+        }
+
+        const body = block.querySelector('.tool-block-body');
+        const section = document.createElement('div');
+        section.className = 'tool-block-section';
+        section.innerHTML = `
+            <div class="tool-block-label">结果</div>
+            <div class="tool-block-code">${escapeHtml(_formatResult(result))}</div>
+        `;
+        body.appendChild(section);
+    }
     scrollToBottom();
 }
 
-function showToolResult() {
-    const pending = messagesEl.querySelectorAll('.tool-chip:not(.done)');
-    if (pending.length > 0) {
-        const chip = pending[pending.length - 1];
-        chip.classList.add('done');
-        chip.querySelector('.tool-spinner')?.remove();
-        const icon = document.createElement('span');
-        icon.className = 'material-symbols-rounded text-sm text-green-400';
-        icon.textContent = 'check_circle';
-        chip.prepend(icon);
+// ---- History tool rendering ----
+
+let _pendingHistoryToolBlock = null;
+
+function addHistoryToolCall(toolName, args) {
+    _pendingHistoryToolBlock = _createToolBlock(toolName, args, { done: false });
+    _pendingHistoryToolBlock.classList.remove('animate-[fade-in_0.2s_ease]');
+}
+
+function addHistoryToolResult(toolName, result) {
+    if (_pendingHistoryToolBlock) {
+        let isError = false;
+        try {
+            const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+            isError = parsed && parsed.error;
+        } catch {}
+
+        _pendingHistoryToolBlock.classList.add(isError ? 'error' : 'done');
+
+        const header = _pendingHistoryToolBlock.querySelector('.tool-block-header');
+        const spinner = header.querySelector('.tool-spinner');
+        if (spinner) {
+            const icon = document.createElement('span');
+            icon.className = `material-symbols-rounded text-sm ${isError ? 'text-red-400' : 'text-green-400'}`;
+            icon.textContent = isError ? 'error' : 'check_circle';
+            spinner.replaceWith(icon);
+        }
+
+        if (result) {
+            const body = _pendingHistoryToolBlock.querySelector('.tool-block-body');
+            const section = document.createElement('div');
+            section.className = 'tool-block-section';
+            section.innerHTML = `
+                <div class="tool-block-label">结果</div>
+                <div class="tool-block-code">${escapeHtml(_formatResult(result))}</div>
+            `;
+            body.appendChild(section);
+        }
+
+        _pendingHistoryToolBlock = null;
     }
 }
 
@@ -202,6 +322,7 @@ function sendMessage() {
     const text = inputEl.value.trim();
     if (!text || isStreaming) return;
 
+    isStreaming = true;
     addUserMessage(text);
     inputEl.value = '';
     updateSendButton();
@@ -209,6 +330,8 @@ function sendMessage() {
     agentClient.sendMessage(text, {
         onThinking: showThinking,
         onToken: appendToken,
+        onToolCall: showToolCall,
+        onToolResult: showToolResult,
         onDone: finalizeMessage,
     });
 }
@@ -229,6 +352,10 @@ agentClient.onHistoryLoaded((history) => {
                 addUserMessage(msg.content, msg.timestamp);
             } else if (msg.role === 'ai') {
                 addAIBubble(msg.content, msg.timestamp);
+            } else if (msg.role === 'tool_call') {
+                addHistoryToolCall(msg.toolName, msg.args);
+            } else if (msg.role === 'tool_result') {
+                addHistoryToolResult(msg.toolName, msg.result);
             }
         }
     }

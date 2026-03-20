@@ -1,144 +1,188 @@
 {
-    "canvas_config": {
-        "width": 720,
-        "height": 1280,
-        "ratio": "16:9"
-    },
-    "duration": 6000,
-    "fps": 30,
-    "id": "test",
-    "tracks": [
-        {
-            "id": "track_video_0",
-            "type": "video",
-            "segments": [
-                {
-                    "id": "segment_0",
-                    "material_id": "material_video_0",
-                    "target_timerange": {
-                        "start": 0,
-                        "duration": 5000
-                    },
-                    "source_timerange": {
-                        "start": 0,
-                        "duration": 5000
-                    },
-                    "extra_material_refs": [
-                        "transition_0"
-                    ],
-                    "clip": {
-                        "alpha": 0.8,
-                        "flip": {
-                            "horizontal": false,
-                            "vertical": false
-                        },
-                        "rotation": 45.0,
-                        "scale": {
-                            "x": 1.0,
-                            "y": 1.0
-                        },
-                        "transform": {
-                            "x": 0.0,
-                            "y": 0.0
-                        }
-                    },
-                    "volume": 0.5
-                },
-                {
-                    "id": "segment_1",
-                    "material_id": "material_video_0",
-                    "target_timerange": {
-                        "start": 5000,
-                        "duration": 1000
-                    },
-                    "source_timerange": {
-                        "start": 0,
-                        "duration": 1000
-                    },
-                    "extra_material_refs": [
-                        "effect_0"
-                    ],
-                    "volume": 0
-                }
-            ]
-        },
-        {
-            "id": "track_text_0",
-            "type": "text",
-            "segments": [
-                {
-                    "id": "segment_2",
-                    "material_id": "material_text_0",
-                    "target_timerange": {
-                        "start": 0,
-                        "duration": 5000
-                    },
-                    "source_timerange": {
-                        "start": 0,
-                        "duration": 5000
-                    },
-                    "extra_material_refs": []
-                }
-            ]
-        },
-        {
-            "id": "track_audio_0",
-            "type": "audio",
-            "segments": [
-                {
-                    "id": "segment_3",
-                    "material_id": "material_audio_0",
-                    "target_timerange": {
-                        "start": 0,
-                        "duration": 5000
-                    },
-                    "source_timerange": {
-                        "start": 0,
-                        "duration": 5000
-                    },
-                    "volume": 0.5
-                }
-            ]
-        }
+  "canvas_config": {
+    "height": 1280,
+    "ratio": "16:9",
+    "width": 720
+  },
+  "duration": 6000,
+  "fps": 30.0,
+  "id": "test",
+  "materials": {
+    "audios": [
+      {
+        "id": "material_audio_0",
+        "name": "test.wav",
+        "path": "./test/test.wav",
+        "type": ""
+      }
     ],
-    "materials": {
-        "videos": [
-            {
-                "id": "material_video_0",
-                "path": "./test/test.mp4",
-                "width": 1088,
-                "height": 1920,
-                "duration": 5000
+    "effects": [
+      {
+        "id": "effect_0",
+        "name": "",
+        "path": "./test/resources/sprint_effect",
+        "type": "effect"
+      }
+    ],
+    "texts": [
+      {
+        "alignment": 1,
+        "content": "{\"styles\":[{\"fill\":{\"content\":{\"solid\":{\"alpha\":1.0,\"color\":[0.0,0.0,0.0]}}},\"font\":{\"id\":\"\",\"path\":\"/Applications/VideoFusion-macOS.app/Contents/Resources/Font/SystemFont/zh-hans.ttf\"},\"letter_spacing\":0.0,\"line_height\":1.0,\"range\":[0,2],\"shadows\":[{\"alpha\":0.8999999761581421,\"angle\":-45.0,\"content\":{\"solid\":{\"alpha\":0.8999999761581421,\"color\":[0.0,0.0,0.0]}},\"diffuse\":0.0,\"distance\":27.781448364257813}],\"size\":150.0,\"strokes\":[{\"content\":{\"solid\":{\"alpha\":1.0,\"color\":[1.0,1.0,1.0]}},\"width\":0.07999999821186066}]},{\"fill\":{\"content\":{\"solid\":{\"alpha\":1.0,\"color\":[0.0,0.0,0.0]}}},\"font\":{\"id\":\"\",\"path\":\"/Applications/VideoFusion-macOS.app/Contents/Resources/Font/SystemFont/zh-hans.ttf\"},\"letter_spacing\":0.0,\"line_height\":1.0,\"range\":[2,4],\"shadows\":[{\"alpha\":0.8999999761581421,\"angle\":-45.0,\"content\":{\"solid\":{\"alpha\":0.8999999761581421,\"color\":[0.0,0.0,0.0]}},\"diffuse\":0.054999999701976776,\"distance\":74.99698638916016}],\"size\":150.0,\"strokes\":[{\"content\":{\"solid\":{\"alpha\":1.0,\"color\":[1.0,1.0,1.0]}},\"width\":0.07999999821186066}]}],\"text\":\"默认文本\"}",
+        "id": "material_text_0"
+      }
+    ],
+    "transitions": [
+      {
+        "duration": 1000,
+        "id": "transition_0",
+        "name": "",
+        "path": "./test/resources/transition_test",
+        "type": "transition"
+      }
+    ],
+    "videos": [
+      {
+        "duration": 5041,
+        "height": 1920,
+        "id": "material_video_0",
+        "name": "",
+        "path": "./test/test.mp4",
+        "type": "",
+        "width": 1088
+      }
+    ]
+  },
+  "tracks": [
+    {
+      "id": "track_video_0",
+      "muted": false,
+      "segments": [
+        {
+          "clip": {
+            "alpha": 0.800000011920929,
+            "flip": {
+              "horizontal": false,
+              "vertical": false
+            },
+            "rotation": 45.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "transform": {
+              "x": 0.0,
+              "y": 0.0
             }
-        ],
-        "effects": [
-            {
-                "id": "effect_0",
-                "type": "effect",
-                "path": "./test/resources/sprint_effect"
+          },
+          "extra_material_refs": [
+            "transition_0"
+          ],
+          "id": "segment_0",
+          "material_id": "material_video_0",
+          "muted": false,
+          "source_timerange": {
+            "duration": 5000,
+            "start": 0
+          },
+          "target_timerange": {
+            "duration": 5000,
+            "start": 0
+          },
+          "visible": true,
+          "volume": 0.5
+        },
+        {
+          "clip": {
+            "alpha": 1.0,
+            "flip": {
+              "horizontal": false,
+              "vertical": false
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "transform": {
+              "x": 0.0,
+              "y": 0.0
             }
-        ],
-        "texts": [
-            {
-                "alignment": 1,
-                "content": "{\"styles\":[{\"fill\":{\"content\":{\"solid\":{\"color\":[0,0,0]}}},\"range\":[0,2],\"shadows\":[{\"diffuse\":0,\"angle\":-45,\"content\":{\"solid\":{\"color\":[0,0,0]}},\"distance\":27.781448364257812,\"alpha\":0.899999976158142}],\"strokes\":[{\"width\":0.079999998211860657,\"content\":{\"solid\":{\"color\":[1,1,1]}}}],\"useLetterColor\":true,\"size\":150,\"font\":{\"path\":\"/Applications/VideoFusion-macOS.app/Contents/Resources/Font/SystemFont/zh-hans.ttf\",\"id\":\"\"}},{\"fill\":{\"content\":{\"solid\":{\"color\":[0,0,0]}}},\"range\":[2,4],\"shadows\":[{\"diffuse\":0.054999999701976776,\"angle\":-45,\"content\":{\"solid\":{\"color\":[0,0,0]}},\"distance\":74.996986389160156,\"alpha\":0.899999976158142}],\"strokes\":[{\"width\":0.079999998211860657,\"content\":{\"solid\":{\"color\":[1,1,1]}}}],\"useLetterColor\":true,\"size\":150,\"font\":{\"path\":\"/Applications/VideoFusion-macOS.app/Contents/Resources/Font/SystemFont/zh-hans.ttf\",\"id\":\"\"}}],\"text\":\"默认文本\"}",
-                "id": "material_text_0"
+          },
+          "extra_material_refs": [
+            "effect_0"
+          ],
+          "id": "segment_1",
+          "material_id": "material_video_0",
+          "muted": false,
+          "source_timerange": {
+            "duration": 1000,
+            "start": 0
+          },
+          "target_timerange": {
+            "duration": 1000,
+            "start": 5000
+          },
+          "visible": true,
+          "volume": 0.0
+        }
+      ],
+      "type": "video",
+      "visible": true
+    },
+    {
+      "id": "track_text_0",
+      "muted": false,
+      "segments": [
+        {
+          "clip": {
+            "alpha": 1.0,
+            "flip": {
+              "horizontal": false,
+              "vertical": false
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "transform": {
+              "x": 0.0,
+              "y": 0.0
             }
-        ],
-        "transitions": [
-            {
-                "id": "transition_0",
-                "type": "transition",
-                "duration": 1000,
-                "path": "./test/resources/transition_test"
-            }
-        ],
-        "audios": [
-            {
-                "id": "material_audio_0",
-                "name": "test.wav",
-                "path": "./test/test.wav"
-            }
-        ]
+          },
+          "id": "segment_2",
+          "material_id": "material_text_0",
+          "target_timerange": {
+            "duration": 5000,
+            "start": 0
+          },
+          "visible": true
+        }
+      ],
+      "type": "text",
+      "visible": true
+    },
+    {
+      "id": "track_audio_0",
+      "muted": false,
+      "segments": [
+        {
+          "id": "segment_3",
+          "material_id": "material_audio_0",
+          "muted_": false,
+          "source_timerange": {
+            "duration": 5000,
+            "start": 0
+          },
+          "target_timerange": {
+            "duration": 5000,
+            "start": 0
+          },
+          "volume": 0.5
+        }
+      ],
+      "type": "audio",
+      "visible": true
     }
+  ]
 }
