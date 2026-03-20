@@ -99,7 +99,7 @@ function updateText({ layerName, text }) {
     }
     const oldText = layer.text;
     layer.text = text;
-    refreshCanvas();
+    refreshAfterLayerMutation();
     return { layerName, oldText, newText: text };
 }
 
@@ -112,7 +112,7 @@ function setLayerProperty({ layerName, property, value }) {
     }
 
     layer[property] = value;
-    refreshCanvas();
+    refreshAfterLayerMutation();
     return { layerName, property, oldValue, newValue: value };
 }
 
@@ -130,6 +130,13 @@ function setCurrentTime({ timeMs }) {
 function refreshCanvas() {
     if (player.video) {
         player.video.render(player.video.currentTime, true, false);
+    }
+}
+
+function refreshAfterLayerMutation() {
+    refreshCanvas();
+    if (typeof player.notifyUiAfterLayerChange === 'function') {
+        player.notifyUiAfterLayerChange();
     }
 }
 

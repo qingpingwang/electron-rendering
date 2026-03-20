@@ -92,6 +92,11 @@ class Timeline {
         this._updatePlayhead();
     }
 
+    /** 时间轴 DOM 与图层数据同步（如工具/API 修改了 layer 后调用） */
+    refresh() {
+        this._render();
+    }
+
     setZoom(pxPerMs) {
         const fit = this._calcFitScale();
         this._pxPerMs = Math.max(fit * ZOOM_MIN, Math.min(fit * ZOOM_MAX, pxPerMs));
@@ -405,7 +410,20 @@ class Timeline {
                 } else {
                     const segName = document.createElement('span');
                     segName.className = 'tl-seg-name';
-                    segName.textContent = seg.name;
+                    const layer = track.group?.layers?.[segIdx];
+                    let label = seg.name;
+                    if (layer) {
+                        if (track.type === 'text') {
+                            const t = (layer.text || '').replace(/\s+/g, ' ').trim();
+                            label = t
+                                ? (t.length > 28 ? `${t.slice(0, 28)}…` : t)
+                                : (layer.name || seg.name);
+                        } else if (layer.name) {
+                            label = layer.name;
+                        }
+                    }
+                    segName.textContent = label;
+                    segEl.title = `${label}\n${formatTime(seg.start)} ~ ${formatTime(seg.start + seg.duration)}`;
                     segEl.appendChild(segName);
                 }
 

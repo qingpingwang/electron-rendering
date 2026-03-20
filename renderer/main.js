@@ -58,6 +58,14 @@ function init() {
     };
     player.timeline.onSelectLayer = (info) => inspector.update(info);
 
+    /** 工具 / 脚本直接改 layer 后同步时间轴与检查器 */
+    player.notifyUiAfterLayerChange = () => {
+        updateUI();
+        if (player.timeline) player.timeline.refresh();
+        const info = inspector.getCurrentInfo();
+        if (info) inspector.update(info);
+    };
+
     document.getElementById('btn-play').onclick = play;
 
     initRightPanel();

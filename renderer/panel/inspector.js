@@ -56,6 +56,11 @@ class Inspector {
         this.el.innerHTML = '<div class="insp-empty">未选择图层</div>';
     }
 
+    /** 当前选中的图层上下文（供外部在数据被工具等修改后刷新面板） */
+    getCurrentInfo() {
+        return this._info;
+    }
+
     _buildSRT(layer) {
         this.el.appendChild(PC.section('画面变换'));
 
