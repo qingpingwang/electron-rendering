@@ -333,6 +333,8 @@ function sendMessage() {
         onToolCall: showToolCall,
         onToolResult: showToolResult,
         onDone: finalizeMessage,
+    }, {
+        threadId: currentProjectUUID,
     });
 }
 
@@ -363,10 +365,21 @@ agentClient.onHistoryLoaded((history) => {
     scrollToBottom();
 });
 
-window.__onProjectOpened = function (uuid) {
+window.__onProjectOpened = async function (uuid, options = {}) {
     currentProjectUUID = uuid;
-    agentClient.notifyProjectOpened(uuid);
-    if (mediaLib) mediaLib.setProject(uuid);
+    await agentClient.notifyProjectOpened(uuid, options);
+    if (mediaLib) await mediaLib.setProject(uuid);
+};
+
+window.__deleteProjectChatContext = function (uuid) {
+    return agentClient.deleteProjectSession(uuid);
+};
+
+window.__agentApi = {
+    initThread: (threadId) => agentClient.initThread(threadId),
+    getHistory: (threadId) => agentClient.getHistory(threadId),
+    deleteThread: (threadId) => agentClient.deleteThread(threadId),
+    getResources: (threadId) => agentClient.getResources(threadId),
 };
 
 // ---- Event bindings ----

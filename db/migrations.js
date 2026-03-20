@@ -81,4 +81,30 @@ module.exports = [
             }
         },
     },
+    {
+        version: 4,
+        name: 'create_chat_messages',
+        up(db) {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS chat_messages (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_uuid TEXT NOT NULL,
+                    role         TEXT NOT NULL CHECK(role IN ('human','ai','tool_call','tool_result')),
+                    content      TEXT NOT NULL,
+                    tool_name    TEXT,
+                    timestamp    TEXT NOT NULL,
+                    FOREIGN KEY (project_uuid) REFERENCES projects(uuid) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_chat_messages_project_id
+                ON chat_messages(project_uuid, id);
+            `);
+        },
+    },
+    {
+        version: 5,
+        name: 'drop_chat_messages_use_langgraph_checkpoints',
+        up(db) {
+            db.exec('DROP TABLE IF EXISTS chat_messages;');
+        },
+    },
 ];

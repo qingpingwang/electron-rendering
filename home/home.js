@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { ipcRenderer } = require('electron');
+const { dialog, BrowserWindow } = require('@electron/remote');
 const toast = require('../renderer/utils/toast');
 const db = require('../db');
 
@@ -111,7 +112,58 @@ function createProject(width, height) {
         duration: config.duration,
     });
 
-    ipcRenderer.send('open-project', { uuid, configPath });
+    ipcRenderer.send('open-project', { uuid, configPath, isNew: true });
+}
+
+async function openProjectFromFile() {
+    try {
+        const win = BrowserWindow.getFocusedWindow();
+        const result = await dialog.showOpenDialog(win || undefined, {
+            title: '选择项目 JSON 文件',
+            properties: ['openFile'],
+            filters: [
+                { name: 'JSON 文件', extensions: ['json'] },
+                { name: '所有文件', extensions: ['*'] },
+            ],
+        });
+        if (result.canceled || !result.filePaths?.length) return;
+
+        const absPath = path.resolve(result.filePaths[0]);
+        let config;
+        try {
+            const raw = fs.readFileSync(absPath, 'utf-8');
+            config = JSON.parse(raw);
+        } catch (e) {
+            toast.show(`JSON 解析失败: ${e.message}`, 'error');
+            return;
+        }
+
+        if (!config || typeof config !== 'object') {
+            toast.show('配置文件格式无效', 'error');
+            return;
+        }
+
+        const existing = db.projects.list().find((p) => path.resolve(ROOT_DIR, p.configPath) === absPath);
+        if (existing) {
+            openProject(existing);
+            return;
+        }
+
+        const uuid = crypto.randomUUID();
+        const name = path.basename(absPath, path.extname(absPath)) || '导入项目';
+        const duration = Number(config.duration) > 0 ? Number(config.duration) : 5000;
+
+        db.projects.create({
+            uuid,
+            configPath: absPath,
+            name,
+            duration,
+        });
+
+        ipcRenderer.send('open-project', { uuid, configPath: absPath, isNew: true });
+    } catch (e) {
+        toast.show(`打开失败: ${e.message}`, 'error');
+    }
 }
 
 // ---- Helpers ----
@@ -154,4 +206,8 @@ document.getElementById('home-create').addEventListener('click', () => {
     const h = parseInt(document.getElementById('home-h').value, 10);
     if (!w || !h || w < 1 || h < 1) return;
     createProject(w, h);
+});
+
+document.getElementById('home-open-file').addEventListener('click', () => {
+    openProjectFromFile();
 });

@@ -176,6 +176,21 @@ body {
 .home-btn:hover { background: #56d8c0; }
 .home-btn:active { background: #44b8b0; }
 
+.home-btn-secondary {
+    background: transparent;
+    color: #9fc7c3;
+    border: 1px solid rgba(78, 205, 196, 0.45);
+}
+
+.home-btn-secondary:hover {
+    background: rgba(78, 205, 196, 0.1);
+    color: #b7ddd9;
+}
+
+.home-btn-secondary:active {
+    background: rgba(78, 205, 196, 0.18);
+}
+
 /* ---- History ---- */
 
 .home-history-section {

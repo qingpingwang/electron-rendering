@@ -474,25 +474,37 @@ class Timeline {
     // ---- Selection ----
 
     _selectSegment(trackIdx, segIdx) {
-        const old = this._body.querySelector('.tl-segment.selected');
-        if (old) old.classList.remove('selected');
+        try {
+            const old = this._body.querySelector('.tl-segment.selected');
+            if (old) old.classList.remove('selected');
 
-        const segEl = this._body.querySelector(
-            `.tl-segment[data-track-idx="${trackIdx}"][data-seg-idx="${segIdx}"]`);
-        if (segEl) segEl.classList.add('selected');
+            const segEl = this._body.querySelector(
+                `.tl-segment[data-track-idx="${trackIdx}"][data-seg-idx="${segIdx}"]`);
+            if (segEl) segEl.classList.add('selected');
 
-        const track = this.tracks[trackIdx];
-        if (!track?.group) return;
-        const layers = track.group.layers;
-        if (!layers || segIdx >= layers.length) return;
+            const track = this.tracks[trackIdx];
+            if (!track?.group) return;
+            const isAudioTrack = track.type === 'audio';
 
-        if (this.onSelectLayer) {
-            this.onSelectLayer({
-                layer: layers[segIdx],
-                group: track.group,
-                trackType: track.type,
-                segName: track.segments[segIdx]?.name || '',
-            });
+            // 音频轨道不访问 group.layers（native getter），先确认是否因此导致崩溃
+            let layer = null;
+            if (!isAudioTrack) {
+                const layers = track.group.layers;
+                if (!layers || segIdx >= layers.length) return;
+                layer = layers[segIdx];
+            }
+
+            if (this.onSelectLayer) {
+                this.onSelectLayer({
+                    layer,
+                    group: track.group,
+                    trackType: track.type,
+                    segName: track.segments[segIdx]?.name || '',
+                    segment: track.segments[segIdx] || null,
+                });
+            }
+        } catch (e) {
+            // ignore selection errors
         }
     }
 

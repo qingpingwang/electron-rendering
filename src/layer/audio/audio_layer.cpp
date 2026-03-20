@@ -31,7 +31,7 @@ json AudioLayer::dump() const {
     json j = Layer::dump();
     // 声音相关
     j["volume"] = getVolume();
-    j["muted_"] = isMuted();
+    j["muted"] = isMuted();
     j["source_timerange"] = Layer::dumpSourceRange();
     return j;
 }

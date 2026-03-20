@@ -1,4 +1,4 @@
-const { BrowserWindow, BrowserView, ipcMain } = require('electron');
+const { app, BrowserWindow, BrowserView, ipcMain } = require('electron');
 const path = require('path');
 
 const TAB_BAR_HEIGHT = 36;
@@ -14,6 +14,7 @@ class WindowManager {
         this.activeTab = 'editor';
         this._lastChatBounds = null;
         this._ipcSetup = false;
+        this._suppressHomeQuit = false;
     }
 
     // ---- Home Window ----
@@ -35,6 +36,17 @@ class WindowManager {
         });
 
         this.homeWindow.loadFile(path.join(__dirname, '..', 'home', 'index.html'));
+        try {
+            require('@electron/remote/main').enable(this.homeWindow.webContents);
+        } catch (_) {}
+        this.homeWindow.on('closed', () => {
+            this.homeWindow = null;
+            // 关闭主页窗口时直接退出应用；但切换到主编辑器时不触发。
+            if (!this._suppressHomeQuit && !this.mainWindow && !this.chatWindow) {
+                app.quit();
+            }
+            this._suppressHomeQuit = false;
+        });
         this.homeWindow.webContents.on('before-input-event', (_event, input) => {
             if (input.type === 'keyDown' && input.key === 'F12') {
                 const wc = this.homeWindow?.webContents;
@@ -49,7 +61,7 @@ class WindowManager {
 
     closeHome() {
         if (this.homeWindow && !this.homeWindow.isDestroyed()) {
-            this.homeWindow.removeAllListeners();
+            this._suppressHomeQuit = true;
             this.homeWindow.destroy();
         }
         this.homeWindow = null;

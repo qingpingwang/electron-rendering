@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const db = require('../db');
+const agent = require('../agent');
 
 const VIDEO_EXTS = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
 const AUDIO_EXTS = ['.mp3', '.wav', '.aac', '.ogg', '.flac', '.m4a'];
@@ -21,17 +21,26 @@ class MediaManager {
         this._items = [];
     }
 
-    setProject(uuid) {
+    async setProject(uuid) {
         this._uuid = uuid;
-        db.media.pruneInvalid(uuid);
-        this._items = db.media.list(uuid);
+        await agent.initThread(uuid);
+        const { resources = [] } = await agent.getResources(uuid);
+        this._items = resources.map((r) => ({
+            id: r.resource_id,
+            name: r.resource_name,
+            path: r.resource_path,
+            type: r.resource_type,
+            size: r.resource_size,
+            addedAt: r.added_at,
+        }));
     }
 
     getItems() {
         return this._items;
     }
 
-    addItems(filePaths) {
+    async addItems(filePaths) {
+        if (!this._uuid) return [];
         const added = [];
         for (const fp of filePaths) {
             const absPath = path.resolve(fp);
@@ -50,16 +59,18 @@ class MediaManager {
                 size: stat.size,
                 addedAt: new Date().toISOString(),
             };
-
-            db.media.add(this._uuid, item);
             this._items.push(item);
             added.push(item);
+        }
+        if (added.length) {
+            await agent.addResources(this._uuid, added);
         }
         return added;
     }
 
-    removeItem(id) {
-        const success = db.media.remove(id);
+    async removeItem(id) {
+        if (!this._uuid) return false;
+        const { success } = await agent.removeResource(this._uuid, id);
         if (success) {
             this._items = this._items.filter(m => m.id !== id);
         }

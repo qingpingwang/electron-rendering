@@ -18,17 +18,25 @@ class Inspector {
         this._info = info;
         if (!info) { this.clear(); return; }
 
-        const { layer, trackType, segName } = info;
+        const { layer, trackType, segName, segment, group } = info;
         this.el.innerHTML = '';
 
         this._appendHTML(sectionHTML('基本信息'));
         this._appendHTML(rowHTML('类型', `<span class="insp-badge ${trackType}">${TYPE_NAMES[trackType] || trackType}</span>`));
-        this._appendHTML(rowHTML('名称', esc(layer.name || segName)));
-        this._appendHTML(rowHTML('时间', `${formatTime(layer.startTime)} ~ ${formatTime(layer.endTime)}`));
-        this._appendHTML(rowHTML('时长', formatTime(layer.durationMs)));
+        const startTime = layer
+            ? safeGet(() => layer.startTime, 0)
+            : (segment?.start || 0);
+        const duration = layer
+            ? safeGet(() => layer.durationMs, 0)
+            : (segment?.duration || 0);
+        this._appendHTML(rowHTML('名称', esc(layer ? (safeGet(() => layer.name, '') || segName) : (segName || '音频片段'))));
+        this._appendHTML(rowHTML('时间', `${formatTime(startTime)} ~ ${formatTime(startTime + duration)}`));
+        this._appendHTML(rowHTML('时长', formatTime(duration)));
 
         this._appendHTML(sectionHTML('属性'));
-        this._addToggle('可见', layer.visible, v => { layer.visible = v; this._emit('visible', v); });
+        if (layer) {
+            this._addToggle('可见', !!safeGet(() => layer.visible, true), v => { layer.visible = v; this._emit('visible', v); });
+        }
 
         if (trackType === 'video') {
             if (layer.videoFrameRate)
@@ -40,14 +48,29 @@ class Inspector {
             this._buildSRT(layer);
         }
         if (trackType === 'audio') {
-            this._appendHTML(rowHTML('文件', esc(layer.audioName || '')));
-            this._addToggle('静音', layer.muted, v => { layer.muted = v; this._emit('muted', v); });
-            this._appendHTML(rowHTML('音量', `${(layer.volume * 100).toFixed(0)}%`));
+            this._appendHTML(rowHTML('文件', esc(layer ? safeGet(() => layer.audioName, '') : (segName || ''))));
+            const muted = layer ? !!safeGet(() => layer.muted, false) : !!group?.muted;
+            if (layer) {
+                this._addToggle('静音', muted, v => { layer.muted = v; this._emit('muted', v); });
+            } else {
+                this._appendHTML(rowHTML('静音', muted ? '是' : '否'));
+            }
+            const volume = layer
+                ? Number(safeGet(() => layer.volume, 1))
+                : Number(segment?.volume ?? 1);
+            this._appendHTML(rowHTML('音量', `${(Math.max(0, volume) * 100).toFixed(0)}%`));
         }
 
         this._appendHTML(sectionHTML('源片段'));
-        this._appendHTML(rowHTML('起始', formatTime(layer.sourceStart)));
-        this._appendHTML(rowHTML('时长', formatTime(layer.sourceDuration)));
+        const srcStart = layer ? safeGet(() => layer.sourceStart, 0) : (segment?.srcStart || 0);
+        const srcDur = layer ? safeGet(() => layer.sourceDuration, 0) : (segment?.srcDuration || duration);
+        this._appendHTML(rowHTML('起始', formatTime(srcStart)));
+        this._appendHTML(rowHTML('时长', formatTime(srcDur)));
+
+        if (!layer && trackType === 'audio') {
+            this._appendHTML(rowHTML('提示', '音频轨道使用安全模式展示，避免原生层崩溃'));
+            return;
+        }
     }
 
     clear() {
@@ -265,5 +288,14 @@ function esc(s) {
 }
 
 function f01(v) { return Math.round(v * 255); }
+
+function safeGet(fn, fallback) {
+    try {
+        const v = fn();
+        return v === undefined || v === null ? fallback : v;
+    } catch (e) {
+        return fallback;
+    }
+}
 
 module.exports = Inspector;

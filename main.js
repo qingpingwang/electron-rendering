@@ -64,7 +64,7 @@ app.whenReady().then(() => {
         }
     });
 
-    ipcMain.on('open-project', (_event, { uuid, configPath }) => {
+    ipcMain.on('open-project', (_event, { uuid, configPath, isNew = false }) => {
         if (!wm.mainWindow) {
             wm.createMainWindow();
 
@@ -85,7 +85,7 @@ app.whenReady().then(() => {
 
         const notifyChat = () => {
             chatWC.executeJavaScript(
-                `window.__onProjectOpened && window.__onProjectOpened(${JSON.stringify(uuid)})`
+                `window.__onProjectOpened && window.__onProjectOpened(${JSON.stringify(uuid)}, ${JSON.stringify({ isNewThread: isNew })})`
             );
         };
 

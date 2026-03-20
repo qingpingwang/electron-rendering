@@ -1,8 +1,7 @@
+const fs = require('fs');
+const { pathToFileURL } = require('url');
 const { dialog, BrowserWindow } = require('@electron/remote');
 const MediaManager = require('../media/media_manager');
-const db = require('../db');
-
-db.init();
 
 const mediaManager = new MediaManager();
 
@@ -29,8 +28,8 @@ function init() {
     bindEvents();
 }
 
-function setProject(uuid) {
-    mediaManager.setProject(uuid);
+async function setProject(uuid) {
+    await mediaManager.setProject(uuid);
     mediaItems = mediaManager.getItems();
     if (isVisible) renderMediaList();
 }
@@ -208,12 +207,15 @@ function renderCard(item) {
     const shortId = item.id.slice(0, 8);
 
     let preview = '';
+    const fileSrc = toFileSrc(item.path);
     if (item.type === 'image') {
-        preview = `<img src="file://${item.path}" class="w-full h-28 object-cover rounded-t-lg" alt="${escapeHtml(item.name)}" loading="lazy">`;
+        preview = fileSrc
+            ? `<img src="${fileSrc}" class="w-full h-28 object-cover rounded-t-lg" alt="${escapeHtml(item.name)}" loading="lazy">`
+            : `<div class="w-full h-28 rounded-t-lg bg-black/40 flex items-center justify-center text-xs text-slate-500">文件不可用</div>`;
     } else if (item.type === 'video') {
         preview = `
             <div class="w-full h-28 rounded-t-lg bg-black/40 flex items-center justify-center relative overflow-hidden">
-                <video src="file://${item.path}" class="absolute inset-0 w-full h-full object-cover opacity-60" muted preload="metadata"></video>
+                ${fileSrc ? `<video src="${fileSrc}" class="absolute inset-0 w-full h-full object-cover opacity-60" muted preload="metadata"></video>` : ''}
                 <span class="material-symbols-rounded text-3xl text-white/70 relative z-10">play_circle</span>
                 ${durationStr ? `<span class="absolute bottom-1 right-1 text-[10px] bg-black/60 text-white px-1.5 py-0.5 rounded z-10">${durationStr}</span>` : ''}
             </div>
@@ -270,12 +272,13 @@ function importMedia() {
             ]},
             { name: '所有文件', extensions: ['*'] },
         ],
-    }).then(result => {
+    }).then(async result => {
         if (overlay) overlay.style.display = 'none';
         if (!result.canceled && result.filePaths.length) {
-            const added = mediaManager.addItems(result.filePaths);
+            const added = await mediaManager.addItems(result.filePaths);
             if (added.length) {
-                mediaItems.push(...added);
+                // mediaManager.addItems 已经更新内部列表，直接重新取一次，避免重复 push
+                mediaItems = mediaManager.getItems();
                 renderMediaList();
             }
         }
@@ -284,10 +287,10 @@ function importMedia() {
     });
 }
 
-function deleteMedia(id) {
+async function deleteMedia(id) {
     if (_isStreamingFn && _isStreamingFn()) return;
 
-    const success = mediaManager.removeItem(id);
+    const success = await mediaManager.removeItem(id);
     if (success) {
         mediaItems = mediaItems.filter(m => m.id !== id);
         renderMediaList();
@@ -297,20 +300,22 @@ function deleteMedia(id) {
 function openPreview(id) {
     const item = mediaItems.find(m => m.id === id);
     if (!item) return;
+    const fileSrc = toFileSrc(item.path);
+    if (!fileSrc) return;
 
     let content = '';
     if (item.type === 'video') {
-        content = `<video src="file://${item.path}" controls autoplay class="w-full max-h-[80vh] rounded-xl bg-black"></video>`;
+        content = `<video src="${fileSrc}" controls autoplay class="w-full max-h-[80vh] rounded-xl bg-black"></video>`;
     } else if (item.type === 'audio') {
         content = `
             <div class="flex flex-col items-center gap-6 p-10">
                 <span class="material-symbols-rounded text-6xl text-indigo-400">graphic_eq</span>
                 <div class="text-sm text-slate-300">${escapeHtml(item.name)}</div>
-                <audio src="file://${item.path}" controls autoplay class="w-full"></audio>
+                <audio src="${fileSrc}" controls autoplay class="w-full"></audio>
             </div>
         `;
     } else {
-        content = `<img src="file://${item.path}" class="w-full max-h-[80vh] object-contain rounded-xl" alt="${escapeHtml(item.name)}">`;
+        content = `<img src="${fileSrc}" class="w-full max-h-[80vh] object-contain rounded-xl" alt="${escapeHtml(item.name)}">`;
     }
 
     previewContent.innerHTML = content;
@@ -372,6 +377,16 @@ function copyToClipboard(text) {
 
 function setStreamingCheck(fn) {
     _isStreamingFn = fn;
+}
+
+function toFileSrc(filePath) {
+    if (!filePath || typeof filePath !== 'string') return '';
+    if (!fs.existsSync(filePath)) return '';
+    try {
+        return pathToFileURL(filePath).href;
+    } catch {
+        return '';
+    }
 }
 
 module.exports = { init, show, hide, toggle, setStreamingCheck, setProject };
