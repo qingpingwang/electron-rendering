@@ -12,8 +12,15 @@ function _stringifyContent(content) {
     if (typeof content === 'string') return content;
     if (Array.isArray(content)) {
         return content
-            .filter((p) => p && p.type === 'text' && p.text)
-            .map((p) => p.text)
+            .map((p) => {
+                if (!p || typeof p !== 'object') return '';
+                if (p.type === 'text' && p.text != null) return String(p.text);
+                if (p.type === 'reasoning') {
+                    if (p.reasoning != null) return String(p.reasoning);
+                    if (p.text != null) return String(p.text);
+                }
+                return '';
+            })
             .join('');
     }
     if (content && typeof content === 'object') {
@@ -46,6 +53,14 @@ function serializeLangGraphMessages(messages) {
         }
 
         if (AIMessage.isInstance(msg)) {
+            const text = _stringifyContent(msg.content).trim();
+            if (text) {
+                out.push({
+                    role: 'ai',
+                    content: text,
+                    timestamp: _ts(msg),
+                });
+            }
             if (msg.tool_calls?.length) {
                 for (const tc of msg.tool_calls) {
                     let argsStr = '{}';
@@ -60,14 +75,6 @@ function serializeLangGraphMessages(messages) {
                         timestamp: _ts(msg),
                     });
                 }
-            }
-            const text = _stringifyContent(msg.content).trim();
-            if (text) {
-                out.push({
-                    role: 'ai',
-                    content: text,
-                    timestamp: _ts(msg),
-                });
             }
             continue;
         }

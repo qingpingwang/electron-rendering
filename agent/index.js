@@ -183,7 +183,28 @@ function initAgent() {
     console.log('[Agent] Initialized with model:', modelName, '| LangGraph SqliteSaver → app.db');
 }
 
-/** 流式 tool_call_chunks 在「仅含 args 的 chunk」里往往不带 name；须在 args JSON 完整解析成功后再通知 UI 一次。 */
+/** 展平 chunk.content（含 reasoning 等块）；流式 tool 需在 args JSON 拼全后再 onToolCall。 */
+function textFromMessageContent(content) {
+    if (content == null || content === '') return '';
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+        return content
+            .map((p) => {
+                if (p == null) return '';
+                if (typeof p === 'string') return p;
+                if (typeof p !== 'object') return String(p);
+                if (p.type === 'text' && p.text != null) return String(p.text);
+                if (p.type === 'reasoning') {
+                    if (p.reasoning != null) return String(p.reasoning);
+                    if (p.text != null) return String(p.text);
+                }
+                return '';
+            })
+            .join('');
+    }
+    return String(content);
+}
+
 function flushPendingToolCallChunks(buf, onToolCall) {
     if (!onToolCall || !buf) return;
     for (const k of Object.keys(buf)) {
@@ -231,7 +252,7 @@ async function handleUserMessage(userText, callbacks = {}, options = {}) {
         return;
     }
 
-    const { onThinking, onToken, onToolCall, onToolResult, onDone } = callbacks;
+    const { onThinking, onToken, onToolCall, onToolResult, onDone, onSegmentBreak } = callbacks;
 
     if (onThinking) onThinking();
 
@@ -258,7 +279,15 @@ async function handleUserMessage(userText, callbacks = {}, options = {}) {
             if (!(chunk instanceof AIMessageChunk)) continue;
 
             if (chunk.id !== currentMsgId) {
+                const hasTools =
+                    (chunk.tool_call_chunks?.length > 0) || (chunk.tool_calls?.length > 0);
+                const text = textFromMessageContent(chunk.content).trim();
+                // 对齐 server.py：新 id 且无工具、无正文的 AI 占位 chunk 直接跳过
+                if (!hasTools && !text) continue;
+
                 flushPendingToolCallChunks(toolCallBuf, onToolCall);
+                if (currentMsgId != null) onSegmentBreak?.();
+
                 currentMsgId = chunk.id;
                 toolCallBuf = {};
             }
@@ -286,12 +315,12 @@ async function handleUserMessage(userText, callbacks = {}, options = {}) {
                         }
                     }
                 }
-                continue;
             }
 
-            if (chunk.content) {
-                aiResponse += chunk.content;
-                if (onToken) onToken(chunk.content);
+            const piece = textFromMessageContent(chunk.content);
+            if (piece) {
+                aiResponse += piece;
+                if (onToken) onToken(piece);
             }
         }
 

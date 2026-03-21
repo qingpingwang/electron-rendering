@@ -161,6 +161,20 @@ function startAIMessage(timestamp) {
     scrollToBottom();
 }
 
+/** 结束当前流式 AI 气泡（思考段 / 上一段 assistant），便于后续工具块或下一条 assistant 新开气泡 */
+function finalizeStreamingAIBubble() {
+    if (!currentAIBubble) return;
+    const row = currentAIBubble.closest('.flex.justify-start');
+    const raw = currentTokens || '';
+    if (raw.trim()) {
+        currentAIBubble.innerHTML = marked.parse(raw);
+    } else if (row) {
+        row.remove();
+    }
+    currentAIBubble = null;
+    currentTokens = '';
+}
+
 function appendToken(token) {
     if (!currentAIBubble) startAIMessage();
     currentTokens += token;
@@ -169,11 +183,17 @@ function appendToken(token) {
 }
 
 function finalizeMessage(fullMessage) {
-    const text = fullMessage || currentTokens;
-    if (currentAIBubble) {
-        currentAIBubble.innerHTML = marked.parse(text);
-    } else if (text) {
-        addAIBubble(text);
+    const isError = typeof fullMessage === 'string' && fullMessage.startsWith('发生错误');
+    if (isError) {
+        if (currentAIBubble) {
+            currentAIBubble.innerHTML = marked.parse(fullMessage);
+        } else if (fullMessage) {
+            addAIBubble(fullMessage);
+        }
+    } else if (currentAIBubble) {
+        currentAIBubble.innerHTML = marked.parse(currentTokens || '');
+    } else if (fullMessage && String(fullMessage).trim()) {
+        addAIBubble(fullMessage);
     }
 
     currentAIBubble = null;
@@ -292,6 +312,7 @@ function _createToolBlock(toolName, args, opts = {}) {
 }
 
 function showToolCall(toolName, args, toolCallId) {
+    finalizeStreamingAIBubble();
     removeThinking();
     _createToolBlock(toolName, args, { toolCallId: toolCallId || '' });
 }
@@ -417,6 +438,7 @@ function sendMessage() {
         onToken: appendToken,
         onToolCall: showToolCall,
         onToolResult: showToolResult,
+        onSegmentBreak: finalizeStreamingAIBubble,
         onDone: finalizeMessage,
     }, {
         threadId: currentProjectUUID,
