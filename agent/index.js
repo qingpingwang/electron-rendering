@@ -165,6 +165,7 @@ function initAgent() {
         temperature,
         openAIApiKey: apiKey,
         configuration: baseURL ? { baseURL } : undefined,
+        modelKwargs: { caching: { type: 'disabled' } },
     });
 
     const tools = createEditorTools();

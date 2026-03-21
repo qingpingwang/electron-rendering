@@ -26,6 +26,11 @@ let currentTokens = '';
 let isStreaming = false;
 let currentProjectUUID = null;
 
+/** 已发送的用户消息（倒序：0 = 最近一条），Shift+↑/↓ 像终端一样翻阅 */
+let _inputHistory = [];
+let _inputHistoryIndex = -1;
+let _inputBeforeHistory = '';
+
 // ---- Media Library (lazy loaded) ----
 let mediaLib = null;
 
@@ -59,6 +64,48 @@ function scrollToBottom() {
 
 function updateSendButton() {
     sendBtn.disabled = isStreaming || !inputEl.value.trim();
+}
+
+function _getInputHistoryMessage(index) {
+    if (index < 0 || index >= _inputHistory.length) return null;
+    return _inputHistory[index];
+}
+
+/** @param {number} direction 1 = ↑ 更早一条；-1 = ↓ 更近一条 */
+function navigateInputHistory(direction) {
+    if (_inputHistory.length === 0) return;
+    if (_inputHistoryIndex === -1) {
+        _inputBeforeHistory = inputEl.value;
+    }
+    const newIndex = _inputHistoryIndex + direction;
+    if (direction === 1) {
+        if (newIndex >= _inputHistory.length) return;
+        _inputHistoryIndex = newIndex;
+        const m = _getInputHistoryMessage(newIndex);
+        if (m !== null) inputEl.value = m;
+    } else {
+        if (newIndex < 0) {
+            _inputHistoryIndex = -1;
+            inputEl.value = _inputBeforeHistory;
+            _inputBeforeHistory = '';
+        } else {
+            _inputHistoryIndex = newIndex;
+            const m = _getInputHistoryMessage(newIndex);
+            if (m !== null) inputEl.value = m;
+        }
+    }
+    updateSendButton();
+}
+
+function onInputElInput() {
+    updateSendButton();
+    if (_inputHistoryIndex !== -1) {
+        const hist = _getInputHistoryMessage(_inputHistoryIndex);
+        if (hist !== null && inputEl.value !== hist) {
+            _inputHistoryIndex = -1;
+            _inputBeforeHistory = inputEl.value;
+        }
+    }
 }
 
 function _createAIBubbleEl(timestamp) {
@@ -204,7 +251,7 @@ function _createToolBlock(toolName, args, opts = {}) {
                 <div class="tool-block-label">tool_call_id</div>
                 <div class="tool-block-code tool-block-code--id">${escapeHtml(toolCallId)}</div>
             </div>`
-        :   '';
+            : '';
 
     let bodyHtml = `
         ${idRow}
@@ -276,7 +323,7 @@ function showToolResult(toolName, result, toolCallId) {
         try {
             const parsed = typeof result === 'string' ? JSON.parse(result) : result;
             isError = parsed && parsed.error;
-        } catch {}
+        } catch { }
 
         block.classList.add(isError ? 'error' : 'done');
 
@@ -320,7 +367,7 @@ function addHistoryToolResult(toolName, result, toolCallId) {
         try {
             const parsed = typeof result === 'string' ? JSON.parse(result) : result;
             isError = parsed && parsed.error;
-        } catch {}
+        } catch { }
 
         block.classList.add(isError ? 'error' : 'done');
 
@@ -354,6 +401,12 @@ function sendMessage() {
     const text = inputEl.value.trim();
     if (!text || isStreaming) return;
 
+    if (_inputHistory.length === 0 || _inputHistory[0] !== text) {
+        _inputHistory.unshift(text);
+    }
+    _inputHistoryIndex = -1;
+    _inputBeforeHistory = '';
+
     isStreaming = true;
     addUserMessage(text);
     inputEl.value = '';
@@ -378,9 +431,19 @@ agentClient.onHistoryLoaded((history) => {
     currentTokens = '';
     isStreaming = false;
 
+    _inputHistory = [];
+    _inputHistoryIndex = -1;
+    _inputBeforeHistory = '';
+
     addAIBubble(WELCOME_MESSAGE);
 
     if (history && history.length > 0) {
+        const humanLines = [];
+        for (const msg of history) {
+            if (msg.role === 'human') humanLines.push(msg.content);
+        }
+        _inputHistory = humanLines.slice().reverse();
+
         for (const msg of history) {
             if (msg.role === 'human') {
                 addUserMessage(msg.content, msg.timestamp);
@@ -428,13 +491,18 @@ sendBtn.addEventListener('click', sendMessage);
 
 inputEl.addEventListener('keydown', (e) => {
     if (e.isComposing || e.keyCode === 229) return;
+    if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault();
+        navigateInputHistory(e.key === 'ArrowUp' ? 1 : -1);
+        return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendMessage();
     }
 });
 
-inputEl.addEventListener('input', updateSendButton);
+inputEl.addEventListener('input', onInputElInput);
 
 toggleMediaBtn.addEventListener('click', () => {
     getMediaLibrary().toggle();
