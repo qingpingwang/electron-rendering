@@ -56,6 +56,7 @@ function serializeLangGraphMessages(messages) {
                         role: 'tool_call',
                         toolName: tc.name || '',
                         args: argsStr,
+                        toolCallId: tc.id || '',
                         timestamp: _ts(msg),
                     });
                 }
@@ -76,6 +77,7 @@ function serializeLangGraphMessages(messages) {
                 role: 'tool_result',
                 toolName: msg.name || '',
                 result: _stringifyContent(msg.content),
+                toolCallId: msg.tool_call_id || '',
                 timestamp: _ts(msg),
             });
         }

@@ -24,8 +24,7 @@ bool Layer::load(const json &config, const std::string &base_path) {
         return false;
     }
 
-    // 解析基础属性
-    name_ = config.value("id", "layer");
+    id_ = config.value("id", "layer");
 
     // 解析时间范围
     if (!config.contains("target_timerange")) {
@@ -112,7 +111,7 @@ bool Layer::load(const json &config, const std::string &base_path) {
 
 json Layer::dump() const {
     json j;
-    j["id"] = name_;
+    j["id"] = id_;
     j["material_id"] = material_->getId();
 
     j["target_timerange"] = {
@@ -169,8 +168,8 @@ void Layer::setMuted(bool m) {
     muted_ = m;
 }
 
-const std::string &Layer::getName() const {
-    return name_;
+const std::string &Layer::getId() const {
+    return id_;
 }
 
 TimeMs Layer::getDurationMs() const {

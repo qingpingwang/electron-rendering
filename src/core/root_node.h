@@ -81,6 +81,9 @@ public:
     // 获取轨道组列表
     const std::vector<std::unique_ptr<GroupLayer>> &getGroups() const;
 
+    // 按协议 segment 的 id 在所有轨道中查找图层；未找到返回 nullptr
+    Layer *findLayerById(const std::string &layer_id) const;
+
     // 获取所有含音频的图层信息（layerId → {path, volume, layerType, sourceRange, targetRange}）
     nlohmann::json getAudioInfos() const;
 

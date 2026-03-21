@@ -189,6 +189,15 @@
     .tool-block-section + .tool-block-section {
         border-top: 1px solid rgba(30, 35, 64, 0.6);
     }
+    .tool-block-section--meta .tool-block-label {
+        text-transform: none;
+        letter-spacing: 0;
+    }
+    .tool-block-code--id {
+        font-size: 10px;
+        color: #6b7280;
+        max-height: 4.5em;
+    }
     .tool-block-label {
         font-size: 10px;
         text-transform: uppercase;

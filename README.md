@@ -135,7 +135,7 @@ console.log(root.width, root.height, root.durationMs);
 // 获取图层
 const layers = root.getLayers();
 layers.forEach(layer => {
-    console.log(layer.name, layer.type, layer.startTime, layer.endTime);
+    console.log(layer.id, layer.type, layer.startTime, layer.endTime);
     if (layer.type === 'text') console.log(layer.text, layer.alignment);
 });
 

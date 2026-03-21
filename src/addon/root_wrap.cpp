@@ -2,8 +2,6 @@
 #include "group_layer_wrap.h"
 #include "layer_wrap.h"
 #include "../core/root_node.h"
-#include "../layer/group/group_layer.h"
-#include "../layer/base/layer.h"
 #include "../gl/types.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -23,6 +21,7 @@ Napi::Function RootWrap::GetClass(Napi::Env env) {
                                             InstanceMethod("isSameFrame", &RootWrap::IsSameFrame),
                                             InstanceMethod("draw", &RootWrap::Draw),
                                             InstanceMethod("getGroups", &RootWrap::GetGroups),
+                                            InstanceMethod("findLayerById", &RootWrap::FindLayerById),
                                             InstanceMethod("getAudioInfos", &RootWrap::GetAudioInfos),
 
                                             InstanceAccessor("width", &RootWrap::GetWidth, nullptr),
@@ -175,6 +174,26 @@ Napi::Value RootWrap::GetGroups(const Napi::CallbackInfo &info) {
                 GroupLayerWrap::NewInstance(env, groups[i].get(), self, gen_));
 
     return arr;
+}
+
+Napi::Value RootWrap::FindLayerById(const Napi::CallbackInfo &info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsString()) {
+        Napi::TypeError::New(env, "expected layer id string").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    if (!root_->isLoaded()) {
+        Napi::Error::New(env, "项目未加载").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    const std::string id = info[0].As<Napi::String>().Utf8Value();
+    Napi::Object self = info.This().As<Napi::Object>();
+    vp::Layer *layer = root_->findLayerById(id);
+    if (!layer) {
+        Napi::Error::New(env, "未找到 id 为 \"" + id + "\" 的图层").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    return LayerWrap::NewInstance(env, layer, self, gen_);
 }
 
 static Napi::Value jsonToNapi(Napi::Env env, const nlohmann::json &j) {

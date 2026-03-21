@@ -186,7 +186,7 @@ function _formatResult(result) {
 }
 
 function _createToolBlock(toolName, args, opts = {}) {
-    const { done = false, result = null, error = false } = opts;
+    const { done = false, result = null, error = false, toolCallId = '' } = opts;
     const el = document.createElement('div');
     el.className = 'flex px-10 animate-[fade-in_0.2s_ease]';
 
@@ -198,7 +198,16 @@ function _createToolBlock(toolName, args, opts = {}) {
         ? '<div class="tool-spinner"></div>'
         : `<span class="material-symbols-rounded text-sm ${iconColor}">${iconName}</span>`;
 
+    const idRow =
+        toolCallId ?
+            `<div class="tool-block-section tool-block-section--meta">
+                <div class="tool-block-label">tool_call_id</div>
+                <div class="tool-block-code tool-block-code--id">${escapeHtml(toolCallId)}</div>
+            </div>`
+        :   '';
+
     let bodyHtml = `
+        ${idRow}
         <div class="tool-block-section">
             <div class="tool-block-label">参数</div>
             <div class="tool-block-code">${escapeHtml(_formatArgs(args))}</div>
@@ -225,6 +234,7 @@ function _createToolBlock(toolName, args, opts = {}) {
     `;
 
     const block = el.querySelector('.tool-block');
+    if (toolCallId) block.dataset.toolCallId = toolCallId;
     block.querySelector('.tool-block-header').addEventListener('click', () => {
         block.classList.toggle('expanded');
     });
@@ -234,15 +244,33 @@ function _createToolBlock(toolName, args, opts = {}) {
     return block;
 }
 
-function showToolCall(toolName, args) {
+function showToolCall(toolName, args, toolCallId) {
     removeThinking();
-    _createToolBlock(toolName, args);
+    _createToolBlock(toolName, args, { toolCallId: toolCallId || '' });
 }
 
-function showToolResult(toolName, result) {
-    const pending = messagesEl.querySelectorAll('.tool-block:not(.done):not(.error)');
-    if (pending.length > 0) {
-        const block = pending[pending.length - 1];
+function _findOpenToolBlockByCallId(toolCallId) {
+    if (!toolCallId) return null;
+    const esc =
+        typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+            ? CSS.escape(toolCallId)
+            : toolCallId.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    try {
+        return messagesEl.querySelector(
+            `.tool-block[data-tool-call-id="${esc}"]:not(.done):not(.error)`,
+        );
+    } catch {
+        return null;
+    }
+}
+
+function showToolResult(toolName, result, toolCallId) {
+    let block = _findOpenToolBlockByCallId(toolCallId);
+    if (!block) {
+        const pending = messagesEl.querySelectorAll('.tool-block:not(.done):not(.error)');
+        if (pending.length > 0) block = pending[pending.length - 1];
+    }
+    if (block) {
 
         let isError = false;
         try {
@@ -277,22 +305,26 @@ function showToolResult(toolName, result) {
 
 let _pendingHistoryToolBlock = null;
 
-function addHistoryToolCall(toolName, args) {
-    _pendingHistoryToolBlock = _createToolBlock(toolName, args, { done: false });
+function addHistoryToolCall(toolName, args, toolCallId) {
+    _pendingHistoryToolBlock = _createToolBlock(toolName, args, {
+        done: false,
+        toolCallId: toolCallId || '',
+    });
     _pendingHistoryToolBlock.classList.remove('animate-[fade-in_0.2s_ease]');
 }
 
-function addHistoryToolResult(toolName, result) {
-    if (_pendingHistoryToolBlock) {
+function addHistoryToolResult(toolName, result, toolCallId) {
+    const block = _findOpenToolBlockByCallId(toolCallId) || _pendingHistoryToolBlock;
+    if (block) {
         let isError = false;
         try {
             const parsed = typeof result === 'string' ? JSON.parse(result) : result;
             isError = parsed && parsed.error;
         } catch {}
 
-        _pendingHistoryToolBlock.classList.add(isError ? 'error' : 'done');
+        block.classList.add(isError ? 'error' : 'done');
 
-        const header = _pendingHistoryToolBlock.querySelector('.tool-block-header');
+        const header = block.querySelector('.tool-block-header');
         const spinner = header.querySelector('.tool-spinner');
         if (spinner) {
             const icon = document.createElement('span');
@@ -302,7 +334,7 @@ function addHistoryToolResult(toolName, result) {
         }
 
         if (result) {
-            const body = _pendingHistoryToolBlock.querySelector('.tool-block-body');
+            const body = block.querySelector('.tool-block-body');
             const section = document.createElement('div');
             section.className = 'tool-block-section';
             section.innerHTML = `
@@ -312,7 +344,7 @@ function addHistoryToolResult(toolName, result) {
             body.appendChild(section);
         }
 
-        _pendingHistoryToolBlock = null;
+        if (_pendingHistoryToolBlock === block) _pendingHistoryToolBlock = null;
     }
 }
 
@@ -355,9 +387,17 @@ agentClient.onHistoryLoaded((history) => {
             } else if (msg.role === 'ai') {
                 addAIBubble(msg.content, msg.timestamp);
             } else if (msg.role === 'tool_call') {
-                addHistoryToolCall(msg.toolName, msg.args);
+                let argsObj = msg.args;
+                if (typeof argsObj === 'string') {
+                    try {
+                        argsObj = argsObj.trim() ? JSON.parse(argsObj) : {};
+                    } catch {
+                        argsObj = {};
+                    }
+                }
+                addHistoryToolCall(msg.toolName, argsObj, msg.toolCallId);
             } else if (msg.role === 'tool_result') {
-                addHistoryToolResult(msg.toolName, msg.result);
+                addHistoryToolResult(msg.toolName, msg.result, msg.toolCallId);
             }
         }
     }

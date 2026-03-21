@@ -433,6 +433,20 @@ const std::vector<std::unique_ptr<GroupLayer>> &RootNode::getGroups() const {
     return groups_;
 }
 
+Layer *RootNode::findLayerById(const std::string &layer_id) const {
+    for (const auto &g : groups_) {
+        const auto &layers = g->getLayers();
+        auto it = std::find_if(layers.begin(), layers.end(),
+                               [&layer_id](const std::unique_ptr<Layer> &ly) {
+                                   return ly->getId() == layer_id;
+                               });
+        if (it != layers.end()) {
+            return it->get();
+        }
+    }
+    return nullptr;
+}
+
 nlohmann::json RootNode::getAudioInfos() const {
     json result = json::object();
 
@@ -451,7 +465,7 @@ nlohmann::json RootNode::getAudioInfos() const {
             const TimeRange &src = layer->getSourceRange();
             const TimeRange &tgt = layer->getTargetRange();
 
-            result[layer->getName()] = {
+            result[layer->getId()] = {
                 {"path", mat->getPath()},
                 {"volume", layer->getVolume()},
                 {"layerType", (type == MATERIAL_TYPE_AUDIO) ? "audio" : "video"},

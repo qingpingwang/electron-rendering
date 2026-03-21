@@ -417,9 +417,9 @@ class Timeline {
                             const t = (layer.text || '').replace(/\s+/g, ' ').trim();
                             label = t
                                 ? (t.length > 28 ? `${t.slice(0, 28)}…` : t)
-                                : (layer.name || seg.name);
-                        } else if (layer.name) {
-                            label = layer.name;
+                                : (layer.id || seg.name);
+                        } else if (layer.id) {
+                            label = layer.id;
                         }
                     }
                     segName.textContent = label;

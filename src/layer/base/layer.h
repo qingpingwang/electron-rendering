@@ -46,7 +46,7 @@ public:
     // 流程：检查特效 → 选择中间/直出 → renderContent() → 应用特效 → blit 到 target
     bool draw(const gl::FBO &target, TimeMs time_ms);
 
-    const std::string &getName() const;
+    const std::string &getId() const;
     TimeMs getDurationMs() const;
 
     TimeMs getStartTime() const;
@@ -134,7 +134,7 @@ protected:
     bool visible_ = true;
     bool muted_ = false;
     Clip clip_;
-    std::string name_;
+    std::string id_;
     float volume_ = 1.0f;
     TimeRange target_range_;
     TimeRange source_range_;

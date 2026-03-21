@@ -9,7 +9,7 @@ static Napi::FunctionReference g_constructor;
 
 Napi::Function LayerWrap::GetClass(Napi::Env env) {
     auto cls = DefineClass(env, "Layer", {
-                                             InstanceAccessor("name", &LayerWrap::GetName, nullptr),
+                                             InstanceAccessor("id", &LayerWrap::GetId, nullptr),
                                              InstanceAccessor("type", &LayerWrap::GetType, nullptr),
                                              InstanceAccessor("startTime", &LayerWrap::GetStartTime, nullptr),
                                              InstanceAccessor("endTime", &LayerWrap::GetEndTime, nullptr),
@@ -72,9 +72,9 @@ vp::Layer *LayerWrap::getLayer(Napi::Env env) {
 
 // ========== Common Getters ==========
 
-Napi::Value LayerWrap::GetName(const Napi::CallbackInfo &info) {
+Napi::Value LayerWrap::GetId(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    return l ? Napi::String::New(info.Env(), l->getName()) : info.Env().Undefined();
+    return l ? Napi::String::New(info.Env(), l->getId()) : info.Env().Undefined();
 }
 
 Napi::Value LayerWrap::GetType(const Napi::CallbackInfo &info) {

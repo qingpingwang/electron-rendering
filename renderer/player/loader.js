@@ -33,7 +33,7 @@ async function loadFromConfig(config, protocolPath = '') {
             groups.forEach((g, gi) => {
                 log(`  [${gi}] "${g.id}" | ${g.type}`, 'info');
                 g.layers.forEach((layer, i) => {
-                    let info = `    [${i}] "${layer.name}" | ${formatTime(layer.startTime)}~${formatTime(layer.endTime)}`;
+                    let info = `    [${i}] "${layer.id}" | ${formatTime(layer.startTime)}~${formatTime(layer.endTime)}`;
                     if (g.type === 'text') info += ` | text="${layer.text}"`;
                     if (g.type === 'video' && layer.videoFrameRate) info += ` | ${layer.videoFrameRate.toFixed(1)}fps`;
                     log(info, 'info');

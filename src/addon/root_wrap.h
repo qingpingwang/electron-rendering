@@ -39,6 +39,7 @@ private:
     Napi::Value IsSameFrame(const Napi::CallbackInfo &info);
     Napi::Value Draw(const Napi::CallbackInfo &info);
     Napi::Value GetGroups(const Napi::CallbackInfo &info);
+    Napi::Value FindLayerById(const Napi::CallbackInfo &info);
     Napi::Value GetAudioInfos(const Napi::CallbackInfo &info);
 
     Napi::Value GetWidth(const Napi::CallbackInfo &info);

@@ -22,7 +22,7 @@ private:
 
     vp::Layer *getLayer(Napi::Env env);
 
-    Napi::Value GetName(const Napi::CallbackInfo &info);
+    Napi::Value GetId(const Napi::CallbackInfo &info);
     Napi::Value GetType(const Napi::CallbackInfo &info);
     Napi::Value GetStartTime(const Napi::CallbackInfo &info);
     Napi::Value GetEndTime(const Napi::CallbackInfo &info);
