@@ -357,19 +357,20 @@ body.resizing-h *, body.resizing-v * { pointer-events: none !important; }
     flex-shrink: 0;
 }
 
+/* 缩略图区域单独铺中性底，避免半透明 canvas 透出外层轨道色（看起来像盖了层青绿） */
 .tl-seg-strip {
     flex: 1;
     overflow: hidden;
     min-height: 0;
     position: relative;
+    background: #0a0a0f;
 }
 
+/* 缓存条在重绘时仍用实色，仅用轻微 shimmer 表示刷新，不再用 opacity 压暗（否则会混色轨底色） */
 .tl-thumb-old {
     width: 100%;
     height: 100%;
     display: block;
-    opacity: 0.5;
-    filter: brightness(0.7);
 }
 
 .tl-seg-strip::after {
@@ -379,7 +380,7 @@ body.resizing-h *, body.resizing-v * { pointer-events: none !important; }
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%);
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.06) 50%, transparent 100%);
     background-size: 200% 100%;
     animation: tl-shimmer 1.8s ease-in-out infinite;
     pointer-events: none;
@@ -388,7 +389,7 @@ body.resizing-h *, body.resizing-v * { pointer-events: none !important; }
 }
 
 .tl-seg-strip:has(.tl-thumb-old)::after {
-    opacity: 1;
+    opacity: 0.45;
 }
 
 @keyframes tl-shimmer {
@@ -397,7 +398,7 @@ body.resizing-h *, body.resizing-v * { pointer-events: none !important; }
 }
 
 @keyframes tl-thumb-fadein {
-    from { opacity: 0.5; }
+    from { opacity: 0; }
     to   { opacity: 1; }
 }
 
