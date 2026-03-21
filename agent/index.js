@@ -1,13 +1,13 @@
 const { ChatOpenAI } = require('@langchain/openai');
 const { HumanMessage, AIMessageChunk, ToolMessage } = require('@langchain/core/messages');
-const { createAgent } = require('langchain');
+const { createAgent, dynamicSystemPromptMiddleware } = require('langchain');
 const { SqliteSaver } = require('@langchain/langgraph-checkpoint-sqlite');
 const { z } = require('zod');
 const fs = require('fs');
 const path = require('path');
 
 const db = require('../db');
-const { createEditorTools } = require('./tools');
+const { createEditorTools, fetchProjectProtocol } = require('./tools');
 const { SYSTEM_PROMPT } = require('./prompts');
 const { serializeLangGraphMessages } = require('./history_serialize');
 
@@ -27,6 +27,62 @@ const RESOURCE_SCHEMA = z.object({
 
 const AGENT_STATE_SCHEMA = z.object({
     resources: z.array(RESOURCE_SCHEMA).optional(),
+});
+
+/**
+ * LangChain 官方动态系统提示词：每次模型调用前拼接「最新工程协议 + 会话素材库 resources」。
+ * 素材库与协议内 materials 无关；快照为最新，操作历史从聊天记录推断。
+ */
+const dynamicProjectContextMiddleware = dynamicSystemPromptMiddleware(async (_state, runtime) => {
+    const threadId = runtime.configurable?.thread_id;
+
+    let protocolBlock = '';
+    try {
+        const proto = await fetchProjectProtocol();
+        if (proto?.loaded && proto.protocol) {
+            protocolBlock =
+                '## 当前视频工程协议（实时快照）\n\n' +
+                '以下为**当前编辑器内存中**导出的完整工程协议 JSON；在**每次调用模型前**都会重新获取，代表**最新状态**。\n\n' +
+                '> **重要**：此前对时间线、图层等的**具体操作过程**不会完整记录在本 JSON 中；请结合**历史聊天记录**与**工具调用 / Tool 消息**推断已执行过的编辑步骤。\n\n' +
+                '```json\n' +
+                proto.protocol +
+                '\n```\n\n';
+        } else {
+            protocolBlock =
+                '## 当前视频工程协议（实时快照）\n\n' +
+                '⚠️ 当前没有已加载的工程，或无法导出协议。' +
+                (proto?.message ? `（${proto.message}）` : '') +
+                '\n\n';
+        }
+    } catch (e) {
+        protocolBlock =
+            `## 当前视频工程协议（实时快照）\n\n⚠️ 获取协议失败：${e.message}\n\n`;
+    }
+
+    let resourcesBlock = '';
+    try {
+        const resources = threadId ? await getResourcesState(threadId) : [];
+        if (resources.length > 0) {
+            resourcesBlock =
+                '## 素材库（应用侧会话登记，与工程协议无关）\n\n' +
+                '以下为当前会话在应用侧维护的**素材库**列表（LangGraph 状态 `resources`）。**仅描述「用户/应用登记到素材库的文件」**。\n\n' +
+                '> **与上方视频工程协议的关系**：工程协议 JSON 里的 `materials`、轨道片段引用等，与**本节素材库**是**两套独立数据**，**没有一一对应关系**；不要假设本节某条记录必然出现在协议中，也不要用本节去「解释」协议里的素材字段。\n\n' +
+                `共 **${resources.length}** 条；在**每次模型调用前**从检查点读取，为**最新快照**。\n\n` +
+                '> **操作历史**：是否已拖入时间轴、剪辑顺序等请以**聊天记录与工具结果**推断；本节**只**反映素材库登记，不涉及时间轴操作。\n\n' +
+                '```json\n' +
+                `${JSON.stringify(resources, null, 2)}\n` +
+                '```\n\n';
+        } else {
+            resourcesBlock =
+                '## 素材库（应用侧会话登记，与工程协议无关）\n\n' +
+                '⚠️ 当前会话的素材库中暂无登记记录（与上方工程协议里是否已有 `materials` **无关**；协议有素材不代表本节一定有条目）。如需使用素材库能力，请先让用户将文件加入素材库。\n\n';
+        }
+    } catch (e) {
+        resourcesBlock =
+            `## 素材库（应用侧会话登记，与工程协议无关）\n\n⚠️ 读取素材库状态失败：${e.message}\n\n`;
+    }
+
+    return protocolBlock + resourcesBlock;
 });
 
 function getConfig() {
@@ -90,6 +146,7 @@ function initAgent() {
         systemPrompt: SYSTEM_PROMPT,
         checkpointer: saver,
         stateSchema: AGENT_STATE_SCHEMA,
+        middleware: [dynamicProjectContextMiddleware],
     });
 
     console.log('[Agent] Initialized with model:', modelName, '| LangGraph SqliteSaver → app.db');

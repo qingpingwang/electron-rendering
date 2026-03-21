@@ -23,18 +23,13 @@ function callEditor(action, params = {}) {
     });
 }
 
+/** 动态系统提示词拉取当前工程协议（经主进程转发到编辑器，不作为模型工具） */
+function fetchProjectProtocol() {
+    return callEditor('getProjectProtocol');
+}
+
 function createEditorTools() {
     return [
-        new DynamicStructuredTool({
-            name: 'get_project_info',
-            description: '获取当前已加载项目的完整信息，包括画布尺寸、时长、帧率、所有轨道和图层列表。在执行任何编辑操作前，应先调用此工具了解项目结构。',
-            schema: z.object({}),
-            func: async () => {
-                const result = await callEditor('getProjectInfo');
-                return JSON.stringify(result, null, 2);
-            },
-        }),
-
         new DynamicStructuredTool({
             name: 'update_text',
             description: '修改指定文字图层的文本内容。需要提供准确的图层名称和新文本。',
@@ -79,4 +74,4 @@ function createEditorTools() {
     ];
 }
 
-module.exports = { createEditorTools };
+module.exports = { createEditorTools, fetchProjectProtocol };

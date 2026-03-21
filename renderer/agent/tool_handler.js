@@ -19,11 +19,22 @@ function initToolHandler() {
 function executeAction(action, params) {
     switch (action) {
         case 'getProjectInfo': return getProjectInfo();
+        case 'getProjectProtocol': return getProjectProtocol();
         case 'updateText': return updateText(params);
         case 'setLayerProperty': return setLayerProperty(params);
         case 'setCurrentTime': return setCurrentTime(params);
         default: throw new Error(`Unknown action: ${action}`);
     }
+}
+
+/** 供聊天侧动态系统提示词使用：完整工程协议 JSON（非工具暴露） */
+function getProjectProtocol() {
+    const root = player.root;
+    if (!root || !root.loaded) {
+        return { loaded: false, message: '没有加载项目', protocol: null };
+    }
+    const protocol = typeof root.exportConfig === 'function' ? root.exportConfig() : null;
+    return { loaded: true, protocol: protocol || null };
 }
 
 function getProjectInfo() {
