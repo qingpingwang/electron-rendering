@@ -60,9 +60,12 @@ private:
     TimeMs ptsToMs(int64_t pts) const;
     int64_t msToPts(TimeMs ms) const;
 
+    void copyFrameWithNativeRetain(VideoFrame &dst, const VideoFrame &src);
+    void saveCurrentFrame(const VideoFrame &current);
+    bool restoreCurrentFrame(VideoFrame &out);
     void savePrevFrame(const VideoFrame &current);
     bool restorePrevFrame(VideoFrame &out);
-    /** seek 到 time_ms 附近关键帧并 flush，清空解码游标与 prev */
+    /** seek 到 time_ms 附近关键帧并 flush，清空解码游标与缓存帧 */
     bool seekTo(TimeMs time_ms);
 
     AVFormatContext *format_ctx_ = nullptr;
@@ -85,12 +88,13 @@ private:
 
     uint8_t *rgba_buffers_[2] = {nullptr, nullptr};
     int active_buf_ = 0;
-    /** 唯一帧缓存：顺序解码时保留的「上一帧」，供回退/相邻请求复用 */
+    /** 双帧缓存：当前帧 + 上一帧，供同帧/回退快速复用 */
+    VideoFrame current_frame_;
+    int current_buf_idx_ = -1;
+    TimeMs current_decoded_ms_ = kInvalidTime;
     VideoFrame prev_frame_;
     int prev_buf_idx_ = -1;
-
-    /** 解码器游标：最后一次写入 out 的帧时间，并非单独再缓存一帧「当前」 */
-    TimeMs last_decoded_ms_ = kInvalidTime;
+    TimeMs prev_decoded_ms_ = kInvalidTime;
     std::string path_;
     bool has_alpha_ = false;
 };

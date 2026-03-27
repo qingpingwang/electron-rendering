@@ -169,9 +169,12 @@ bool VideoDecoder::open(const std::string &path) {
             width_, height_, 1);
     }
 
-    last_decoded_ms_ = kInvalidTime;
+    current_frame_ = VideoFrame{};
+    current_buf_idx_ = -1;
+    current_decoded_ms_ = kInvalidTime;
     prev_frame_ = VideoFrame{};
     prev_buf_idx_ = -1;
+    prev_decoded_ms_ = kInvalidTime;
     return true;
 }
 
@@ -179,27 +182,42 @@ bool VideoDecoder::hasAlpha() const {
     return has_alpha_;
 }
 
-void VideoDecoder::savePrevFrame(const VideoFrame &current) {
-    if (!current.valid) return;
-    prev_frame_.releaseNative();
-    prev_frame_ = current;
-    prev_buf_idx_ = active_buf_;
+void VideoDecoder::copyFrameWithNativeRetain(VideoFrame &dst, const VideoFrame &src) {
+    dst.releaseNative();
+    dst = src;
 #ifdef __APPLE__
-    if (current.hw && current.native_buf)
-        CVPixelBufferRetain(static_cast<CVPixelBufferRef>(current.native_buf));
+    if (src.hw && src.native_buf)
+        CVPixelBufferRetain(static_cast<CVPixelBufferRef>(src.native_buf));
 #endif
+}
+
+void VideoDecoder::saveCurrentFrame(const VideoFrame &current) {
+    if (!current.valid) return;
+    copyFrameWithNativeRetain(current_frame_, current);
+    current_buf_idx_ = active_buf_;
+    current_decoded_ms_ = current.pts_ms;
+}
+
+bool VideoDecoder::restoreCurrentFrame(VideoFrame &out) {
+    if (!current_frame_.valid) return false;
+    copyFrameWithNativeRetain(out, current_frame_);
+    active_buf_ = current_buf_idx_;
+    current_decoded_ms_ = current_frame_.pts_ms;
+    return true;
+}
+
+void VideoDecoder::savePrevFrame(const VideoFrame &prev_frame) {
+    if (!prev_frame.valid) return;
+    copyFrameWithNativeRetain(prev_frame_, prev_frame);
+    prev_buf_idx_ = active_buf_;
+    prev_decoded_ms_ = prev_frame.pts_ms;
 }
 
 bool VideoDecoder::restorePrevFrame(VideoFrame &out) {
     if (!prev_frame_.valid) return false;
-    out.releaseNative();
-    out = prev_frame_;
-#ifdef __APPLE__
-    if (prev_frame_.hw && prev_frame_.native_buf)
-        CVPixelBufferRetain(static_cast<CVPixelBufferRef>(prev_frame_.native_buf));
-#endif
+    copyFrameWithNativeRetain(out, prev_frame_);
     active_buf_ = prev_buf_idx_;
-    last_decoded_ms_ = prev_frame_.pts_ms;
+    current_decoded_ms_ = prev_frame_.pts_ms;
     return true;
 }
 
@@ -208,9 +226,14 @@ bool VideoDecoder::seekTo(TimeMs time_ms) {
     if (av_seek_frame(format_ctx_, video_stream_idx_, target_pts, AVSEEK_FLAG_BACKWARD) < 0)
         return false;
     avcodec_flush_buffers(codec_ctx_);
-    last_decoded_ms_ = kInvalidTime;
+    current_frame_.releaseNative();
+    current_frame_ = VideoFrame{};
+    current_buf_idx_ = -1;
+    current_decoded_ms_ = kInvalidTime;
     prev_frame_.releaseNative();
-    prev_frame_.valid = false;
+    prev_frame_ = VideoFrame{};
+    prev_buf_idx_ = -1;
+    prev_decoded_ms_ = kInvalidTime;
     return true;
 }
 
@@ -233,10 +256,15 @@ void VideoDecoder::close() {
     }
     active_buf_ = 0;
 
+    current_frame_.releaseNative();
+    current_frame_ = VideoFrame{};
+    current_buf_idx_ = -1;
+    current_decoded_ms_ = kInvalidTime;
+
     prev_frame_.releaseNative();
     prev_frame_ = VideoFrame{};
     prev_buf_idx_ = -1;
-
+    prev_decoded_ms_ = kInvalidTime;
     if (hw_device_ctx_) {
         av_buffer_unref(&hw_device_ctx_);
         hw_device_ctx_ = nullptr;
@@ -248,7 +276,6 @@ void VideoDecoder::close() {
     width_ = height_ = 0;
     duration_ms_ = 0;
     frame_rate_ = 0.0;
-    last_decoded_ms_ = kInvalidTime;
 }
 
 bool VideoDecoder::decodeFrameAt(TimeMs time_ms, VideoFrame &out) {
@@ -267,37 +294,41 @@ bool VideoDecoder::decodeFrameAt(TimeMs time_ms, VideoFrame &out) {
         return d <= half_frame;
     };
 
-    // 1) 仅 prev 为缓存：请求时间与上一帧 pts 同帧则直接还原
-    if (last_decoded_ms_ != kInvalidTime && prev_frame_.valid && near(time_ms, last_decoded_ms_))
+    // 1) 双帧缓存命中：同帧优先返回 current，其次回退到 prev
+    if (current_frame_.valid && near(time_ms, current_frame_.pts_ms)) {
+        return restoreCurrentFrame(out);
+    }
+    if (prev_frame_.valid && near(time_ms, prev_frame_.pts_ms)) {
         return restorePrevFrame(out);
+    }
 
-    // 无单独「当前帧缓存」。若上次 decode 已满足 time（need_seek 为假、while 不前进），末尾 return out.valid 即复用 out。
     // 需 seek：无游标、大跳、回拉
     bool need_seek = false;
-    if (last_decoded_ms_ == kInvalidTime) {
+    if (current_decoded_ms_ == kInvalidTime) {
         need_seek = true;
-    } else if (time_ms < last_decoded_ms_) {
+    } else if (time_ms < current_decoded_ms_) {
         need_seek = true;
-    } else if ((time_ms - last_decoded_ms_) > frame_interval * 20) {
+    } else if ((time_ms - current_decoded_ms_) > frame_interval * 20) {
         need_seek = true;
     }
 
     if (need_seek) {
-        if (!seekTo(time_ms))
+        if (!seekTo(time_ms)) {
             return false;
+        }
         out.releaseNative();
         out = VideoFrame{};
     }
 
-    while (last_decoded_ms_ == kInvalidTime || last_decoded_ms_ < time_ms) {
+    while (current_decoded_ms_ == kInvalidTime || current_decoded_ms_ < time_ms) {
+        if (out.valid) {
+            savePrevFrame(out);
+        }
         active_buf_ = 1 - active_buf_;
         if (!decodeNextFrame(out)) {
             return false;
         }
-        last_decoded_ms_ = out.pts_ms;
-    }
-    if (out.valid) {
-        savePrevFrame(out);
+        saveCurrentFrame(out);
     }
 
     return out.valid;
