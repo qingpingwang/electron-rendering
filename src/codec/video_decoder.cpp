@@ -203,6 +203,17 @@ bool VideoDecoder::restorePrevFrame(VideoFrame &out) {
     return true;
 }
 
+bool VideoDecoder::seekTo(TimeMs time_ms) {
+    int64_t target_pts = msToPts(time_ms);
+    if (av_seek_frame(format_ctx_, video_stream_idx_, target_pts, AVSEEK_FLAG_BACKWARD) < 0)
+        return false;
+    avcodec_flush_buffers(codec_ctx_);
+    last_decoded_ms_ = kInvalidTime;
+    prev_frame_.releaseNative();
+    prev_frame_.valid = false;
+    return true;
+}
+
 void VideoDecoder::close() {
     if (sws_ctx_) {
         sws_freeContext(sws_ctx_);
@@ -250,47 +261,43 @@ bool VideoDecoder::decodeFrameAt(TimeMs time_ms, VideoFrame &out) {
     TimeMs frame_interval = (frame_rate_ > 0) ? (TimeMs)(1000.0 / frame_rate_) : 40;
     TimeMs half_frame = frame_interval / 2;
 
-    // 回退时检查 prev 缓存：如果 prev 比 current 更接近目标，直接返回
-    if (last_decoded_ms_ != kInvalidTime && last_decoded_ms_ > time_ms && prev_frame_.valid) {
-        TimeMs cur_diff = last_decoded_ms_ - time_ms;
-        TimeMs prev_pts = prev_frame_.pts_ms;
-        TimeMs prev_diff = (time_ms >= prev_pts) ? (time_ms - prev_pts) : (prev_pts - time_ms);
-        if (prev_diff <= half_frame || prev_diff < cur_diff) {
-            return restorePrevFrame(out);
-        }
-    }
+    auto near = [&](TimeMs t, TimeMs ref) -> bool {
+        if (ref == kInvalidTime) return false;
+        TimeMs d = (t >= ref) ? (t - ref) : (ref - t);
+        return d <= half_frame;
+    };
 
-    // 判断是否需要 seek
+    // 1) 仅 prev 为缓存：请求时间与上一帧 pts 同帧则直接还原
+    if (last_decoded_ms_ != kInvalidTime && prev_frame_.valid && near(time_ms, last_decoded_ms_))
+        return restorePrevFrame(out);
+
+    // 无单独「当前帧缓存」。若上次 decode 已满足 time（need_seek 为假、while 不前进），末尾 return out.valid 即复用 out。
+    // 需 seek：无游标、大跳、回拉
     bool need_seek = false;
     if (last_decoded_ms_ == kInvalidTime) {
         need_seek = true;
-    } else if (time_ms < last_decoded_ms_ && (last_decoded_ms_ - time_ms) > frame_interval) {
+    } else if (time_ms < last_decoded_ms_) {
         need_seek = true;
-    } else if (last_decoded_ms_ != kInvalidTime && time_ms > last_decoded_ms_ && (time_ms - last_decoded_ms_) > frame_interval * 20) {
+    } else if ((time_ms - last_decoded_ms_) > frame_interval * 20) {
         need_seek = true;
     }
 
     if (need_seek) {
-        int64_t target_pts = msToPts(time_ms);
-        if (av_seek_frame(format_ctx_, video_stream_idx_, target_pts, AVSEEK_FLAG_BACKWARD) < 0)
+        if (!seekTo(time_ms))
             return false;
-        avcodec_flush_buffers(codec_ctx_);
-        last_decoded_ms_ = kInvalidTime;
-        prev_frame_.releaseNative();
-        prev_frame_.valid = false;
+        out.releaseNative();
+        out = VideoFrame{};
     }
 
-    // 已经在目标时间或之后，直接返回
-    if (last_decoded_ms_ != kInvalidTime && last_decoded_ms_ >= time_ms)
-        return true;
-
-    // 解码直到目标时间
     while (last_decoded_ms_ == kInvalidTime || last_decoded_ms_ < time_ms) {
-        if (out.valid) savePrevFrame(out);
         active_buf_ = 1 - active_buf_;
-        if (!decodeNextFrame(out))
+        if (!decodeNextFrame(out)) {
             return false;
+        }
         last_decoded_ms_ = out.pts_ms;
+    }
+    if (out.valid) {
+        savePrevFrame(out);
     }
 
     return out.valid;
