@@ -1,4 +1,6 @@
 #include "video_decoder.h"
+#include <algorithm>
+#include <cstring>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -53,15 +55,9 @@ bool VideoDecoder::open(const std::string &path) {
 
     path_ = path;
 
-    // WebM: 启用 Alpha 通道解封装
-    AVDictionary *format_opts = nullptr;
-    av_dict_set(&format_opts, "enable_drefs", "1", 0);
-
-    if (avformat_open_input(&format_ctx_, path_.c_str(), nullptr, &format_opts) < 0) {
-        av_dict_free(&format_opts);
+    if (avformat_open_input(&format_ctx_, path_.c_str(), nullptr, nullptr) < 0) {
         return false;
     }
-    av_dict_free(&format_opts);
 
     if (avformat_find_stream_info(format_ctx_, nullptr) < 0) {
         close();
@@ -84,24 +80,8 @@ bool VideoDecoder::open(const std::string &path) {
     AVStream *stream = format_ctx_->streams[video_stream_idx_];
     AVCodecParameters *codecpar = stream->codecpar;
 
-    // 检查是否有 Alpha 通道（VP9 WebM）
     has_alpha_ = false;
-    AVDictionaryEntry *alpha_tag = av_dict_get(stream->metadata, "alpha_mode", nullptr, 0);
-    if (alpha_tag && std::string(alpha_tag->value) == "1") {
-        has_alpha_ = true;
-    }
-
-    // 如果是 VP9 with alpha，强制使用 libvpx-vp9 解码器
-    const AVCodec *codec = nullptr;
-    if (codecpar->codec_id == AV_CODEC_ID_VP9 && has_alpha_) {
-        codec = avcodec_find_decoder_by_name("libvpx-vp9");
-    }
-
-    // 否则使用默认解码器
-    if (!codec) {
-        codec = avcodec_find_decoder(codecpar->codec_id);
-    }
-
+    const AVCodec *codec = avcodec_find_decoder(codecpar->codec_id);
     if (!codec) {
         close();
         return false;
@@ -113,8 +93,8 @@ bool VideoDecoder::open(const std::string &path) {
         return false;
     }
 
-    // H.264/HEVC（无 alpha）：尝试 VideoToolbox 硬件解码
-    if (!has_alpha_ && (codecpar->codec_id == AV_CODEC_ID_H264 || codecpar->codec_id == AV_CODEC_ID_HEVC)) {
+    // H.264/HEVC：macOS 优先 VideoToolbox，后续通过 CVPixelBuffer/IOSurface 进 GL。
+    if (codecpar->codec_id == AV_CODEC_ID_H264 || codecpar->codec_id == AV_CODEC_ID_HEVC) {
         if (av_hwdevice_ctx_create(&hw_device_ctx_, AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
                                    nullptr, nullptr, 0)
             == 0) {
@@ -125,11 +105,6 @@ bool VideoDecoder::open(const std::string &path) {
     }
 
     AVDictionary *opts = nullptr;
-    if (codecpar->codec_id == AV_CODEC_ID_VP9) {
-        codec_ctx_->request_sample_fmt = AV_SAMPLE_FMT_NONE;
-        av_dict_set(&opts, "apply_cropping", "0", 0);
-    }
-
     if (avcodec_open2(codec_ctx_, codec, &opts) < 0) {
         av_dict_free(&opts);
         close();
@@ -169,12 +144,10 @@ bool VideoDecoder::open(const std::string &path) {
             width_, height_, 1);
     }
 
-    current_frame_ = VideoFrame{};
-    current_buf_idx_ = -1;
-    current_decoded_ms_ = kInvalidTime;
-    prev_frame_ = VideoFrame{};
-    prev_buf_idx_ = -1;
-    prev_decoded_ms_ = kInvalidTime;
+    has_frame_index_ = moov_.load(path_) && moov_.hasVideoTrack();
+    clearGopCache();
+    decode_cursor_sample_ = -1;
+    decode_cursor_gop_ = -1;
     return true;
 }
 
@@ -182,7 +155,7 @@ bool VideoDecoder::hasAlpha() const {
     return has_alpha_;
 }
 
-void VideoDecoder::copyFrameWithNativeRetain(VideoFrame &dst, const VideoFrame &src) {
+void VideoDecoder::copyFrameWithNativeRetain(VideoFrame &dst, const VideoFrame &src) const {
     dst.releaseNative();
     dst = src;
 #ifdef __APPLE__
@@ -191,34 +164,100 @@ void VideoDecoder::copyFrameWithNativeRetain(VideoFrame &dst, const VideoFrame &
 #endif
 }
 
-void VideoDecoder::saveCurrentFrame(const VideoFrame &current) {
-    if (!current.valid) return;
-    copyFrameWithNativeRetain(current_frame_, current);
-    current_buf_idx_ = active_buf_;
-    current_decoded_ms_ = current.pts_ms;
+void VideoDecoder::fillFrameLocation(VideoFrame &frame, const FrameLocation &loc) const {
+    frame.pts_ms = loc.pts_ms;
+    frame.sample_index = loc.sample_index;
+    frame.display_index = loc.display_index;
+    frame.gop_index = loc.gop_index;
+    frame.frame_in_gop = loc.frame_in_gop;
 }
 
-bool VideoDecoder::restoreCurrentFrame(VideoFrame &out) {
-    if (!current_frame_.valid) return false;
-    copyFrameWithNativeRetain(out, current_frame_);
-    active_buf_ = current_buf_idx_;
-    current_decoded_ms_ = current_frame_.pts_ms;
+void VideoDecoder::clearGopCache() {
+    for (auto &cached : gop_cache_) {
+        cached.frame.releaseNative();
+    }
+    gop_cache_.clear();
+    cached_gop_index_ = -1;
+}
+
+bool VideoDecoder::restoreCachedFrame(int sample_index, VideoFrame &out) const {
+    auto it = std::find_if(gop_cache_.begin(), gop_cache_.end(), [&](const CachedFrame &cached) {
+        return cached.frame.valid && cached.frame.sample_index == sample_index;
+    });
+    if (it == gop_cache_.end()) {
+        return false;
+    }
+    copyFrameWithNativeRetain(out, it->frame);
     return true;
 }
 
-void VideoDecoder::savePrevFrame(const VideoFrame &prev_frame) {
-    if (!prev_frame.valid) return;
-    copyFrameWithNativeRetain(prev_frame_, prev_frame);
-    prev_buf_idx_ = active_buf_;
-    prev_decoded_ms_ = prev_frame.pts_ms;
+void VideoDecoder::cacheDecodedFrame(const VideoFrame &frame) {
+    if (!frame.valid || frame.sample_index < 0) {
+        return;
+    }
+    if (cached_gop_index_ != frame.gop_index) {
+        clearGopCache();
+        cached_gop_index_ = frame.gop_index;
+    }
+    auto it = std::find_if(gop_cache_.begin(), gop_cache_.end(), [&](const CachedFrame &cached) {
+        return cached.frame.sample_index == frame.sample_index;
+    });
+    if (it != gop_cache_.end()) {
+        it->frame.releaseNative();
+        gop_cache_.erase(it);
+    }
+
+    CachedFrame cached;
+    cached.frame = frame;
+    if (frame.hw) {
+#ifdef __APPLE__
+        if (frame.native_buf) {
+            CVPixelBufferRetain(static_cast<CVPixelBufferRef>(frame.native_buf));
+        }
+#endif
+    } else if (frame.data && frame.width > 0 && frame.height > 0) {
+        const size_t bytes = static_cast<size_t>(frame.width) * static_cast<size_t>(frame.height) * 4;
+        cached.rgba.resize(bytes);
+        std::memcpy(cached.rgba.data(), frame.data, bytes);
+        cached.frame.data = cached.rgba.data();
+    }
+    gop_cache_.push_back(std::move(cached));
+    if (!gop_cache_.back().rgba.empty()) {
+        gop_cache_.back().frame.data = gop_cache_.back().rgba.data();
+    }
 }
 
-bool VideoDecoder::restorePrevFrame(VideoFrame &out) {
-    if (!prev_frame_.valid) return false;
-    copyFrameWithNativeRetain(out, prev_frame_);
-    active_buf_ = prev_buf_idx_;
-    current_decoded_ms_ = prev_frame_.pts_ms;
-    return true;
+bool VideoDecoder::cacheCurrentGopUntil(const FrameLocation &target, VideoFrame &out) {
+    const int max_decodes = std::max(target.gop_frame_count + 16, target.frame_in_gop + 16);
+    for (int decoded = 0; decoded < max_decodes; ++decoded) {
+        active_buf_ = 1 - active_buf_;
+        VideoFrame frame;
+        if (!decodeNextFrame(frame)) {
+            return restoreCachedFrame(target.sample_index, out);
+        }
+
+        FrameLocation loc;
+        if (has_frame_index_ && moov_.queryFrame(frame.pts_ms, loc)) {
+            fillFrameLocation(frame, loc);
+        } else {
+            frame.sample_index = ++decode_cursor_sample_;
+            frame.gop_index = target.gop_index;
+            frame.frame_in_gop = frame.sample_index;
+        }
+
+        decode_cursor_sample_ = std::max(decode_cursor_sample_, frame.sample_index);
+        decode_cursor_gop_ = frame.gop_index;
+        if (frame.gop_index == target.gop_index) {
+            cacheDecodedFrame(frame);
+        }
+
+        if (restoreCachedFrame(target.sample_index, out)) {
+            frame.releaseNative();
+            return true;
+        }
+        frame.releaseNative();
+    }
+    return false;
 }
 
 bool VideoDecoder::seekTo(TimeMs time_ms) {
@@ -226,14 +265,9 @@ bool VideoDecoder::seekTo(TimeMs time_ms) {
     if (av_seek_frame(format_ctx_, video_stream_idx_, target_pts, AVSEEK_FLAG_BACKWARD) < 0)
         return false;
     avcodec_flush_buffers(codec_ctx_);
-    current_frame_.releaseNative();
-    current_frame_ = VideoFrame{};
-    current_buf_idx_ = -1;
-    current_decoded_ms_ = kInvalidTime;
-    prev_frame_.releaseNative();
-    prev_frame_ = VideoFrame{};
-    prev_buf_idx_ = -1;
-    prev_decoded_ms_ = kInvalidTime;
+    clearGopCache();
+    decode_cursor_sample_ = -1;
+    decode_cursor_gop_ = -1;
     return true;
 }
 
@@ -256,15 +290,9 @@ void VideoDecoder::close() {
     }
     active_buf_ = 0;
 
-    current_frame_.releaseNative();
-    current_frame_ = VideoFrame{};
-    current_buf_idx_ = -1;
-    current_decoded_ms_ = kInvalidTime;
-
-    prev_frame_.releaseNative();
-    prev_frame_ = VideoFrame{};
-    prev_buf_idx_ = -1;
-    prev_decoded_ms_ = kInvalidTime;
+    clearGopCache();
+    decode_cursor_sample_ = -1;
+    decode_cursor_gop_ = -1;
     if (hw_device_ctx_) {
         av_buffer_unref(&hw_device_ctx_);
         hw_device_ctx_ = nullptr;
@@ -276,62 +304,55 @@ void VideoDecoder::close() {
     width_ = height_ = 0;
     duration_ms_ = 0;
     frame_rate_ = 0.0;
+    has_frame_index_ = false;
 }
 
 bool VideoDecoder::decodeFrameAt(TimeMs time_ms, VideoFrame &out) {
     if (!format_ctx_ || video_stream_idx_ < 0)
         return false;
 
+    if (duration_ms_ == 0)
+        return false;
+
     if (time_ms >= duration_ms_)
         time_ms = duration_ms_ - 1;
 
-    TimeMs frame_interval = (frame_rate_ > 0) ? (TimeMs)(1000.0 / frame_rate_) : 40;
-    TimeMs half_frame = frame_interval / 2;
-
-    auto near = [&](TimeMs t, TimeMs ref) -> bool {
-        if (ref == kInvalidTime) return false;
-        TimeMs d = (t >= ref) ? (t - ref) : (ref - t);
-        return d <= half_frame;
-    };
-
-    // 1) 双帧缓存命中：同帧优先返回 current，其次回退到 prev
-    if (current_frame_.valid && near(time_ms, current_frame_.pts_ms)) {
-        return restoreCurrentFrame(out);
-    }
-    if (prev_frame_.valid && near(time_ms, prev_frame_.pts_ms)) {
-        return restorePrevFrame(out);
-    }
-
-    // 需 seek：无游标、大跳、回拉
-    bool need_seek = false;
-    if (current_decoded_ms_ == kInvalidTime) {
-        need_seek = true;
-    } else if (time_ms < current_decoded_ms_) {
-        need_seek = true;
-    } else if ((time_ms - current_decoded_ms_) > frame_interval * 20) {
-        need_seek = true;
-    }
-
-    if (need_seek) {
-        if (!seekTo(time_ms)) {
+    if (has_frame_index_) {
+        FrameLocation target;
+        if (!moov_.queryFrame(time_ms, target)) {
             return false;
         }
-        out.releaseNative();
-        out = VideoFrame{};
+
+        if (restoreCachedFrame(target.sample_index, out)) {
+            return true;
+        }
+
+        const bool can_continue = decode_cursor_gop_ == target.gop_index &&
+            decode_cursor_sample_ >= 0 &&
+            decode_cursor_sample_ <= target.sample_index;
+        if (!can_continue) {
+            if (!seekTo(target.gop_pts_ms)) {
+                return false;
+            }
+            cached_gop_index_ = target.gop_index;
+            decode_cursor_sample_ = target.sample_index - target.frame_in_gop - 1;
+            decode_cursor_gop_ = target.gop_index;
+        }
+        return cacheCurrentGopUntil(target, out);
     }
 
-    while (current_decoded_ms_ == kInvalidTime || current_decoded_ms_ < time_ms) {
-        if (out.valid) {
-            savePrevFrame(out);
-        }
+    if (!seekTo(time_ms)) {
+        return false;
+    }
+    while (true) {
         active_buf_ = 1 - active_buf_;
         if (!decodeNextFrame(out)) {
             return false;
         }
-        saveCurrentFrame(out);
+        if (out.pts_ms >= time_ms) {
+            return out.valid;
+        }
     }
-
-    return out.valid;
 }
 
 bool VideoDecoder::decodeNextFrame(VideoFrame &out) {
@@ -416,12 +437,6 @@ void VideoDecoder::convertToRGBA(AVFrame *frame, VideoFrame &out) {
 
     // 软件路径
     AVPixelFormat actual_fmt = (AVPixelFormat)frame->format;
-
-    if (has_alpha_) {
-        bool frame_has_alpha = (actual_fmt == AV_PIX_FMT_YUVA420P || actual_fmt == AV_PIX_FMT_YUVA420P10LE || actual_fmt == AV_PIX_FMT_YUVA420P10BE);
-        if (!frame_has_alpha)
-            has_alpha_ = false;
-    }
 
     ensureSwsContext((int)actual_fmt);
 

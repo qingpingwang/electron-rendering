@@ -2,7 +2,6 @@
 #include "../../core/root_node.h"
 #include <nlohmann/json.hpp>
 #include "../../gl/functions.h"
-#include "../../gl/shader.h"
 
 using json = nlohmann::json;
 
@@ -14,6 +13,7 @@ VideoLayer::VideoLayer(RootNode *root) :
 }
 
 VideoLayer::~VideoLayer() {
+    current_frame_.releaseNative();
     if (decoder_)
         decoder_->close();
     gl::destroyTexture(texture_);

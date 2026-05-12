@@ -1,8 +1,10 @@
 #pragma once
 
 #include "../core/types.h"
+#include "moov_helper.h"
 #include <cstdint>
 #include <string>
+#include <vector>
 
 extern "C" {
 #include <libavutil/rational.h>
@@ -24,6 +26,10 @@ struct VideoFrame {
     int width = 0;
     int height = 0;
     TimeMs pts_ms = 0;
+    int sample_index = -1;
+    int display_index = -1;
+    int gop_index = -1;
+    int frame_in_gop = -1;
     bool valid = false;
     bool hw = false;
 
@@ -60,11 +66,17 @@ private:
     TimeMs ptsToMs(int64_t pts) const;
     int64_t msToPts(TimeMs ms) const;
 
-    void copyFrameWithNativeRetain(VideoFrame &dst, const VideoFrame &src);
-    void saveCurrentFrame(const VideoFrame &current);
-    bool restoreCurrentFrame(VideoFrame &out);
-    void savePrevFrame(const VideoFrame &current);
-    bool restorePrevFrame(VideoFrame &out);
+    struct CachedFrame {
+        VideoFrame frame;
+        std::vector<uint8_t> rgba;
+    };
+
+    void copyFrameWithNativeRetain(VideoFrame &dst, const VideoFrame &src) const;
+    void fillFrameLocation(VideoFrame &frame, const FrameLocation &loc) const;
+    void clearGopCache();
+    bool restoreCachedFrame(int sample_index, VideoFrame &out) const;
+    void cacheDecodedFrame(const VideoFrame &frame);
+    bool cacheCurrentGopUntil(const FrameLocation &target, VideoFrame &out);
     /** seek 到 time_ms 附近关键帧并 flush，清空解码游标与缓存帧 */
     bool seekTo(TimeMs time_ms);
 
@@ -88,13 +100,12 @@ private:
 
     uint8_t *rgba_buffers_[2] = {nullptr, nullptr};
     int active_buf_ = 0;
-    /** 双帧缓存：当前帧 + 上一帧，供同帧/回退快速复用 */
-    VideoFrame current_frame_;
-    int current_buf_idx_ = -1;
-    TimeMs current_decoded_ms_ = kInvalidTime;
-    VideoFrame prev_frame_;
-    int prev_buf_idx_ = -1;
-    TimeMs prev_decoded_ms_ = kInvalidTime;
+    MoovHelper moov_;
+    bool has_frame_index_ = false;
+    std::vector<CachedFrame> gop_cache_;
+    int cached_gop_index_ = -1;
+    int decode_cursor_sample_ = -1;
+    int decode_cursor_gop_ = -1;
     std::string path_;
     bool has_alpha_ = false;
 };

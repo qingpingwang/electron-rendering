@@ -1,58 +1,60 @@
-// 视频解码测试 - 解码所有帧并保存为 PNG
-// 编译运行：
-//   cmake --build build
-//   ./build/test/decoder_test [video_path]
-
-#include "../../src/codec/video_decoder.h"
-#include "../../third_party/stb_image/stb_image_write.h"
+#include "../../src/codec/moov_helper.h"
 #include <iostream>
 
-using namespace vp;
-
 int main(int argc, char *argv[]) {
-    std::string video_path = "./test/resources/sprint_effect/textures/mask.webm";
-    if (argc > 1) {
-        video_path = argv[1];
-    }
+    const std::string path = argc > 1 ? argv[1] : "../../test/test.mp4";
 
-    // 打开解码器
-    VideoDecoder decoder;
-    if (!decoder.open(video_path)) {
-        std::cerr << "Failed to open video: " << video_path << std::endl;
+    vp::MoovHelper moov;
+    if (!moov.load(path) || !moov.hasVideoTrack()) {
+        std::cerr << "No indexed MP4 video track found: " << path << std::endl;
         return 1;
     }
 
-    int64_t duration_ms = decoder.getDurationMs();
-    double fps = decoder.getFrameRate();
-    int64_t frame_interval_ms = (fps > 0) ? (int64_t)(1000.0 / fps) : 33;
+    const auto frames = moov.getAllFrameLocations();
+    std::cout << "{" << std::endl;
+    std::cout << "  \"width\": " << moov.width() << "," << std::endl;
+    std::cout << "  \"height\": " << moov.height() << "," << std::endl;
+    std::cout << "  \"duration_ms\": " << moov.durationMs() << "," << std::endl;
+    std::cout << "  \"frame_count\": " << frames.size() << "," << std::endl;
 
-    std::cout << "Decoding: " << video_path << std::endl;
-    std::cout << "Resolution: " << decoder.getWidth() << "x" << decoder.getHeight()
-              << ", Duration: " << duration_ms << "ms, FPS: " << fps << std::endl;
-
-    // 循环解码所有帧
-    VideoFrame frame;
-    int64_t time_ms = 0;
-    int frame_count = 0;
-
-    while (time_ms < duration_ms) {
-        if (!decoder.decodeFrameAt(time_ms, frame) || !frame.valid) {
-            std::cerr << "Failed to decode frame at " << time_ms << "ms" << std::endl;
-            break;
-        }
-
-        // 保存为 frame_pts.png
-        std::string output_path = "./frame_" + std::to_string(time_ms) + "ms.png";
-        if (!stbi_write_png(output_path.c_str(), frame.width, frame.height, 4,
-                            frame.data, frame.width * 4)) {
-            std::cerr << "Failed to save " << output_path << std::endl;
-            break;
-        }
-
-        frame_count++;
-        time_ms += frame_interval_ms;
+    std::cout << "  \"pts_ms\": [";
+    for (size_t i = 0; i < frames.size(); ++i) {
+        std::cout << frames[i].pts_ms << (i + 1 == frames.size() ? "" : ", ");
     }
+    std::cout << "]," << std::endl;
 
-    std::cout << "Completed: " << frame_count << " frames saved" << std::endl;
+    std::cout << "  \"keyframe_indices\": [";
+    bool first = true;
+    for (const auto &frame : frames) {
+        if (frame.frame_in_gop != 0) {
+            continue;
+        }
+        if (!first) {
+            std::cout << ", ";
+        }
+        std::cout << frame.sample_index;
+        first = false;
+    }
+    std::cout << "]," << std::endl;
+
+    std::cout << "  \"gops\": [" << std::endl;
+    first = true;
+    for (const auto &frame : frames) {
+        if (frame.frame_in_gop != 0) {
+            continue;
+        }
+        if (!first) {
+            std::cout << "," << std::endl;
+        }
+        std::cout << "    {\"index\": " << frame.gop_index
+                  << ", \"offset\": " << frame.gop_offset
+                  << ", \"size\": " << frame.gop_size
+                  << ", \"frames\": " << frame.gop_frame_count << "}";
+        first = false;
+    }
+    std::cout << std::endl;
+    std::cout << "  ]" << std::endl;
+    std::cout << "}" << std::endl;
+
     return 0;
 }
