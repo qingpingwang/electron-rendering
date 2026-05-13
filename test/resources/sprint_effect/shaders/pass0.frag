@@ -34,7 +34,9 @@ void main()
 {
     vec2 dt = getDirection();
     vec4 srcColor = texture(inputTexture0, texCoord + dt);
-    vec4 maskColor = texture(mask, texCoord);
+    vec2 maskColorUv = vec2(texCoord.x * 0.5, texCoord.y);
+    vec2 maskAlphaUv = maskColorUv + vec2(0.5, 0.0);
+    vec4 maskColor = vec4(texture(mask, maskColorUv).rgb, texture(mask, maskAlphaUv).r);
     vec3 resultColor = mix(srcColor.rgb, maskColor.rgb, maskColor.a);
     FragColor = vec4(resultColor, 1.0);
 }
