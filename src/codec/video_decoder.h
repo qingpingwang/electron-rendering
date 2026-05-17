@@ -4,6 +4,7 @@
 #include "moov_helper.h"
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 extern "C" {
@@ -101,10 +102,9 @@ private:
     uint8_t *rgba_buffers_[2] = {nullptr, nullptr};
     int active_buf_ = 0;
     MoovHelper moov_;
-    bool has_frame_index_ = false;
-    std::vector<CachedFrame> gop_cache_;
+    std::unordered_map<int, CachedFrame> gop_cache_;
     int cached_gop_index_ = -1;
-    int decode_cursor_sample_ = -1;
+    int decode_cursor_display_ = -1;
     int decode_cursor_gop_ = -1;
     std::string path_;
     bool has_alpha_ = false;

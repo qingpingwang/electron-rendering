@@ -144,9 +144,12 @@ bool VideoDecoder::open(const std::string &path) {
             width_, height_, 1);
     }
 
-    has_frame_index_ = moov_.load(path_) && moov_.hasVideoTrack();
+    if (!moov_.load(path_) || !moov_.hasVideoTrack()) {
+        close();
+        return false;
+    }
     clearGopCache();
-    decode_cursor_sample_ = -1;
+    decode_cursor_display_ = -1;
     decode_cursor_gop_ = -1;
     return true;
 }
@@ -173,21 +176,19 @@ void VideoDecoder::fillFrameLocation(VideoFrame &frame, const FrameLocation &loc
 }
 
 void VideoDecoder::clearGopCache() {
-    for (auto &cached : gop_cache_) {
-        cached.frame.releaseNative();
+    for (auto &kv : gop_cache_) {
+        kv.second.frame.releaseNative();
     }
     gop_cache_.clear();
     cached_gop_index_ = -1;
 }
 
 bool VideoDecoder::restoreCachedFrame(int sample_index, VideoFrame &out) const {
-    auto it = std::find_if(gop_cache_.begin(), gop_cache_.end(), [&](const CachedFrame &cached) {
-        return cached.frame.valid && cached.frame.sample_index == sample_index;
-    });
-    if (it == gop_cache_.end()) {
+    auto it = gop_cache_.find(sample_index);
+    if (it == gop_cache_.end() || !it->second.frame.valid) {
         return false;
     }
-    copyFrameWithNativeRetain(out, it->frame);
+    copyFrameWithNativeRetain(out, it->second.frame);
     return true;
 }
 
@@ -199,12 +200,11 @@ void VideoDecoder::cacheDecodedFrame(const VideoFrame &frame) {
         clearGopCache();
         cached_gop_index_ = frame.gop_index;
     }
-    auto it = std::find_if(gop_cache_.begin(), gop_cache_.end(), [&](const CachedFrame &cached) {
-        return cached.frame.sample_index == frame.sample_index;
-    });
-    if (it != gop_cache_.end()) {
-        it->frame.releaseNative();
-        gop_cache_.erase(it);
+
+    auto existing = gop_cache_.find(frame.sample_index);
+    if (existing != gop_cache_.end()) {
+        existing->second.frame.releaseNative();
+        gop_cache_.erase(existing);
     }
 
     CachedFrame cached;
@@ -219,11 +219,12 @@ void VideoDecoder::cacheDecodedFrame(const VideoFrame &frame) {
         const size_t bytes = static_cast<size_t>(frame.width) * static_cast<size_t>(frame.height) * 4;
         cached.rgba.resize(bytes);
         std::memcpy(cached.rgba.data(), frame.data, bytes);
-        cached.frame.data = cached.rgba.data();
     }
-    gop_cache_.push_back(std::move(cached));
-    if (!gop_cache_.back().rgba.empty()) {
-        gop_cache_.back().frame.data = gop_cache_.back().rgba.data();
+
+    // unordered_map 节点地址稳定，emplace 之后再修正 frame.data 指向节点内的 rgba 缓冲。
+    auto it = gop_cache_.emplace(frame.sample_index, std::move(cached)).first;
+    if (!it->second.rgba.empty()) {
+        it->second.frame.data = it->second.rgba.data();
     }
 }
 
@@ -237,15 +238,14 @@ bool VideoDecoder::cacheCurrentGopUntil(const FrameLocation &target, VideoFrame 
         }
 
         FrameLocation loc;
-        if (has_frame_index_ && moov_.queryFrame(frame.pts_ms, loc)) {
-            fillFrameLocation(frame, loc);
-        } else {
-            frame.sample_index = ++decode_cursor_sample_;
-            frame.gop_index = target.gop_index;
-            frame.frame_in_gop = frame.sample_index;
+        if (!moov_.queryFrame(frame.pts_ms, loc)) {
+            frame.releaseNative();
+            return restoreCachedFrame(target.sample_index, out);
         }
+        fillFrameLocation(frame, loc);
 
-        decode_cursor_sample_ = std::max(decode_cursor_sample_, frame.sample_index);
+        // FFmpeg 按 PTS 顺序吐帧，因此 display_index 才是单调递增的解码进度量。
+        decode_cursor_display_ = std::max(decode_cursor_display_, frame.display_index);
         decode_cursor_gop_ = frame.gop_index;
         if (frame.gop_index == target.gop_index) {
             cacheDecodedFrame(frame);
@@ -266,7 +266,7 @@ bool VideoDecoder::seekTo(TimeMs time_ms) {
         return false;
     avcodec_flush_buffers(codec_ctx_);
     clearGopCache();
-    decode_cursor_sample_ = -1;
+    decode_cursor_display_ = -1;
     decode_cursor_gop_ = -1;
     return true;
 }
@@ -291,7 +291,7 @@ void VideoDecoder::close() {
     active_buf_ = 0;
 
     clearGopCache();
-    decode_cursor_sample_ = -1;
+    decode_cursor_display_ = -1;
     decode_cursor_gop_ = -1;
     if (hw_device_ctx_) {
         av_buffer_unref(&hw_device_ctx_);
@@ -304,55 +304,39 @@ void VideoDecoder::close() {
     width_ = height_ = 0;
     duration_ms_ = 0;
     frame_rate_ = 0.0;
-    has_frame_index_ = false;
 }
 
 bool VideoDecoder::decodeFrameAt(TimeMs time_ms, VideoFrame &out) {
-    if (!format_ctx_ || video_stream_idx_ < 0)
+    if (!format_ctx_ || video_stream_idx_ < 0 || duration_ms_ == 0) {
         return false;
-
-    if (duration_ms_ == 0)
-        return false;
-
-    if (time_ms >= duration_ms_)
+    }
+    if (time_ms >= duration_ms_) {
         time_ms = duration_ms_ - 1;
-
-    if (has_frame_index_) {
-        FrameLocation target;
-        if (!moov_.queryFrame(time_ms, target)) {
-            return false;
-        }
-
-        if (restoreCachedFrame(target.sample_index, out)) {
-            return true;
-        }
-
-        const bool can_continue = decode_cursor_gop_ == target.gop_index &&
-            decode_cursor_sample_ >= 0 &&
-            decode_cursor_sample_ <= target.sample_index;
-        if (!can_continue) {
-            if (!seekTo(target.gop_pts_ms)) {
-                return false;
-            }
-            cached_gop_index_ = target.gop_index;
-            decode_cursor_sample_ = target.sample_index - target.frame_in_gop - 1;
-            decode_cursor_gop_ = target.gop_index;
-        }
-        return cacheCurrentGopUntil(target, out);
     }
 
-    if (!seekTo(time_ms)) {
+    FrameLocation target;
+    if (!moov_.queryFrame(time_ms, target)) {
         return false;
     }
-    while (true) {
-        active_buf_ = 1 - active_buf_;
-        if (!decodeNextFrame(out)) {
+
+    if (restoreCachedFrame(target.sample_index, out)) {
+        return true;
+    }
+
+    // GOP 内 FFmpeg 按 PTS 顺序吐帧，比较必须用 display_index 而非 sample_index。
+    // 例如 IBBP 的 sample 顺序是 [I,P,B,B]，吐帧顺序是 [I,B,B,P]——
+    // 解到末尾 B 帧时 cursor_sample 已是 GOP 内最大值，但下一帧 P 帧的 sample_index 反而最小。
+    const bool can_continue = decode_cursor_gop_ == target.gop_index &&
+        decode_cursor_display_ >= 0 &&
+        decode_cursor_display_ < target.display_index;
+    if (!can_continue) {
+        if (!seekTo(target.gop_pts_ms)) {
             return false;
         }
-        if (out.pts_ms >= time_ms) {
-            return out.valid;
-        }
+        cached_gop_index_ = target.gop_index;
+        decode_cursor_gop_ = target.gop_index;
     }
+    return cacheCurrentGopUntil(target, out);
 }
 
 bool VideoDecoder::decodeNextFrame(VideoFrame &out) {
