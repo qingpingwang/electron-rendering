@@ -15,9 +15,54 @@
 
 > 技术栈要点：**LangChain / LangGraph**、可插拔 LLM（含思考/推理模式）、**N-API** 桥接原生渲染与前端 UI。
 
+## 渲染资源 Agent · Shader 特效对话创作
+
+**用自然语言创作 GLSL Shader 特效与转场**——无需手写一行 OpenGL 代码，在对话中描述意图，AI 实时生成并预览。
+
+![渲染资源 Agent](test/image1.png)
+
+### 工作流程
+
+1. **新建对话**：点击首页「新建对话」，进入资源聊天室（零文件足迹，无需手动命名工程）。
+2. **描述意图**：用中文描述想要的特效，例如 *"创建一个基于 sin 函数的波浪扭曲画面特效"*。
+3. **AI 自动创作**：Agent 调用 `list_dir` → `write_file` 工具，生成完整的资源工程结构：
+   ```
+   warp_effect/
+   ├── config.json          # 资源描述：名称、格式、参数声明
+   └── shaders/
+       └── pass0.frag       # GLSL 片段着色器
+   ```
+4. **自动挂载预览**：`config.json` 写入后触发自动挂载，左栏出现资源卡片，预览区实时呈现效果。
+5. **参数调节**：右侧参数面板根据 `config.json` 中 `uniform[]` 声明动态生成滑块 / 开关，通过 N-API 实时调用 C++ 侧 `setMaterialFloatParam` 更新渲染。
+
+### 三栏布局
+
+| 区域 | 说明 |
+|------|------|
+| **左栏** 资源列表 | 扫描沙箱目录，展示特效 / 转场资源；点击卡片切换挂载状态 |
+| **中栏** 实时预览 | 基于 C++ OpenGL 渲染管线，支持时间轴播放与拖动 |
+| **右栏** 聊天 + 参数 | LangGraph 对话历史 + 已挂载资源的 uniform 参数面板 |
+| **底栏** 日志 | 挂载状态、渲染耗时、工具调用实时输出 |
+
+### Shader 内置 Uniform
+
+Agent 生成的着色器可直接使用以下内置变量，**无需在 `config.json` 中声明**：
+
+| 变量 | 类型 | 说明 |
+|------|------|------|
+| `uTime` | `float` | 当前播放时间（秒）|
+| `uProgress` | `float` | 段内进度 `[0, 1]` |
+| `inputTexture0` | `sampler2D` | 主输入纹理（特效 / 转场均有）|
+| `inputTexture1` | `sampler2D` | 转场第二输入纹理 |
+
+### 会话持久化
+
+- 聊天历史通过 **LangGraph SqliteSaver** 按 `resource:<uuid>` 线程隔离存储，无直接 SQL 操作。
+- 首页「最近对话」从 Checkpointer 实时读取，以第一条用户消息作为标题。
+- 退出未对话的聊天室，系统自动删除空线程，不留历史记录。
+
 ---
 
-## 持久化 · 会话与记忆
 
 - **SQLite Checkpointer**：对话与代理状态落盘至应用数据库（**SqliteSaver**），按 **工程 / 线程 ID（thread_id）** 隔离。
 - **跨次打开可续聊**：切换项目即加载对应会话历史；新建工程自动初始化线程，删除工程可同步清理会话图谱。
@@ -106,6 +151,7 @@ root.cleanup();
 |------|------|
 | AI 编排 | LangGraph、流式 messages、工具绑定与结构化回调 |
 | 持久化 | SqliteSaver、thread 级 checkpoint、历史序列化 |
+| **Shader 创作** | **GLSL 特效 / 转场 Agent**、`config.json` 声明式资源协议、uniform 参数面板 |
 | 视频解码 | FFmpeg；H.264/HEVC → VideoToolbox（macOS） |
 | 合成 | OpenGL FBO、纹理混合、硬件帧直传纹理 |
 | 文字 | Skia skparagraph、GPU 直绘 |

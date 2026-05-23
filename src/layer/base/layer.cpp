@@ -1,6 +1,5 @@
 #include "layer.h"
 #include "../../core/root_node.h"
-#include "../material/effect.h"
 #include "../../gl/functions.h"
 #include "../../gl/shader.h"
 #include "../../resource/render_resource.h"
@@ -70,6 +69,7 @@ bool Layer::load(const json &config, const std::string &base_path) {
         }
     }
 
+    // extra_material_refs：解析材质 ID 引用，存指针（材质由 RootNode 持有和加载）
     auto ref_ids = config.value("extra_material_refs", std::vector<std::string>{});
     for (const auto &ref_id : ref_ids) {
         static const MaterialType kRefTypes[] = {MATERIAL_TYPE_EFFECT, MATERIAL_TYPE_TRANSITION};
@@ -77,10 +77,7 @@ bool Layer::load(const json &config, const std::string &base_path) {
         MaterialType mat_type = MATERIAL_TYPE_EFFECT;
         for (auto type : kRefTypes) {
             mat = root_->getMaterial(type, ref_id);
-            if (mat) {
-                mat_type = type;
-                break;
-            }
+            if (mat) { mat_type = type; break; }
         }
         if (!mat) {
             setError("extra material not found: " + ref_id);
@@ -88,19 +85,10 @@ bool Layer::load(const json &config, const std::string &base_path) {
         }
 
         auto *effect_mat = static_cast<EffectMaterial *>(mat);
-        auto effect = std::make_unique<ResourceEffect>(root_);
-        if (!effect->loadFromFolder(effect_mat->getPath())) {
-            setError("load extra[" + ref_id + "] failed: " + effect->getRenderResource()->getErrorMessage());
-            return false;
-        }
-
-        if (mat_type == MATERIAL_TYPE_TRANSITION) {
-            auto *trans_mat = static_cast<TransitionMaterial *>(mat);
-            effect->getRenderResource()->setResourceDuration(trans_mat->getDuration());
-            transitions_.emplace_back(EffectInfo{trans_mat, std::move(effect)});
-        } else {
-            effects_.emplace_back(EffectInfo{effect_mat, std::move(effect)});
-        }
+        if (mat_type == MATERIAL_TYPE_TRANSITION)
+            transitions_.emplace_back(EffectInfo{static_cast<TransitionMaterial *>(mat)});
+        else
+            effects_.emplace_back(EffectInfo{effect_mat});
     }
 
     visible_ = config.value("visible", true);
@@ -141,14 +129,12 @@ bool Layer::hasTransition() const {
 }
 
 Effect *Layer::getActiveTransition(TimeMs time_ms) const {
-    if (!hasTransition())
-        return nullptr;
-    auto &transition = transitions_.front().effect;
-    TimeMs halfTransitionDuration = transition->getRenderResource()->getResourceDuration() / 2;
-    TimeMs relativeTime = time_ms - getStartTime();
-    // 时间在图层结束前[getDurationMs - transitionDuration/2, getDurationMs + transitionDuration/2]
-    if (relativeTime >= getDurationMs() - halfTransitionDuration && relativeTime < getDurationMs() + halfTransitionDuration)
-        return transition.get();
+    if (!hasTransition()) return nullptr;
+    auto *mat = transitions_.front().material;
+    TimeMs halfDur = mat->getDurationMs() / 2;
+    TimeMs relTime = time_ms - getStartTime();
+    if (relTime >= getDurationMs() - halfDur && relTime < getDurationMs() + halfDur)
+        return mat->getEffect();
     return nullptr;
 }
 
@@ -218,14 +204,10 @@ json Layer::dumpSourceRange() const {
 }
 
 bool Layer::hasActiveEffects(TimeMs time_ms) const {
-    if (effects_.empty())
-        return false;
-
+    if (effects_.empty()) return false;
     TimeMs offset = time_ms - target_range_.start;
     return std::any_of(effects_.begin(), effects_.end(),
-                       [offset](const auto &effect_info) {
-                           return effect_info.effect->isActive(offset);
-                       });
+                       [offset](const auto &ei) { return ei.material->isActive(offset); });
 }
 
 static glm::mat4 computeModelMatrix(const Clip &clip, float aspect) {
@@ -310,21 +292,17 @@ bool Layer::draw(const gl::FBO &target, TimeMs time_ms) {
 }
 
 gl::FBO Layer::applyEffects(const gl::FBO &input, TimeMs time_ms) {
-    if (effects_.empty() || !root_)
-        return gl::FBO{};
+    if (effects_.empty() || !root_) return gl::FBO{};
 
     gl::FBO current = input;
     TimeMs offset = time_ms - getStartTime();
 
-    for (auto &effect_ifo : effects_) {
-        auto &effect = effect_ifo.effect;
-        if (!effect->isActive(offset))
-            continue;
+    for (auto &ei : effects_) {
+        if (!ei.material->isActive(offset)) continue;
         if (current.isValid() && current.fbo != input.fbo)
             root_->getFBOPool()->release(current);
-        gl::FBO output = effect->apply({current}, offset);
-        if (!output.isValid())
-            return gl::FBO{};
+        gl::FBO output = ei.material->apply({current}, offset);
+        if (!output.isValid()) return gl::FBO{};
         current = output;
     }
 

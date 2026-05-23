@@ -1,4 +1,7 @@
 #include "material.h"
+#include "effect.h"
+#include "../../resource/render_resource.h"
+#include <filesystem>
 
 using json = nlohmann::json;
 
@@ -78,6 +81,10 @@ void VideoMaterial::updateWHAndDuration(int width, int height, TimeMs duration) 
 
 // ========== EffectMaterial 实现 ==========
 
+EffectMaterial::EffectMaterial(RootNode *root) : root_(root) {}
+
+EffectMaterial::~EffectMaterial() = default;
+
 bool EffectMaterial::load(const json &config, const std::string &base_path) {
     if (!Material::load(config, base_path)) {
         setError("effect material: " + getErrorMessage());
@@ -91,9 +98,19 @@ bool EffectMaterial::load(const json &config, const std::string &base_path) {
 
     effect_name_ = config.value("name", "");
 
-    // 存储额外配置（如果有）
-    if (config.contains("config")) {
+    if (config.contains("config"))
         config_ = config["config"];
+
+    // 创建并加载 ResourceEffect
+    if (root_) {
+        resource_effect_ = std::make_unique<ResourceEffect>(root_);
+        const std::string folder = std::filesystem::path(path_).is_absolute()
+                                       ? path_
+                                       : (base_path.empty() ? path_ : base_path + "/" + path_);
+        if (!resource_effect_->loadFromFolder(folder)) {
+            setError("effect material[" + id_ + "]: " + resource_effect_->getErrorMessage());
+            return false;
+        }
     }
 
     return true;
@@ -101,18 +118,51 @@ bool EffectMaterial::load(const json &config, const std::string &base_path) {
 
 json EffectMaterial::dump() const {
     json j = Material::dump();
-    if (!config_.is_null()) {
+    if (!config_.is_null())
         j["config"] = config_;
-    }
     return j;
 }
 
-const std::string &EffectMaterial::getEffectName() const {
-    return effect_name_;
+const std::string &EffectMaterial::getEffectName() const { return effect_name_; }
+const nlohmann::json &EffectMaterial::getConfig() const { return config_; }
+
+gl::FBO EffectMaterial::apply(const std::vector<gl::FBO> &inputs, TimeMs time_ms) {
+    if (!resource_effect_) return gl::FBO{};
+    return resource_effect_->apply(inputs, time_ms);
 }
 
-const nlohmann::json &EffectMaterial::getConfig() const {
-    return config_;
+bool EffectMaterial::isActive(TimeMs time_ms) const {
+    if (!resource_effect_) return false;
+    return resource_effect_->isActive(time_ms);
+}
+
+TimeMs EffectMaterial::getDurationMs() const {
+    if (!resource_effect_) return 0;
+    return resource_effect_->getDurationMs();
+}
+
+Effect *EffectMaterial::getEffect() const {
+    return resource_effect_.get();
+}
+
+RenderResource *EffectMaterial::getRenderResource() const {
+    if (!resource_effect_) return nullptr;
+    return resource_effect_->getRenderResource();
+}
+
+bool EffectMaterial::setFloatParam(const std::string &name, float value) {
+    auto *r = getRenderResource();
+    return r && r->setFloatParam(name, value);
+}
+
+bool EffectMaterial::setVecParam(const std::string &name, const std::vector<float> &value) {
+    auto *r = getRenderResource();
+    return r && r->setVecParam(name, value);
+}
+
+bool EffectMaterial::setBoolParam(const std::string &name, bool value) {
+    auto *r = getRenderResource();
+    return r && r->setBoolParam(name, value);
 }
 
 // ========== TextMaterial 实现 ==========
@@ -333,19 +383,25 @@ const std::vector<TextStyleRun> &TextMaterial::getStyleRuns() const {
     return style_runs_;
 }
 
-bool TransitionMaterial::load(const json &config, const std::string &base_path) {
-    if (!EffectMaterial::load(config, base_path)) {
-        setError("transition material: " + getErrorMessage());
-        return false;
-    }
+TransitionMaterial::TransitionMaterial(RootNode *root) : EffectMaterial(root) {}
 
+bool TransitionMaterial::load(const json &config, const std::string &base_path) {
     duration_ms_ = config.value("duration", 0);
     if (duration_ms_ == 0) {
         setError("transition material[" + id_ + "]: duration is required");
         return false;
     }
 
-    return EffectMaterial::load(config, base_path);
+    if (!EffectMaterial::load(config, base_path)) {
+        setError("transition material: " + getErrorMessage());
+        return false;
+    }
+
+    // 把协议声明的时长同步给 RenderResource
+    if (resource_effect_ && resource_effect_->getRenderResource())
+        resource_effect_->getRenderResource()->setResourceDuration(duration_ms_);
+
+    return true;
 }
 
 json TransitionMaterial::dump() const {

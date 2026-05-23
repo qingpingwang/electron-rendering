@@ -107,4 +107,26 @@ module.exports = [
             db.exec('DROP TABLE IF EXISTS chat_messages;');
         },
     },
+    {
+        version: 6,
+        name: 'create_resource_projects',
+        up(db) {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS resource_projects (
+                    uuid       TEXT PRIMARY KEY,
+                    name       TEXT NOT NULL,
+                    folder     TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+            `);
+        },
+    },
+    {
+        version: 7,
+        name: 'resource_projects_add_first_message',
+        up(_db) {
+            // 已废弃：first_message 改为从 LangGraph checkpoint 实时读取，不落地 SQL
+            // 保留 version 占位，避免已迁移环境重跑
+        },
+    },
 ];

@@ -3,7 +3,8 @@ const agentClient = require('./agent_client');
 
 marked.setOptions({ breaks: true, gfm: true });
 
-const WELCOME_MESSAGE = `👋 **您好！我是视频编辑助手**
+const WELCOME_MESSAGES = {
+    editor: `👋 **您好！我是视频编辑助手**
 
 **我可以帮您：**
 • 查看和修改工程信息
@@ -14,17 +15,55 @@ const WELCOME_MESSAGE = `👋 **您好！我是视频编辑助手**
 **使用示例：**
 • "帮我把标题改成 Hello World"
 • "调整图层位置到居中"
-• "查看当前工程信息"`;
+• "查看当前工程信息"`,
+
+    resource: `🎨 **您好！我是渲染资源工程助手**
+
+**我可以帮您：**
+• 编写 GLSL Shader（顶点/片段着色器）
+• 生成 \`config.json\` 渲染资源配置
+• 配置内/外部 uniform 参数
+
+**安全约定：**
+• 读取：可读任意位置（参考资料、其他工程等）
+• 写入：仅限沙箱目录内
+
+**使用示例：**
+• "新建一个高斯模糊效果，外部参数 sigma 范围 0~10"
+• "把 simple_effect 复制一份改成红色调滤镜"
+• "看一下 blur_effect 的 config 怎么配的"`,
+};
+
+const HEADER_LABELS = {
+    editor: 'AI 编辑助手',
+    resource: '渲染资源助手',
+};
 
 const messagesEl = document.getElementById('messages');
 const inputEl = document.getElementById('input');
 const sendBtn = document.getElementById('btn-send');
 const toggleMediaBtn = document.getElementById('btn-toggle-media');
+const headerLabelEl = document.querySelector('header span.text-sm.font-semibold');
 
 let currentAIBubble = null;
 let currentTokens = '';
 let isStreaming = false;
 let currentProjectUUID = null;
+let currentMode = agentClient.DEFAULT_MODE || 'editor';
+
+function applyModeUI(mode) {
+    if (headerLabelEl) headerLabelEl.textContent = HEADER_LABELS[mode] || HEADER_LABELS.editor;
+    // 媒体库按钮仅在视频编辑模式可见
+    if (toggleMediaBtn) {
+        toggleMediaBtn.style.display = (mode === 'editor') ? '' : 'none';
+    }
+    // 输入提示
+    if (inputEl) {
+        inputEl.placeholder = (mode === 'resource')
+            ? '描述你想要的 shader 或资源配置...'
+            : '输入你的编辑需求...';
+    }
+}
 
 /** 已发送的用户消息（倒序：0 = 最近一条），Shift+↑/↓ 像终端一样翻阅 */
 let _inputHistory = [];
@@ -442,12 +481,16 @@ function sendMessage() {
         onDone: finalizeMessage,
     }, {
         threadId: currentProjectUUID,
+        mode: currentMode,
     });
 }
 
 // ---- 历史记录 ----
 
-agentClient.onHistoryLoaded((history) => {
+agentClient.onHistoryLoaded((history, meta = {}) => {
+    if (meta.mode) currentMode = meta.mode;
+    applyModeUI(currentMode);
+
     messagesEl.innerHTML = '';
     currentAIBubble = null;
     currentTokens = '';
@@ -457,7 +500,7 @@ agentClient.onHistoryLoaded((history) => {
     _inputHistoryIndex = -1;
     _inputBeforeHistory = '';
 
-    addAIBubble(WELCOME_MESSAGE);
+    addAIBubble(WELCOME_MESSAGES[currentMode] || WELCOME_MESSAGES.editor);
 
     if (history && history.length > 0) {
         const humanLines = [];
@@ -492,19 +535,21 @@ agentClient.onHistoryLoaded((history) => {
 
 window.__onProjectOpened = async function (uuid, options = {}) {
     currentProjectUUID = uuid;
-    await agentClient.notifyProjectOpened(uuid, options);
-    if (mediaLib) await mediaLib.setProject(uuid);
+    currentMode = options.mode || agentClient.DEFAULT_MODE || 'editor';
+    applyModeUI(currentMode);
+    await agentClient.notifyProjectOpened(uuid, { ...options, mode: currentMode });
+    if (currentMode === 'editor' && mediaLib) await mediaLib.setProject(uuid);
 };
 
-window.__deleteProjectChatContext = function (uuid) {
-    return agentClient.deleteProjectSession(uuid);
+window.__deleteProjectChatContext = function (uuid, mode) {
+    return agentClient.deleteThread(uuid, mode);
 };
 
 window.__agentApi = {
-    initThread: (threadId) => agentClient.initThread(threadId),
-    getHistory: (threadId) => agentClient.getHistory(threadId),
-    deleteThread: (threadId) => agentClient.deleteThread(threadId),
-    getResources: (threadId) => agentClient.getResources(threadId),
+    initThread:   (threadId, mode) => agentClient.initThread(threadId, mode),
+    getHistory:   (threadId, mode) => agentClient.getHistory(threadId, mode),
+    deleteThread: (threadId, mode) => agentClient.deleteThread(threadId, mode),
+    getResources: (threadId, mode) => agentClient.getResources(threadId, mode),
 };
 
 // ---- Event bindings ----
@@ -571,4 +616,5 @@ toggleMediaBtn.addEventListener('click', () => {
     });
 })();
 
+applyModeUI(currentMode);
 updateSendButton();

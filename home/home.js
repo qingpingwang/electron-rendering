@@ -16,7 +16,9 @@ const PRESETS = [
     { name: '方形', width: 1080, height: 1080, iconClass: 'square' },
 ];
 
-// ---- Rendering ----
+// =====================================================================
+// 视频工程
+// =====================================================================
 
 function renderPresets() {
     const container = document.getElementById('home-presets');
@@ -36,34 +38,19 @@ function renderPresets() {
 }
 
 function renderHistory() {
-    const section = document.getElementById('home-history-section');
-    const list = document.getElementById('home-history-list');
-
     const items = db.projects.list();
-
-    list.innerHTML = '';
-
-    if (!items || items.length === 0) {
-        section.style.display = 'none';
-        return;
-    }
-
-    section.style.display = '';
-    items.forEach(item => {
+    renderHistoryList('home-history-section', 'home-history-list', items, item => {
         const row = document.createElement('div');
         row.className = 'home-history-item';
-
         row.innerHTML = `
             <span class="home-history-label">${escapeHtml(item.name)}</span>
             <span class="home-history-duration">${formatDuration(item.duration)}</span>
             <span class="home-history-date">${formatDate(item.updatedAt)}</span>
         `;
         row.addEventListener('click', () => openProject(item));
-        list.appendChild(row);
+        return row;
     });
 }
-
-// ---- Actions ----
 
 function openProject(item) {
     const absPath = path.resolve(ROOT_DIR, item.configPath);
@@ -74,6 +61,7 @@ function openProject(item) {
         return;
     }
     ipcRenderer.send('open-project', {
+        type: 'editor',
         uuid: item.uuid,
         configPath: item.configPath,
     });
@@ -112,7 +100,7 @@ function createProject(width, height) {
         duration: config.duration,
     });
 
-    ipcRenderer.send('open-project', { uuid, configPath, isNew: true });
+    ipcRenderer.send('open-project', { type: 'editor', uuid, configPath, isNew: true });
 }
 
 async function openProjectFromFile() {
@@ -160,18 +148,92 @@ async function openProjectFromFile() {
             duration,
         });
 
-        ipcRenderer.send('open-project', { uuid, configPath: absPath, isNew: true });
+        ipcRenderer.send('open-project', { type: 'editor', uuid, configPath: absPath, isNew: true });
     } catch (e) {
         toast.show(`打开失败: ${e.message}`, 'error');
     }
 }
 
-// ---- Helpers ----
+// =====================================================================
+// 渲染资源工程  —— 聊天室不绑定任何项目文件夹，通过 checkpointer 接口管理会话
+// =====================================================================
+
+async function renderResHistory() {
+    const list = document.getElementById('res-history-list');
+    list.innerHTML = '<div style="padding:8px;color:#888;font-size:12px;">加载中…</div>';
+    document.getElementById('res-history-section').style.display = '';
+
+    const agent = require('../agent');
+    let threads = [];
+    try {
+        threads = await agent.listResourceThreads();
+    } catch (e) {
+        console.warn('[Home] listResourceThreads failed:', e.message);
+    }
+
+    renderHistoryList('res-history-section', 'res-history-list', threads, item => {
+        const row = document.createElement('div');
+        row.className = 'home-history-item';
+        const label = truncate(item.title) || '（未开始对话）';
+        row.innerHTML = `
+            <span class="home-history-label">${escapeHtml(label)}</span>
+            <span class="home-history-duration">${escapeHtml(item.uuid.substring(0, 8))}</span>
+            <span class="home-history-date">${formatDate(item.updatedAt)}</span>
+        `;
+        row.addEventListener('click', () => openResourceProject(item));
+        return row;
+    });
+}
+
+function openResourceProject(item) {
+    ipcRenderer.send('open-project', {
+        type: 'resource',
+        uuid: item.uuid,
+        name: item.title || item.uuid,
+    });
+}
+
+function createResourceProject() {
+    const uuid = crypto.randomUUID();
+    // 聊天室不创建任何文件夹，会话由 LangGraph checkpoint 持久化
+    ipcRenderer.send('open-project', {
+        type:  'resource',
+        uuid,
+        name:  '',
+        isNew: true,
+    });
+}
+
+// =====================================================================
+// Tabs
+// =====================================================================
+
+function setupTabs() {
+    const tabs = document.querySelectorAll('.home-tab');
+    const panels = document.querySelectorAll('.home-tab-panel');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const id = tab.dataset.tab;
+            tabs.forEach(t => t.classList.toggle('active', t === tab));
+            panels.forEach(p => p.classList.toggle('active', p.dataset.tabPanel === id));
+        });
+    });
+}
+
+// =====================================================================
+// Helpers
+// =====================================================================
 
 function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str || '';
     return div.innerHTML;
+}
+
+/** 超出 max 字符时截断并加省略号 */
+function truncate(str, max = 52) {
+    if (!str) return '';
+    return str.length > max ? str.substring(0, max) + '…' : str;
 }
 
 function formatDuration(ms) {
@@ -192,14 +254,35 @@ function formatDate(isoStr) {
     }
 }
 
-// ---- Init ----
+/**
+ * 通用历史列表渲染：填充 section/list 对应 DOM。
+ * buildRow(item) → HTMLElement
+ */
+function renderHistoryList(sectionId, listId, items, buildRow) {
+    const section = document.getElementById(sectionId);
+    const list    = document.getElementById(listId);
+    list.innerHTML = '';
+    if (!items || items.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+    section.style.display = '';
+    items.forEach(item => list.appendChild(buildRow(item)));
+}
+
+// =====================================================================
+// Init
+// =====================================================================
 
 ipcRenderer.on('refresh-history', () => {
     renderHistory();
+    renderResHistory();
 });
 
+setupTabs();
 renderPresets();
 renderHistory();
+renderResHistory();
 
 document.getElementById('home-create').addEventListener('click', () => {
     const w = parseInt(document.getElementById('home-w').value, 10);
@@ -210,4 +293,8 @@ document.getElementById('home-create').addEventListener('click', () => {
 
 document.getElementById('home-open-file').addEventListener('click', () => {
     openProjectFromFile();
+});
+
+document.getElementById('res-create').addEventListener('click', () => {
+    createResourceProject();
 });

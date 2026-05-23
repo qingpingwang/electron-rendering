@@ -15,6 +15,9 @@ class WindowManager {
         this._lastChatBounds = null;
         this._ipcSetup = false;
         this._suppressHomeQuit = false;
+
+        // 渲染资源工程窗口（仅 chat，无 editor / tab-bar）
+        this.resourceWindow = null;
     }
 
     // ---- Home Window ----
@@ -328,6 +331,68 @@ class WindowManager {
         return this.chatView?.webContents;
     }
 
+    // ---- Resource Project Window (chat-only) ----
+
+    showResourceWindow() {
+        if (this.resourceWindow && !this.resourceWindow.isDestroyed()) {
+            this.resourceWindow.show();
+            this.resourceWindow.focus();
+            return this.resourceWindow;
+        }
+
+        this.resourceWindow = new BrowserWindow({
+            width: 1400,
+            height: 840,
+            minWidth: 900,
+            minHeight: 560,
+            show: false,
+            backgroundColor: '#0f0f1a',
+            title: '渲染资源助手',
+            titleBarStyle: 'hiddenInset',
+            trafficLightPosition: { x: 12, y: 10 },
+            webPreferences: {
+                nodeIntegration: true,
+                contextIsolation: false,
+                enableRemoteModule: true,
+            },
+        });
+        this.resourceWindow.loadFile(path.join(__dirname, '..', 'resource_ui', 'index.html'));
+        try {
+            require('@electron/remote/main').enable(this.resourceWindow.webContents);
+        } catch (_) {}
+
+
+        this.resourceWindow.webContents.on('before-input-event', (_event, input) => {
+            if (input.type === 'keyDown' && input.key === 'F12') {
+                const wc = this.resourceWindow?.webContents;
+                if (!wc) return;
+                if (wc.isDevToolsOpened()) wc.closeDevTools();
+                else wc.openDevTools({ mode: 'detach' });
+            }
+        });
+
+        this.resourceWindow.once('ready-to-show', () => this.resourceWindow.show());
+        this.resourceWindow.on('closed', () => {
+            this.resourceWindow = null;
+            if (!this.mainWindow && !this.homeWindow && !this.chatWindow) {
+                this.showHome();
+            }
+        });
+        return this.resourceWindow;
+    }
+
+    closeResource() {
+        if (this.resourceWindow && !this.resourceWindow.isDestroyed()) {
+            this.resourceWindow.removeAllListeners();
+            this.resourceWindow.destroy();
+        }
+        this.resourceWindow = null;
+    }
+
+    getResourceChatWebContents() {
+        return this.resourceWindow?.webContents;
+    }
+
     destroy() {
         if (this.chatWindow && !this.chatWindow.isDestroyed()) {
             this.chatWindow.removeAllListeners();
@@ -338,6 +403,11 @@ class WindowManager {
             this.mainWindow.destroy();
         }
         this.mainWindow = null;
+        if (this.resourceWindow && !this.resourceWindow.isDestroyed()) {
+            this.resourceWindow.removeAllListeners();
+            this.resourceWindow.destroy();
+        }
+        this.resourceWindow = null;
         if (this.homeWindow && !this.homeWindow.isDestroyed()) {
             this.homeWindow.destroy();
         }

@@ -24,6 +24,10 @@ Napi::Function RootWrap::GetClass(Napi::Env env) {
                                             InstanceMethod("findLayerById", &RootWrap::FindLayerById),
                                             InstanceMethod("getAudioInfos", &RootWrap::GetAudioInfos),
 
+                                            InstanceMethod("setMaterialFloatParam", &RootWrap::SetMaterialFloatParam),
+                                            InstanceMethod("setMaterialVecParam",   &RootWrap::SetMaterialVecParam),
+                                            InstanceMethod("setMaterialBoolParam",  &RootWrap::SetMaterialBoolParam),
+
                                             InstanceAccessor("width", &RootWrap::GetWidth, nullptr),
                                             InstanceAccessor("height", &RootWrap::GetHeight, nullptr),
                                             InstanceAccessor("durationMs", &RootWrap::GetDurationMs, nullptr),
@@ -219,6 +223,55 @@ static Napi::Value jsonToNapi(Napi::Env env, const nlohmann::json &j) {
 
 Napi::Value RootWrap::GetAudioInfos(const Napi::CallbackInfo &info) {
     return jsonToNapi(info.Env(), root_->getAudioInfos());
+}
+
+// ========== Material Param Setters ==========
+
+// setMaterialFloatParam(materialId: string, name: string, value: number) → boolean
+Napi::Value RootWrap::SetMaterialFloatParam(const Napi::CallbackInfo &info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 3 || !info[0].IsString() || !info[1].IsString() || !info[2].IsNumber()) {
+        Napi::TypeError::New(env, "expected (materialId: string, name: string, value: number)").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    bool ok = root_->setMaterialFloatParam(
+        info[0].As<Napi::String>().Utf8Value(),
+        info[1].As<Napi::String>().Utf8Value(),
+        info[2].As<Napi::Number>().FloatValue());
+    return Napi::Boolean::New(env, ok);
+}
+
+// setMaterialVecParam(materialId: string, name: string, values: number[]) → boolean
+Napi::Value RootWrap::SetMaterialVecParam(const Napi::CallbackInfo &info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 3 || !info[0].IsString() || !info[1].IsString() || !info[2].IsArray()) {
+        Napi::TypeError::New(env, "expected (materialId: string, name: string, values: number[])").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    auto arr = info[2].As<Napi::Array>();
+    std::vector<float> values;
+    values.reserve(arr.Length());
+    for (uint32_t i = 0; i < arr.Length(); ++i)
+        values.push_back(arr.Get(i).As<Napi::Number>().FloatValue());
+    bool ok = root_->setMaterialVecParam(
+        info[0].As<Napi::String>().Utf8Value(),
+        info[1].As<Napi::String>().Utf8Value(),
+        values);
+    return Napi::Boolean::New(env, ok);
+}
+
+// setMaterialBoolParam(materialId: string, name: string, value: boolean) → boolean
+Napi::Value RootWrap::SetMaterialBoolParam(const Napi::CallbackInfo &info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 3 || !info[0].IsString() || !info[1].IsString() || !info[2].IsBoolean()) {
+        Napi::TypeError::New(env, "expected (materialId: string, name: string, value: boolean)").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    bool ok = root_->setMaterialBoolParam(
+        info[0].As<Napi::String>().Utf8Value(),
+        info[1].As<Napi::String>().Utf8Value(),
+        info[2].As<Napi::Boolean>().Value());
+    return Napi::Boolean::New(env, ok);
 }
 
 // ========== Getters ==========

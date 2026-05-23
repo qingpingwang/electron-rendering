@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <title>渲染资源助手</title>
+    <link rel="stylesheet" href="../chat/dist/output.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body {
+            margin: 0; padding: 0;
+            height: 100vh; overflow: hidden;
+            background: #0f0f1a;
+            color: #cbd5e1;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 13px;
+        }
+
+        /* ===== 标题栏 ===== */
+        #app-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            height: 40px;
+            padding: 0 14px;
+            background: #15152b;
+            border-bottom: 1px solid #2a2a4a;
+            -webkit-app-region: drag;
+            flex-shrink: 0;
+            user-select: none;
+        }
+        #app-header .traffic-light-space { width: 64px; flex-shrink: 0; }
+        #app-header .header-icon { color: #818cf8; font-size: 18px; }
+        #app-header .header-title { font-weight: 600; color: #a5b4fc; font-size: 13px; }
+        #app-header .header-sep { color: #3f3f6a; margin: 0 4px; }
+        #app-header #res-title { color: #64748b; font-size: 12px; }
+
+        /* ===== 主体容器（标题栏 + 内容行 + 播放条） ===== */
+        #main-wrap {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 40px);
+            overflow: hidden;
+        }
+
+        /* ===== 三栏内容行 ===== */
+        #content-row {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        /* ===== 垂直分割条 ===== */
+        .divider-v {
+            width: 4px;
+            flex-shrink: 0;
+            background: #1a1a30;
+            cursor: col-resize;
+            transition: background 0.15s;
+            position: relative;
+            z-index: 10;
+        }
+        .divider-v:hover, .divider-v.active { background: #4f46e5; }
+        body.resizing-v { cursor: col-resize !important; user-select: none; }
+
+        /* ===== 左栏 ===== */
+        #left-sidebar {
+            display: flex;
+            flex-direction: column;
+            background: #12122a;
+            overflow: hidden;
+            min-width: 120px;
+            flex-shrink: 0;
+            flex-grow: 0;
+        }
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            color: #4f5d8a;
+            text-transform: uppercase;
+            flex-shrink: 0;
+            user-select: none;
+        }
+        #btn-refresh-list {
+            background: none; border: none; cursor: pointer;
+            color: #4f5d8a; padding: 2px;
+            border-radius: 4px;
+            display: flex; align-items: center;
+            transition: color 0.15s;
+        }
+        #btn-refresh-list:hover { color: #a5b4fc; }
+        #resource-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px 8px 8px;
+        }
+        #resource-list::-webkit-scrollbar { width: 4px; }
+        #resource-list::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 2px; }
+        .resource-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid transparent;
+            margin-bottom: 4px;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        /* 已知类型的卡片可点击 */
+        .resource-item.selectable {
+            cursor: pointer;
+        }
+        .resource-item.selectable:hover { background: #1a1a3a; }
+        .resource-item.selectable.active {
+            background: #1a1e40;
+            border-color: #4f46e5;
+        }
+        .resource-item.selectable.active .resource-item-name { color: #a5b4fc; }
+        /* 类型未知的卡片 */
+        .resource-item.unknown {
+            background: #141425;
+            border-color: #2a2a40;
+        }
+        .resource-item-name {
+            font-weight: 500;
+            color: #c4cde8;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .resource-item-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .resource-item-folder {
+            font-size: 10px; color: #3f4f6a;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            flex: 1;
+        }
+        /* 类型徽标（点击挂载后展示） */
+        .resource-type-badge {
+            font-size: 10px; font-weight: 600;
+            letter-spacing: 0.04em;
+            padding: 1px 7px; border-radius: 10px;
+            flex-shrink: 0;
+        }
+        .resource-type-badge.effect     { background: #1d2d50; color: #60a5fa; }
+        .resource-type-badge.transition { background: #1d3030; color: #34d399; }
+        .resource-item.selectable.active .resource-type-badge.effect     { background: #243560; border: 1px solid #3b82f6; }
+        .resource-item.selectable.active .resource-type-badge.transition { background: #1a3838; border: 1px solid #10b981; }
+        /* 类型选择按钮（仅 unknown 卡片） */
+        .resource-type-btns { display: flex; gap: 4px; margin-left: auto; flex-shrink: 0; }
+        .resource-type-hint { font-size: 10px; color: #4f5d8a; }
+        .type-btn {
+            font-size: 10px; font-weight: 600; letter-spacing: 0.04em;
+            padding: 2px 8px; border-radius: 10px; border: 1px solid transparent;
+            cursor: pointer; transition: all 0.15s;
+            background: transparent;
+        }
+        .type-btn.effect     { color: #60a5fa; border-color: #1d2d50; }
+        .type-btn.transition { color: #34d399; border-color: #1d3030; }
+        .type-btn.effect:hover     { background: #1d2d50; }
+        .type-btn.transition:hover { background: #1d3030; }
+        .resource-list-empty {
+            color: #3f4f6a; font-size: 12px;
+            text-align: center; padding: 24px 12px; line-height: 1.6;
+        }
+
+        /* ===== 参数面板 ===== */
+        #param-panel {
+            flex-shrink: 0;
+            border-top: 1px solid #1e1e3a;
+            overflow-y: auto;
+            max-height: 260px;
+        }
+        #param-panel::-webkit-scrollbar { width: 4px; }
+        #param-panel::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 2px; }
+        #param-panel.empty { display: none; }
+        .param-panel-title {
+            font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
+            color: #4f5d8a; text-transform: uppercase;
+            padding: 8px 10px 4px;
+            user-select: none;
+        }
+        .param-item {
+            padding: 4px 10px 6px;
+        }
+        .param-label {
+            font-size: 11px; color: #8892b0;
+            display: flex; justify-content: space-between;
+            margin-bottom: 3px;
+        }
+        .param-label-value { color: #c4cde8; font-variant-numeric: tabular-nums; }
+        .param-slider {
+            width: 100%; height: 3px;
+            -webkit-appearance: none; appearance: none;
+            background: #1e1e3a; border-radius: 2px; outline: none;
+            cursor: pointer;
+        }
+        .param-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 11px; height: 11px; border-radius: 50%;
+            background: #60a5fa; cursor: pointer;
+        }
+        .param-slider.transition-slider::-webkit-slider-thumb { background: #34d399; }
+        .param-checkbox-row {
+            display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8892b0;
+        }
+        .param-checkbox { accent-color: #60a5fa; cursor: pointer; }
+        .param-vec-row { display: flex; flex-direction: column; gap: 2px; }
+
+        /* ===== 中栏（预览 + 日志） ===== */
+        #center-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #0d0d1e;
+            overflow: hidden;
+            min-width: 200px;
+        }
+
+        /* 预览容器 */
+        #preview-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            min-height: 60px;
+        }
+        #preview-canvas {
+            max-width: 100%; max-height: 100%;
+            object-fit: contain;
+            display: block;
+            background: #000;
+        }
+        #preview-status {
+            position: absolute;
+            bottom: 8px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.75);
+            color: #94a3b8;
+            font-size: 11px;
+            padding: 3px 10px;
+            border-radius: 12px;
+            max-width: 92%;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            pointer-events: none;
+            display: none;
+        }
+        #preview-status.visible { display: block; }
+        #preview-status.error { color: #f87171; }
+        #preview-placeholder {
+            position: absolute; inset: 0;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 12px;
+            color: #2a2a4a; font-size: 13px;
+            pointer-events: none;
+        }
+        #preview-placeholder .placeholder-icon { font-size: 48px; color: #1e1e38; }
+        #preview-placeholder.hidden { display: none; }
+
+        /* 水平分割条（预览 vs 日志） */
+        .divider-h {
+            height: 4px;
+            flex-shrink: 0;
+            background: #1a1a30;
+            cursor: row-resize;
+            transition: background 0.15s;
+        }
+        .divider-h:hover, .divider-h.active { background: #4f46e5; }
+        body.resizing-h { cursor: row-resize !important; user-select: none; }
+
+        /* 日志面板 */
+        #log-panel {
+            flex-shrink: 0;
+            background: #0a0a18;
+            border-top: none;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 28px;
+        }
+        #log-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            flex-shrink: 0;
+            background: #0f0f22;
+            cursor: pointer;
+            user-select: none;
+        }
+        #log-header span.log-title {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #4f5d8a;
+        }
+        #log-header .log-toggle { margin-left: auto; color: #4f5d8a; font-size: 16px; transition: transform 0.2s; }
+        #log-panel.collapsed #log-header .log-toggle { transform: rotate(-90deg); }
+        #btn-clear-log {
+            background: none; border: none; cursor: pointer;
+            color: #4f5d8a; padding: 0;
+            border-radius: 4px;
+            display: flex; align-items: center;
+            font-size: 14px;
+            transition: color 0.15s;
+            -webkit-app-region: no-drag;
+        }
+        #btn-clear-log:hover { color: #94a3b8; }
+        #log-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px 10px 6px;
+            font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+            font-size: 11px;
+            line-height: 1.6;
+        }
+        #log-body::-webkit-scrollbar { width: 4px; }
+        #log-body::-webkit-scrollbar-thumb { background: #1e1e38; border-radius: 2px; }
+        #log-panel.collapsed #log-body { display: none; }
+        .log-line { padding: 0; }
+        .log-line .log-time { color: #2a3a5a; margin-right: 6px; }
+        .log-line.info  .log-msg { color: #64748b; }
+        .log-line.ok    .log-msg { color: #34d399; }
+        .log-line.warn  .log-msg { color: #fbbf24; }
+        .log-line.err   .log-msg { color: #f87171; }
+        .log-line.load  .log-msg { color: #818cf8; }
+
+        /* ===== 右栏（AI 聊天） ===== */
+        #chatPanel {
+            display: flex;
+            flex-direction: column;
+            background: #0f0f1e;
+            overflow: hidden;
+            min-width: 160px;
+            flex-shrink: 0;
+            flex-grow: 0;
+        }
+
+        /* ===== 底部播放控制条 ===== */
+        #playback-bar {
+            height: 48px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 0 16px;
+            background: #12122a;
+            border-top: 1px solid #1e1e38;
+        }
+        #btn-play-preview {
+            width: 32px; height: 32px;
+            border-radius: 50%;
+            background: #818cf8; border: none; cursor: pointer;
+            color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+            transition: background 0.15s;
+        }
+        #btn-play-preview:hover { background: #a5b4fc; }
+        #btn-play-preview:disabled { background: #2a2a4a; cursor: default; }
+        #time-display {
+            font-size: 11px; color: #64748b;
+            min-width: 80px; flex-shrink: 0;
+            font-variant-numeric: tabular-nums;
+        }
+        #seek-bar {
+            flex: 1; height: 4px;
+            -webkit-appearance: none; appearance: none;
+            background: #1e1e38; border-radius: 2px;
+            cursor: pointer; outline: none;
+        }
+        #seek-bar::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px; height: 12px;
+            background: #818cf8; border-radius: 50%; cursor: pointer;
+        }
+        #seek-bar:disabled { opacity: 0.3; cursor: default; }
+        #preview-resource-label {
+            font-size: 11px; color: #4f5d8a;
+            max-width: 140px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            flex-shrink: 0;
+        }
+    </style>
+</head>
+<body>
+    <!-- 标题栏 -->
+    <header id="app-header">
+        <div class="traffic-light-space"></div>
+        <span class="material-symbols-rounded header-icon">palette</span>
+        <span class="header-title">渲染资源助手</span>
+        <span class="header-sep">·</span>
+        <span id="res-title">未打开工程</span>
+    </header>
+
+    <div id="main-wrap">
+        <!-- 三栏内容行 -->
+        <div id="content-row">
+
+            <!-- 左栏：资源列表 -->
+            <aside id="left-sidebar">
+                <div class="sidebar-header">
+                    资源列表
+                    <button id="btn-refresh-list" title="刷新列表">
+                        <span class="material-symbols-rounded" style="font-size:16px">refresh</span>
+                    </button>
+                </div>
+                <div id="resource-list">
+                    <div class="resource-list-empty">正在扫描...</div>
+                </div>
+                <!-- 参数面板：挂载资源时自动填充 -->
+                <div id="param-panel" class="empty"></div>
+            </aside>
+
+            <!-- 垂直分割条 1 -->
+            <div class="divider-v" id="divider-v1"></div>
+
+            <!-- 中栏：预览 + 日志 -->
+            <main id="center-panel">
+                <!-- 预览 -->
+                <div id="preview-container">
+                    <canvas id="preview-canvas"></canvas>
+                    <div id="preview-placeholder">
+                        <span class="material-symbols-rounded placeholder-icon">play_circle</span>
+                        <span>点击左栏资源工程加载预览</span>
+                    </div>
+                    <div id="preview-status"></div>
+                </div>
+
+                <!-- 水平分割条 -->
+                <div class="divider-h" id="divider-h1"></div>
+
+                <!-- 日志面板 -->
+                <div id="log-panel">
+                    <div id="log-header">
+                        <span class="material-symbols-rounded" style="font-size:14px;color:#4f5d8a">terminal</span>
+                        <span class="log-title">日志</span>
+                        <button id="btn-clear-log" title="清空日志">
+                            <span class="material-symbols-rounded" style="font-size:14px">delete_sweep</span>
+                        </button>
+                        <span class="material-symbols-rounded log-toggle">expand_more</span>
+                    </div>
+                    <div id="log-body"></div>
+                </div>
+            </main>
+
+            <!-- 垂直分割条 2 -->
+            <div class="divider-v" id="divider-v2"></div>
+
+            <!-- 右栏：AI 聊天（与 chat/index.html 同 DOM 结构） -->
+            <div id="chatPanel" class="flex flex-col">
+                <header class="flex items-center justify-between px-4 h-11 bg-header-dark border-b border-border-dark shrink-0">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-rounded text-xl text-indigo-400">smart_toy</span>
+                        <span class="text-sm font-semibold text-slate-400">渲染资源助手</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <button id="btn-toggle-media" style="display:none">
+                            <span class="material-symbols-rounded text-lg">perm_media</span>
+                        </button>
+                    </div>
+                </header>
+                <div id="messages" class="overflow-y-auto px-4 py-4 flex flex-col gap-3 scrollbar-thin" style="height: 75%;"></div>
+                <div id="resizer" class="resizer shrink-0"></div>
+                <div class="flex-1 flex flex-col min-h-0 px-4 pb-3 pt-2">
+                    <div id="input-wrap" class="flex-1 flex items-start gap-2 bg-input-dark border border-border-dark rounded-xl px-3 py-2 focus-within:border-indigo-500/40 transition-colors min-h-0">
+                        <textarea id="input" rows="1" placeholder="描述你想要的 shader 或资源配置..."
+                            class="flex-1 bg-transparent border-none outline-none text-slate-200 text-sm resize-none leading-relaxed overflow-y-auto placeholder:text-slate-600 font-sans h-full"></textarea>
+                        <button id="btn-send" title="发送" disabled
+                            class="w-8 h-8 rounded-lg bg-primary hover:bg-indigo-500 text-white flex items-center justify-center transition-all shrink-0 mt-0.5 disabled:opacity-30 disabled:cursor-not-allowed">
+                            <span class="material-symbols-rounded text-lg">send</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部播放控制条 -->
+        <div id="playback-bar">
+            <button id="btn-play-preview" disabled title="播放/暂停">
+                <span class="material-symbols-rounded" style="font-size:18px">play_arrow</span>
+            </button>
+            <span id="time-display">0:00 / 0:00</span>
+            <input type="range" id="seek-bar" min="0" max="1000" value="0" step="1" disabled>
+            <span id="preview-resource-label"></span>
+        </div>
+    </div>
+
+    <script>require('../chat/chat.js')</script>
+    <script>require('./resource_ui.js')</script>
+</body>
+</html>

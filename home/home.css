@@ -58,6 +58,51 @@ body {
     margin-top: -10px;
 }
 
+/* ---- Tabs ---- */
+
+.home-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    width: 100%;
+    -webkit-app-region: no-drag;
+}
+
+.home-tab {
+    padding: 8px 18px;
+    font-size: 13px;
+    color: #777;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+    margin-bottom: -1px;
+}
+
+.home-tab:hover { color: #ccc; }
+
+.home-tab.active {
+    color: #4ecdc4;
+    border-bottom-color: #4ecdc4;
+}
+
+.home-tab-panel {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    width: 100%;
+}
+
+.home-tab-panel.active {
+    display: flex;
+}
+
+.home-input-wide {
+    width: 220px;
+    text-align: left;
+    padding: 4px 10px;
+}
+
 /* ---- Presets ---- */
 
 .home-presets {

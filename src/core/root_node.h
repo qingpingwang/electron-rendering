@@ -87,6 +87,11 @@ public:
     // 获取所有含音频的图层信息（layerId → {path, volume, layerType, sourceRange, targetRange}）
     nlohmann::json getAudioInfos() const;
 
+    // 通过素材 ID 设置 RenderResource 外部参数（特效/转场均可）
+    bool setMaterialFloatParam(const std::string &materialId, const std::string &name, float value);
+    bool setMaterialVecParam(const std::string &materialId, const std::string &name, const std::vector<float> &value);
+    bool setMaterialBoolParam(const std::string &materialId, const std::string &name, bool value);
+
 private:
     // 渲染一帧
     bool renderFrame(TimeMs time_ms, uint8_t *out_buffer);

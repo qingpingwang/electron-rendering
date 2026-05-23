@@ -1,8 +1,10 @@
 #include "root_node.h"
 #include "../layer/group/group_layer.h"
 #include "../layer/base/layer.h"
+#include "../layer/material/material.h"
 #include "../gl/shader.h"
 #include <algorithm>
+#include <functional>
 #include <cstring>
 #include <nlohmann/json.hpp>
 #include <glm/glm.hpp>
@@ -180,17 +182,17 @@ bool RootNode::load(const nlohmann::json &config, const std::string &base_path) 
         if (config.contains("materials")) {
             const auto &materials_json = config["materials"];
 
-            using Factory = std::unique_ptr<Material> (*)();
+            using Factory = std::function<std::unique_ptr<Material>()>;
             const struct {
                 const char *key;
                 MaterialType type;
                 Factory create;
             } loaders[] = {
-                {"videos", MATERIAL_TYPE_VIDEO, []() -> std::unique_ptr<Material> { return std::make_unique<VideoMaterial>(); }},
-                {"effects", MATERIAL_TYPE_EFFECT, []() -> std::unique_ptr<Material> { return std::make_unique<EffectMaterial>(); }},
-                {"texts", MATERIAL_TYPE_TEXT, []() -> std::unique_ptr<Material> { return std::make_unique<TextMaterial>(); }},
-                {"transitions", MATERIAL_TYPE_TRANSITION, []() -> std::unique_ptr<Material> { return std::make_unique<TransitionMaterial>(); }},
-                {"audios", MATERIAL_TYPE_AUDIO, []() -> std::unique_ptr<Material> { return std::make_unique<AudioMaterial>(); }},
+                {"videos",      MATERIAL_TYPE_VIDEO,      []()       -> std::unique_ptr<Material> { return std::make_unique<VideoMaterial>(); }},
+                {"effects",     MATERIAL_TYPE_EFFECT,     [this]()   -> std::unique_ptr<Material> { return std::make_unique<EffectMaterial>(this); }},
+                {"texts",       MATERIAL_TYPE_TEXT,       []()       -> std::unique_ptr<Material> { return std::make_unique<TextMaterial>(); }},
+                {"transitions", MATERIAL_TYPE_TRANSITION, [this]()   -> std::unique_ptr<Material> { return std::make_unique<TransitionMaterial>(this); }},
+                {"audios",      MATERIAL_TYPE_AUDIO,      []()       -> std::unique_ptr<Material> { return std::make_unique<AudioMaterial>(); }},
             };
 
             for (const auto &loader : loaders) {
@@ -477,6 +479,32 @@ nlohmann::json RootNode::getAudioInfos() const {
     }
 
     return result;
+}
+
+// ─── 素材参数控制 ───────────────────────────────────────────────────────────────
+
+static EffectMaterial *findEffectMat(RootNode *self, const std::string &materialId) {
+    for (auto type : {MATERIAL_TYPE_EFFECT, MATERIAL_TYPE_TRANSITION}) {
+        if (auto *mat = self->getMaterial(type, materialId))
+            return static_cast<EffectMaterial *>(mat);
+    }
+    return nullptr;
+}
+
+bool RootNode::setMaterialFloatParam(const std::string &materialId, const std::string &name, float value) {
+    auto *mat = findEffectMat(this, materialId);
+    return mat && mat->setFloatParam(name, value);
+}
+
+bool RootNode::setMaterialVecParam(const std::string &materialId, const std::string &name,
+                                   const std::vector<float> &value) {
+    auto *mat = findEffectMat(this, materialId);
+    return mat && mat->setVecParam(name, value);
+}
+
+bool RootNode::setMaterialBoolParam(const std::string &materialId, const std::string &name, bool value) {
+    auto *mat = findEffectMat(this, materialId);
+    return mat && mat->setBoolParam(name, value);
 }
 
 } // namespace vp

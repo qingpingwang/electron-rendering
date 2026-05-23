@@ -42,6 +42,11 @@ private:
     Napi::Value FindLayerById(const Napi::CallbackInfo &info);
     Napi::Value GetAudioInfos(const Napi::CallbackInfo &info);
 
+    // 素材参数控制（特效/转场 uniform）
+    Napi::Value SetMaterialFloatParam(const Napi::CallbackInfo &info);
+    Napi::Value SetMaterialVecParam(const Napi::CallbackInfo &info);
+    Napi::Value SetMaterialBoolParam(const Napi::CallbackInfo &info);
+
     Napi::Value GetWidth(const Napi::CallbackInfo &info);
     Napi::Value GetHeight(const Napi::CallbackInfo &info);
     Napi::Value GetDurationMs(const Napi::CallbackInfo &info);

@@ -9,22 +9,45 @@
     <div class="home-page">
         <div class="home-inner">
             <div class="home-title">视频编辑器</div>
-            <div class="home-subtitle">创建新项目</div>
 
-            <div class="home-presets" id="home-presets"></div>
-
-            <div class="home-custom">
-                <span class="home-custom-label">自定义</span>
-                <input type="number" class="home-input" id="home-w" value="1920" min="1" max="7680">
-                <span class="home-x">x</span>
-                <input type="number" class="home-input" id="home-h" value="1080" min="1" max="7680">
-                <button class="home-btn" id="home-create">创建</button>
-                <button class="home-btn home-btn-secondary" id="home-open-file">从文件打开</button>
+            <div class="home-tabs" id="home-tabs">
+                <div class="home-tab active" data-tab="editor">视频工程</div>
+                <div class="home-tab" data-tab="resource">渲染资源工程</div>
             </div>
 
-            <div class="home-history-section" id="home-history-section">
-                <div class="home-history-title">最近项目</div>
-                <div class="home-history-list" id="home-history-list"></div>
+            <!-- ===== 视频工程 ===== -->
+            <div class="home-tab-panel active" data-tab-panel="editor">
+                <div class="home-subtitle">创建新项目</div>
+
+                <div class="home-presets" id="home-presets"></div>
+
+                <div class="home-custom">
+                    <span class="home-custom-label">自定义</span>
+                    <input type="number" class="home-input" id="home-w" value="1920" min="1" max="7680">
+                    <span class="home-x">x</span>
+                    <input type="number" class="home-input" id="home-h" value="1080" min="1" max="7680">
+                    <button class="home-btn" id="home-create">创建</button>
+                    <button class="home-btn home-btn-secondary" id="home-open-file">从文件打开</button>
+                </div>
+
+                <div class="home-history-section" id="home-history-section">
+                    <div class="home-history-title">最近项目</div>
+                    <div class="home-history-list" id="home-history-list"></div>
+                </div>
+            </div>
+
+            <!-- ===== 渲染资源工程 ===== -->
+            <div class="home-tab-panel" data-tab-panel="resource">
+                <div class="home-subtitle">渲染资源助手 · 用对话创作 Shader 特效</div>
+
+                <div class="home-custom">
+                    <button class="home-btn" id="res-create">新建对话</button>
+                </div>
+
+                <div class="home-history-section" id="res-history-section">
+                    <div class="home-history-title">最近对话</div>
+                    <div class="home-history-list" id="res-history-list"></div>
+                </div>
             </div>
         </div>
     </div>

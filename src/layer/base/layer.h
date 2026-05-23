@@ -25,8 +25,7 @@ struct Clip {
 };
 
 struct EffectInfo {
-    EffectMaterial *material = nullptr;
-    std::unique_ptr<Effect> effect = nullptr;
+    EffectMaterial *material = nullptr; // 非持有，生命周期归 RootNode
 };
 
 // 图层基类

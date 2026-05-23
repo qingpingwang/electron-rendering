@@ -2,11 +2,18 @@
 
 #include "../../core/loadable.h"
 #include "../../core/types.h"
+#include "../../gl/types.h"
 #include <nlohmann/json.hpp>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace vp {
+
+class RenderResource; // 前向声明，避免循环依赖
+class ResourceEffect; // 前向声明
+class RootNode;       // 前向声明
+class Effect;         // 前向声明
 
 // 素材类型（固定数组下标）
 enum MaterialType {
@@ -65,28 +72,42 @@ private:
 };
 
 // 特效素材（配置层）
-// 存储特效的元信息，实际执行由 Effect 类负责
+// 存储特效的元信息，并持有 ResourceEffect 负责实际渲染
 class EffectMaterial : public Material {
 public:
-    EffectMaterial() = default;
-    ~EffectMaterial() override = default;
+    explicit EffectMaterial(RootNode *root = nullptr);
+    ~EffectMaterial() override;
 
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;
     nlohmann::json dump() const override;
 
-    // 获取特效类型（"resource", "builtin", "lut" 等）
+    // 特效类型（"resource", "builtin", "lut" 等）
     const std::string &getType() const;
-
-    // 获取特效名称（对于 builtin 类型）
     const std::string &getEffectName() const;
-
-    // 获取额外配置（扩展字段）
     const nlohmann::json &getConfig() const;
 
+    // 渲染接口（委托给 ResourceEffect）
+    gl::FBO apply(const std::vector<gl::FBO> &inputs, TimeMs time_ms);
+    bool isActive(TimeMs time_ms) const;
+    TimeMs getDurationMs() const;
+
+    // 返回内部 Effect 指针（供 Layer::getActiveTransition 向上兼容）
+    Effect *getEffect() const;
+
+    // 外部参数控制（委托给 RenderResource）
+    bool setFloatParam(const std::string &name, float value);
+    bool setVecParam(const std::string &name, const std::vector<float> &value);
+    bool setBoolParam(const std::string &name, bool value);
+    RenderResource *getRenderResource() const;
+
+protected:
+    RootNode *root_ = nullptr;
+    std::unique_ptr<ResourceEffect> resource_effect_; // 持有，生命周期随 EffectMaterial
+
 private:
-    std::string type_;        // 特效类型
-    std::string effect_name_; // 内置特效名称（builtin 类型）
-    nlohmann::json config_;   // 额外配置参数
+    std::string type_;
+    std::string effect_name_;
+    nlohmann::json config_;
 };
 
 // 文字对齐方式
@@ -202,10 +223,10 @@ private:
     std::vector<TextStyleRun> style_runs_;
 };
 
-// 转场继承自特效
+// 转场继承自特效，load 后自动把时长同步给 ResourceEffect
 class TransitionMaterial : public EffectMaterial {
 public:
-    TransitionMaterial() = default;
+    explicit TransitionMaterial(RootNode *root = nullptr);
     ~TransitionMaterial() override = default;
 
     bool load(const nlohmann::json &config, const std::string &base_path = "") override;

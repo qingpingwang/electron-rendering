@@ -1,112 +1,25 @@
 const { ChatOpenAI } = require('@langchain/openai');
 const { HumanMessage, AIMessageChunk, ToolMessage } = require('@langchain/core/messages');
-const { createAgent, dynamicSystemPromptMiddleware } = require('langchain');
+const { createAgent } = require('langchain');
 const { SqliteSaver } = require('@langchain/langgraph-checkpoint-sqlite');
 const { z } = require('zod');
 const fs = require('fs');
 const path = require('path');
 
 const db = require('../db');
-const { createEditorTools, fetchProjectProtocol, fetchTextLayerDigest } = require('./tools');
-const { SYSTEM_PROMPT } = require('./prompts');
 const { serializeLangGraphMessages } = require('./history_serialize');
+const { MODES, DEFAULT_MODE, getMode, listModes } = require('./modes');
 
-let agent = null;
+let llm = null;
 let checkpointer = null;
-/** 当前工程 UUID，作为 LangGraph thread_id */
-let activeThreadId = null;
+const agents = {};                      // mode -> compiled LangGraph agent
 
-const RESOURCE_SCHEMA = z.object({
-    resource_id: z.string(),
-    resource_name: z.string(),
-    resource_path: z.string(),
-    resource_type: z.enum(['video', 'audio', 'image']),
-    resource_size: z.number().optional(),
-    added_at: z.string().optional(),
-});
-
-const AGENT_STATE_SCHEMA = z.object({
-    resources: z.array(RESOURCE_SCHEMA).optional(),
-});
-
-/**
- * LangChain 动态系统提示词：每次进模型前 await 拉取「文字快览 + 完整协议 + 素材库」。
- * wrapModelCall 在工具执行后的下一轮同样会重新执行本函数并重新 IPC（数据会更新）。
- */
-const dynamicProjectContextMiddleware = dynamicSystemPromptMiddleware(async (_state, runtime) => {
-    const threadId = runtime.configurable?.thread_id;
-
-    let textDigestBlock = '';
-    try {
-        const digest = await fetchTextLayerDigest();
-        if (digest?.loaded && Array.isArray(digest.layers) && digest.layers.length > 0) {
-            textDigestBlock =
-                '## 文字图层当前文案（实时快照，优先用于核对改字）\n\n' +
-                '以下为编辑器内存中**每个文字图层**的 `layerId` 与当前 `text`；**每次调用本模型前**都会重新从编辑器拉取。' +
-                '`update_text` 成功后，**下一轮**本节即反映新文案（比下方完整协议里的嵌套 `content` 更易读）。\n\n' +
-                '```json\n' +
-                JSON.stringify(digest.layers, null, 2) +
-                '\n```\n\n';
-        } else if (digest && !digest.loaded) {
-            textDigestBlock =
-                '## 文字图层当前文案（实时快照）\n\n' +
-                '⚠️ 当前无法列出文字图层（工程未加载或不可用）' +
-                (digest.message ? `：${digest.message}` : '') +
-                '。\n\n';
-        }
-    } catch (e) {
-        textDigestBlock =
-            `## 文字图层当前文案（实时快照）\n\n⚠️ 获取文字图层快照失败：${e.message}\n\n`;
-    }
-
-    let protocolBlock = '';
-    try {
-        const proto = await fetchProjectProtocol();
-        if (proto?.loaded && proto.protocol) {
-            protocolBlock =
-                '## 当前视频工程协议（实时快照）\n\n' +
-                '以下为**当前编辑器内存中**导出的完整工程协议 JSON；在**每次调用模型前**都会重新获取，代表**最新状态**。\n\n' +
-                '> **重要**：此前对时间线、图层等的**具体操作过程**不会完整记录在本 JSON 中；请结合**历史聊天记录**与**工具调用 / Tool 消息**推断已执行过的编辑步骤。\n\n' +
-                '```json\n' +
-                proto.protocol +
-                '\n```\n\n';
-        } else {
-            protocolBlock =
-                '## 当前视频工程协议（实时快照）\n\n' +
-                '⚠️ 当前没有已加载的工程，或无法导出协议。' +
-                (proto?.message ? `（${proto.message}）` : '') +
-                '\n\n';
-        }
-    } catch (e) {
-        protocolBlock =
-            `## 当前视频工程协议（实时快照）\n\n⚠️ 获取协议失败：${e.message}\n\n`;
-    }
-
-    let resourcesBlock = '';
-    try {
-        const resources = threadId ? await getResourcesState(threadId) : [];
-        if (resources.length > 0) {
-            resourcesBlock =
-                '## 素材库（应用侧会话登记，与工程协议无关）\n\n' +
-                '以下为当前会话在应用侧维护的**素材库**列表（LangGraph 状态 `resources`）。**仅描述「用户/应用登记到素材库的文件」**。\n\n' +
-                '> **与上方视频工程协议的关系**：工程协议 JSON 里的 `materials`、轨道片段引用等，与**本节素材库**是**两套独立数据**，**没有一一对应关系**；不要假设本节某条记录必然出现在协议中，也不要用本节去「解释」协议里的素材字段。\n\n' +
-                `共 **${resources.length}** 条；在**每次模型调用前**从检查点读取，为**最新快照**。\n\n` +
-                '> **操作历史**：是否已拖入时间轴、剪辑顺序等请以**聊天记录与工具结果**推断；本节**只**反映素材库登记，不涉及时间轴操作。\n\n' +
-                '```json\n' +
-                `${JSON.stringify(resources, null, 2)}\n` +
-                '```\n\n';
-        } else {
-            resourcesBlock =
-                '## 素材库（应用侧会话登记，与工程协议无关）\n\n' +
-                '⚠️ 当前会话的素材库中暂无登记记录（与上方工程协议里是否已有 `materials` **无关**；协议有素材不代表本节一定有条目）。如需使用素材库能力，请先让用户将文件加入素材库。\n\n';
-        }
-    } catch (e) {
-        resourcesBlock =
-            `## 素材库（应用侧会话登记，与工程协议无关）\n\n⚠️ 读取素材库状态失败：${e.message}\n\n`;
-    }
-
-    return textDigestBlock + protocolBlock + resourcesBlock;
-});
+/** thread_id 命名规则：所有 mode 统一带前缀，零特殊情况 */
+function resolveThreadId(uuid, mode) {
+    if (!uuid) return null;
+    if (!MODES[mode]) throw new Error(`Unknown agent mode: ${mode}`);
+    return `${mode}:${uuid}`;
+}
 
 function getConfig() {
     const dotenvPath = path.join(__dirname, '..', '.env');
@@ -135,8 +48,8 @@ function ensureCheckpointer() {
     return checkpointer;
 }
 
-function initAgent() {
-    if (agent) return;
+function ensureLLM() {
+    if (llm) return llm;
 
     const config = getConfig();
     const apiKey = config.OPENAI_API_KEY || process.env.OPENAI_API_KEY || undefined;
@@ -144,8 +57,7 @@ function initAgent() {
     const modelName = config.OPENAI_MODEL_NAME || process.env.OPENAI_MODEL_NAME || undefined;
 
     if (!apiKey || !modelName || !baseURL) {
-        console.warn('[Agent] Missing OPENAI_API_KEY / MODEL_NAME / BASE_URL in .env');
-        return;
+        throw new Error('Missing OPENAI_API_KEY / MODEL_NAME / BASE_URL in .env');
     }
 
     if (baseURL) baseURL = baseURL.replace(/\/chat\/completions\/?$/i, '').replace(/\/$/, '');
@@ -160,30 +72,54 @@ function initAgent() {
         if (!Number.isNaN(t)) temperature = Math.min(2, Math.max(0, t));
     }
 
-    const llm = new ChatOpenAI({
+    llm = new ChatOpenAI({
         modelName,
         temperature,
         openAIApiKey: apiKey,
         configuration: baseURL ? { baseURL } : undefined,
         modelKwargs: { caching: { type: 'disabled' } },
     });
-
-    const tools = createEditorTools();
-    const saver = ensureCheckpointer();
-
-    agent = createAgent({
-        model: llm,
-        tools,
-        systemPrompt: SYSTEM_PROMPT,
-        checkpointer: saver,
-        stateSchema: AGENT_STATE_SCHEMA,
-        middleware: [dynamicProjectContextMiddleware],
-    });
-
-    console.log('[Agent] Initialized with model:', modelName, '| LangGraph SqliteSaver → app.db');
+    console.log('[Agent] LLM initialized:', modelName);
+    return llm;
 }
 
-/** 展平 chunk.content（含 reasoning 等块）；流式 tool 需在 args JSON 拼全后再 onToolCall。 */
+/**
+ * 按 mode 懒加载 compiled agent。
+ * 各 mode 独立 systemPrompt / tools / middleware / stateSchema，互不干扰。
+ */
+function getAgent(mode) {
+    if (agents[mode]) return agents[mode];
+
+    const def = getMode(mode);
+    const model = ensureLLM();
+    const saver = ensureCheckpointer();
+
+    const middleware = def.createMiddleware
+        ? def.createMiddleware({ getResourcesState })
+        : [];
+
+    agents[mode] = createAgent({
+        model,
+        tools: def.createTools(),
+        systemPrompt: def.systemPrompt,
+        checkpointer: saver,
+        stateSchema: def.stateSchema || z.object({}),
+        middleware,
+    });
+    console.log(`[Agent] Compiled mode "${mode}" (${def.label})`);
+    return agents[mode];
+}
+
+function initAgent() {
+    try {
+        ensureLLM();
+        ensureCheckpointer();
+    } catch (e) {
+        console.warn('[Agent]', e.message);
+    }
+}
+
+/** 展平 chunk.content（含 reasoning 等块） */
 function textFromMessageContent(content) {
     if (content == null || content === '') return '';
     if (typeof content === 'string') return content;
@@ -221,38 +157,39 @@ function flushPendingToolCallChunks(buf, onToolCall) {
     }
 }
 
-function ensureAgentReady() {
-    initAgent();
-    if (!agent) {
-        throw new Error('Agent 未初始化（请检查 .env 的 OPENAI 配置）');
-    }
-    return agent;
-}
-
-async function loadDisplayHistory(threadId) {
+async function loadDisplayHistory(uuid, mode) {
+    const threadId = resolveThreadId(uuid, mode);
     if (!threadId) return [];
-    const a = ensureAgentReady();
+    const a = getAgent(mode);
     try {
         const state = await a.graph.getState({ configurable: { thread_id: threadId } });
         return serializeLangGraphMessages(state.values?.messages);
     } catch (e) {
-        console.warn('[Agent] getState failed:', e.message);
+        console.warn(`[Agent] getState failed for ${threadId}:`, e.message);
         return [];
     }
 }
 
 async function handleUserMessage(userText, callbacks = {}, options = {}) {
-    const a = ensureAgentReady();
-    const threadId = options.threadId || activeThreadId;
-    if (options.threadId) activeThreadId = options.threadId;
+    const mode = options.mode || DEFAULT_MODE;
+    const uuid = options.threadId;
+    const threadId = resolveThreadId(uuid, mode);
+
+    const { onThinking, onToken, onToolCall, onToolResult, onDone, onSegmentBreak } = callbacks;
 
     if (!threadId) {
         console.warn('[Agent] No active project (thread_id). Open a project first.');
-        if (callbacks.onDone) callbacks.onDone('发生错误: 当前没有活动项目，请先打开项目。');
+        if (onDone) onDone('发生错误: 当前没有活动项目，请先打开项目。');
         return;
     }
 
-    const { onThinking, onToken, onToolCall, onToolResult, onDone, onSegmentBreak } = callbacks;
+    let a;
+    try {
+        a = getAgent(mode);
+    } catch (e) {
+        if (onDone) onDone(`发生错误: ${e.message}`);
+        return;
+    }
 
     if (onThinking) onThinking();
 
@@ -282,7 +219,6 @@ async function handleUserMessage(userText, callbacks = {}, options = {}) {
                 const hasTools =
                     (chunk.tool_call_chunks?.length > 0) || (chunk.tool_calls?.length > 0);
                 const text = textFromMessageContent(chunk.content).trim();
-                // 对齐 server.py：新 id 且无工具、无正文的 AI 占位 chunk 直接跳过
                 if (!hasTools && !text) continue;
 
                 flushPendingToolCallChunks(toolCallBuf, onToolCall);
@@ -334,94 +270,118 @@ async function handleUserMessage(userText, callbacks = {}, options = {}) {
     }
 }
 
-async function onProjectOpened(uuid) {
-    activeThreadId = uuid || null;
-    return loadDisplayHistory(uuid);
-}
-
-async function deleteProjectSession(uuid) {
-    if (!uuid) return false;
-    ensureCheckpointer();
-    await checkpointer.deleteThread(uuid);
-    if (activeThreadId === uuid) activeThreadId = null;
-    return true;
-}
-
-/**
- * 参考 server.py 风格：初始化会话（thread）
- */
-async function initThread(threadId) {
-    if (!threadId) throw new Error('missing thread_id');
-    const a = ensureAgentReady();
+async function initThread(uuid, mode = DEFAULT_MODE) {
+    if (!uuid) throw new Error('missing thread_id');
+    const threadId = resolveThreadId(uuid, mode);
+    const a = getAgent(mode);
     const config = { configurable: { thread_id: threadId } };
+
+    let existingState = null;
     try {
-        const state = await a.graph.getState(config);
-        const hasMessages = Array.isArray(state?.values?.messages) && state.values.messages.length > 0;
-        const hasResources = Array.isArray(state?.values?.resources) && state.values.resources.length > 0;
-        const hasAnyState = !!state?.values && Object.keys(state.values).length > 0;
-        // 只要 thread 已有状态（哪怕尚未聊天，但已有 resources），就不要重置。
-        if (hasMessages || hasResources || hasAnyState) {
-            return { success: true, message: 'thread_already_exists' };
-        }
-    } catch {
-        // 不存在状态时继续初始化
+        existingState = await a.graph.getState(config);
+    } catch { /* thread doesn't exist yet */ }
+
+    // hasAnyState 已覆盖 hasMessages/hasResources：只要有任何 key 说明已初始化
+    const hasAnyState = !!existingState?.values && Object.keys(existingState.values).length > 0;
+    if (hasAnyState) {
+        return { success: true, message: 'thread_already_exists' };
     }
 
-    // 创建空 checkpoint（与官方 checkpointer 结合）
     await a.graph.updateState(config, { messages: [], resources: [] });
     return { success: true, thread_id: threadId };
 }
 
-/**
- * 参考 server.py 风格：获取会话历史
- */
-async function getHistory(threadId) {
-    if (!threadId) throw new Error('missing thread_id');
-    const messages = await loadDisplayHistory(threadId);
+async function getHistory(uuid, mode = DEFAULT_MODE) {
+    if (!uuid) throw new Error('missing thread_id');
+    const messages = await loadDisplayHistory(uuid, mode);
     return { success: true, messages };
 }
 
-/**
- * 参考 server.py 风格：删除会话
- */
-async function deleteThread(threadId) {
-    if (!threadId) throw new Error('missing thread_id');
-    const ok = await deleteProjectSession(threadId);
-    return { success: ok };
+async function deleteThread(uuid, mode = DEFAULT_MODE) {
+    if (!uuid) throw new Error('missing thread_id');
+    const threadId = resolveThreadId(uuid, mode);
+    ensureCheckpointer();
+    await checkpointer.deleteThread(threadId);
+    return { success: true };
 }
 
 /**
- * 参考 server.py 风格：获取素材列表（当前项目媒体库）
+ * 通过 checkpointer.list() 枚举所有 resource 对话，
+ * 不依赖任何自定义 SQL 表。
+ * 参考：server.py get_all_thread_ids / list_threads
  */
-function getResources(threadId) {
-    if (!threadId) throw new Error('missing thread_id');
-    return getResourcesState(threadId).then((items) => ({
+async function listResourceThreads() {
+    const saver = ensureCheckpointer();
+    const a = getAgent('resource');
+
+    const seen    = new Set();
+    const results = [];
+
+    try {
+        for await (const item of saver.list({})) {
+            const threadId = item.config?.configurable?.thread_id;
+            if (!threadId || !threadId.startsWith('resource:') || seen.has(threadId)) continue;
+            seen.add(threadId);
+
+            const uuid = threadId.slice('resource:'.length);
+            try {
+                const state = await a.graph.getState({ configurable: { thread_id: threadId } });
+                const msgs       = serializeLangGraphMessages(state?.values?.messages);
+                const firstHuman = msgs.find(m => m.role === 'human');
+                results.push({
+                    uuid,
+                    title:     firstHuman?.content || '',
+                    updatedAt: item.checkpoint?.ts  || new Date().toISOString(),
+                });
+            } catch { /* 跳过损坏的 thread */ }
+        }
+    } catch (e) {
+        console.warn('[Agent] listResourceThreads failed:', e.message);
+    }
+
+    return results.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+}
+
+/** 兼容旧调用名 —— 已合并，直接走 deleteThread */
+
+// ---- 素材库（仅 editor mode 使用，但 API 保持通用）----
+
+function getResources(uuid, mode = DEFAULT_MODE) {
+    if (!uuid) throw new Error('missing thread_id');
+    return getResourcesState(resolveThreadId(uuid, mode)).then((items) => ({
         success: true,
         resources: items,
     }));
 }
 
-async function getResourcesState(threadId) {
-    const a = ensureAgentReady();
+async function getResourcesState(threadIdOrUuid, modeMaybe) {
+    // 兼容两种调用：(threadId) 或 (uuid, mode)
+    const threadId = modeMaybe === undefined
+        ? threadIdOrUuid
+        : resolveThreadId(threadIdOrUuid, modeMaybe);
+    if (!threadId) return [];
+    // editor mode 走 stateSchema 含 resources；其他 mode 没有这个字段，直接空
+    const mode = threadId.split(':')[0];
+    if (!MODES[mode]) return [];
+    const a = getAgent(mode);
     const state = await a.graph.getState({ configurable: { thread_id: threadId } }).catch(() => null);
     const resources = state?.values?.resources;
     if (!Array.isArray(resources)) return [];
-    return resources
-        .map(normalizeResource)
-        .filter(Boolean);
+    return resources.map(normalizeResource).filter(Boolean);
 }
 
-async function setResourcesState(threadId, resources) {
-    const a = ensureAgentReady();
+async function setResourcesState(uuid, mode, resources) {
+    const threadId = resolveThreadId(uuid, mode);
+    const a = getAgent(mode);
     await a.graph.updateState(
         { configurable: { thread_id: threadId } },
         { resources }
     );
 }
 
-async function addResources(threadId, items) {
-    if (!threadId) throw new Error('missing thread_id');
-    const current = await getResourcesState(threadId);
+async function addResources(uuid, items, mode = DEFAULT_MODE) {
+    if (!uuid) throw new Error('missing thread_id');
+    const current = await getResourcesState(uuid, mode);
     const byPath = new Set(current.map((i) => i.resource_path));
     const merged = [...current];
     for (const raw of items || []) {
@@ -430,16 +390,16 @@ async function addResources(threadId, items) {
         merged.push(item);
         byPath.add(item.resource_path);
     }
-    await setResourcesState(threadId, merged);
+    await setResourcesState(uuid, mode, merged);
     return { success: true, resources: merged };
 }
 
-async function removeResource(threadId, resourceId) {
-    if (!threadId) throw new Error('missing thread_id');
-    const current = await getResourcesState(threadId);
+async function removeResource(uuid, resourceId, mode = DEFAULT_MODE) {
+    if (!uuid) throw new Error('missing thread_id');
+    const current = await getResourcesState(uuid, mode);
     const next = current.filter((i) => i.resource_id !== resourceId);
     const changed = next.length !== current.length;
-    if (changed) await setResourcesState(threadId, next);
+    if (changed) await setResourcesState(uuid, mode, next);
     return { success: changed, resources: next };
 }
 
@@ -463,12 +423,13 @@ function normalizeResource(raw) {
 module.exports = {
     initAgent,
     handleUserMessage,
-    onProjectOpened,
-    deleteProjectSession,
     initThread,
     getHistory,
     deleteThread,
+    listResourceThreads,
     getResources,
     addResources,
     removeResource,
+    listModes,
+    DEFAULT_MODE,
 };
