@@ -2,14 +2,14 @@
   "name": "electron-video-player",
   "version": "2.0.0",
   "description": "Electron + C++ Native Addon 视频播放器 (FFmpeg + OpenGL)",
-  "main": "main.js",
+  "main": "app/main.js",
   "scripts": {
-    "build": "cmake -B build -S . -DBUILD_TESTS=OFF && cmake --build build --config Release",
-    "rebuild": "rm -rf build && npm run build",
+    "build": "cmake -B build/Release -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build/Release --config Release -j8",
+    "rebuild": "rm -rf build/Release && npm run build",
     "start": "electron .",
     "postinstall": "npm run build && electron-rebuild -o better-sqlite3",
-    "build:css": "tailwindcss -i chat/input.css -o chat/dist/output.css --minify",
-    "watch:css": "tailwindcss -i chat/input.css -o chat/dist/output.css --watch"
+    "build:css": "tailwindcss -i app/chat/input.css -o app/chat/dist/output.css --minify",
+    "watch:css": "tailwindcss -i app/chat/input.css -o app/chat/dist/output.css --watch"
   },
   "dependencies": {
     "@electron/remote": "^2.1.0",
