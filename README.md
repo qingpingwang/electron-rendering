@@ -2,7 +2,7 @@
 
 **AI 原生的视频编排工作台**：在 Electron 中融合 **LangGraph 智能体**、**工程级持久化** 与 **C++/OpenGL/Skia 实时渲染管线**，让自然语言驱动时间轴、图层与素材——所见即所得，所聊即所改。
 
-![产品界面](test/image.png)
+![产品界面](resources/image.png)
 
 ---
 
@@ -19,7 +19,7 @@
 
 **用自然语言创作 GLSL Shader 特效与转场**——无需手写一行 OpenGL 代码，在对话中描述意图，AI 实时生成并预览。
 
-![渲染资源 Agent](test/image1.png)
+![渲染资源 Agent](resources/image1.png)
 
 ### 工作流程
 
@@ -76,9 +76,9 @@ Agent 生成的着色器可直接使用以下内置变量，**无需在 `config.
 
 | 维度 | 说明 |
 |------|------|
-| **合成一帧** | 典型负载下，多图层 OpenGL 离屏合成 **约 0.4 ms/帧**，为实时预览与批处理留出余量。 |
+| **合成一帧** | 典型负载下，多图层离屏合成 **约 0.4 ms/帧**，为实时预览与批处理留出余量。 |
 | **GPU 硬件解码** | **H.264 / HEVC** 在 **macOS** 上优先走 **VideoToolbox** 硬解，帧数据以 **CVPixelBuffer** 路径上传纹理，减少 CPU 色彩转换与 memcpy 压力。 |
-| **GPU 文字** | **Skia** 与 **OpenGL** 共享上下文，富文本直接绘制至 **FBO**，与视频纹理同一合成管线。 |
+| **GPU 文字** | **Skia** 与 **ANGLE** 共享 EGL 上下文，富文本直接绘制至 **FBO**，与视频纹理同一合成管线。 |
 | **异步预取** | 后台预渲染下一帧，顺序播放缓存命中率高，交互拖拽时首帧可接受、后续快速跟上。 |
 
 ---
@@ -87,7 +87,7 @@ Agent 生成的着色器可直接使用以下内置变量，**无需在 `config.
 
 - **多轨道时间轴**：类 After Effects 的非线性编排，视频 / 文本 / 音频分层管理。
 - **富文本引擎**：基于 Skia **skparagraph**，字间距、行高、多重描边、逐 run 阴影。
-- **离屏 OpenGL**：FBO + 纹理混合，无需依赖可见窗口即可完成成片帧输出。
+- **离屏 ANGLE EGL/GLES3**：基于 ANGLE EGL Pbuffer 的离屏上下文，FBO + 纹理混合，无需可见窗口即可完成成片帧输出；macOS 使用 Metal 后端，Linux 使用 Surfaceless Mesa。
 - **OOP N-API**：`ObjectWrap` 映射 `Root` / `Layer`，多实例、generation 校验，杜绝野指针泄漏到 JS。
 - **零拷贝倾向**：渲染结果写入 `ArrayBuffer` 直出 JS，降低冗余拷贝。
 
@@ -107,9 +107,9 @@ Agent 生成的着色器可直接使用以下内置变量，**无需在 `config.
 └───────────────────────────┬─────────────────────────────────┘
                             │
 ┌───────────────────────────▼─────────────────────────────────┐
-│  C++ 渲染引擎                                                │
+│  C++ 渲染引擎（ANGLE EGL/GLES3）                              │
 │  RootNode 合成 → VideoLayer(Texture+HW 解码) + TextLayer(Skia) │
-│  → FBO → 像素回传 JS                                         │
+│  → FBO → glReadPixels → 像素回传 JS                           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -118,15 +118,27 @@ Agent 生成的着色器可直接使用以下内置变量，**无需在 `config.
 ## 构建与运行
 
 ```bash
-# macOS 依赖示例
+# macOS 依赖
 brew install cmake ffmpeg pkg-config
 
+# 初始化 submodule（googletest 等）
+git submodule update --init --recursive
+
+# 构建 C++ 渲染引擎（默认 Debug）
+./build.sh           # Debug
+./build.sh Release   # Release
+./build.sh GTest     # Debug + googletest + gcov 覆盖率插桩
+
+# 运行单测并生成覆盖率报告
+pip install -r requirements.txt
+./run_test.sh        # 报告输出至 coverage_report/index.html
+
+# 前端依赖 & 启动
 npm install
-npm run build
 npm start
 ```
 
-配置 **LLM**（如 `OPENAI_API_KEY`、方舟/兼容端点等）于项目环境变量后，即可使用内置智能助手；数据库与 checkpoint 由应用自动维护。
+配置 **LLM**（如 `OPENAI_API_KEY`、方舟/兼容端点等）于 `app/.env` 后，即可使用内置智能助手；数据库与 checkpoint 由应用自动维护。
 
 ### 渲染 API 示例
 
@@ -153,7 +165,7 @@ root.cleanup();
 | 持久化 | SqliteSaver、thread 级 checkpoint、历史序列化 |
 | **Shader 创作** | **GLSL 特效 / 转场 Agent**、`config.json` 声明式资源协议、uniform 参数面板 |
 | 视频解码 | FFmpeg；H.264/HEVC → VideoToolbox（macOS） |
-| 合成 | OpenGL FBO、纹理混合、硬件帧直传纹理 |
+| 合成 | ANGLE EGL/GLES3、FBO、纹理混合、硬件帧直传纹理 |
 | 文字 | Skia skparagraph、GPU 直绘 |
 | JS 绑定 | N-API ObjectWrap、generation 安全 |
 
