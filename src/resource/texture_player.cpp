@@ -2,11 +2,11 @@
 #include "../core/root_node.h"
 #include "../codec/video_decoder.h"
 #include "../gl/functions.h"
-#include "../third_party/stb_image/stb_image.h"
+#include "include/codec/SkCodec.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkData.h"
 #include <cstring>
 #include <filesystem>
-#include <fstream>
-
 namespace fs = std::filesystem;
 
 namespace vp {
@@ -82,102 +82,110 @@ bool ImageTexture::load(const nlohmann::json &config, const std::string &base_pa
 }
 
 bool ImageTexture::loadStaticImage() {
-    // 使用 stb_image 加载静态图片
-    int width, height, channels;
-    stbi_set_flip_vertically_on_load(false);
-    unsigned char *data = stbi_load(file_path_.c_str(), &width, &height, &channels, STBI_rgb_alpha);
-
-    if (!data) {
+    auto sk_data = SkData::MakeFromFileName(file_path_.c_str());
+    if (!sk_data) {
         setError("load static image failed: " + file_path_);
         return false;
     }
 
-    width_ = width;
-    height_ = height;
+    auto codec = SkCodec::MakeFromData(sk_data);
+    if (!codec) {
+        setError("unsupported image format: " + file_path_);
+        return false;
+    }
 
-    // 创建纹理并上传数据
-    texture_ = gl::createTexture(width, height, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
-    gl::updateTexture(texture_, data, width, height);
+    SkImageInfo info = codec->getInfo()
+                           .makeColorType(kRGBA_8888_SkColorType)
+                           .makeAlphaType(kUnpremul_SkAlphaType);
+    SkBitmap bitmap;
+    bitmap.allocPixels(info);
+    if (!bitmap.getPixels()) {
+        setError("allocate bitmap failed: " + file_path_);
+        return false;
+    }
 
-    // 释放 CPU 数据（静态图不需要保留）
-    stbi_image_free(data);
+    if (codec->getPixels(info, bitmap.getPixels(), bitmap.rowBytes()) != SkCodec::kSuccess) {
+        setError("decode image failed: " + file_path_);
+        return false;
+    }
 
-    fps_ = 0.0f; // 静态图，无动画
-    // frame_data_ 保持为空
+    width_ = info.width();
+    height_ = info.height();
+    texture_ = gl::createTexture(width_, height_, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
+    gl::updateTexture(texture_, static_cast<const uint8_t *>(bitmap.getPixels()), width_, height_);
 
+    fps_ = 0.0f;
     return true;
 }
 
 bool ImageTexture::loadGif() {
-    // 读取 GIF 文件到内存
-    std::ifstream file(file_path_, std::ios::binary | std::ios::ate);
-    if (!file.is_open()) {
-        setError("open gif file failed: " + file_path_);
+    auto sk_data = SkData::MakeFromFileName(file_path_.c_str());
+    if (!sk_data) {
+        setError("open gif failed: " + file_path_);
         return false;
     }
 
-    std::streamsize size = file.tellg();
-    file.seekg(0, std::ios::beg);
-
-    std::vector<unsigned char> buffer(size);
-    if (!file.read(reinterpret_cast<char *>(buffer.data()), size)) {
-        setError("read gif file failed: " + file_path_);
+    auto codec = SkCodec::MakeFromData(sk_data);
+    if (!codec) {
+        setError("unsupported gif format: " + file_path_);
         return false;
     }
 
-    // 使用 stb_image 解码 GIF
-    int *delays = nullptr;
-    int width, height, frames, channels;
-
-    unsigned char *data = stbi_load_gif_from_memory(
-        buffer.data(), static_cast<int>(buffer.size()),
-        &delays, &width, &height, &frames, &channels, STBI_rgb_alpha);
-
-    if (!data || frames == 0) {
-        if (delays)
-            free(delays);
-        setError("load gif failed: " + file_path_);
+    int frame_count = codec->getFrameCount();
+    if (frame_count == 0) {
+        setError("gif has no frames: " + file_path_);
         return false;
     }
 
-    width_ = width;
-    height_ = height;
+    SkImageInfo info = codec->getInfo()
+                           .makeColorType(kRGBA_8888_SkColorType)
+                           .makeAlphaType(kUnpremul_SkAlphaType);
+    width_ = info.width();
+    height_ = info.height();
 
-    // 计算平均 FPS（从延迟）
-    if (frames > 1 && delays) {
-        int total_delay_ms = 0;
-        for (int i = 0; i < frames; ++i) {
-            total_delay_ms += delays[i];
-        }
-        float avg_delay_ms = static_cast<float>(total_delay_ms) / frames;
-        fps_ = avg_delay_ms > 0 ? 1000.0f / avg_delay_ms : 10.0f;
-    } else {
-        fps_ = 0.0f;
+    // 获取帧信息（用于计算 FPS）
+    std::vector<SkCodec::FrameInfo> frame_infos = codec->getFrameInfo();
+
+    if (frame_count > 1) {
+        int total_ms = 0;
+        for (const auto &fi : frame_infos)
+            total_ms += fi.fDuration;
+        float avg_ms = static_cast<float>(total_ms) / frame_count;
+        fps_ = avg_ms > 0 ? 1000.0f / avg_ms : 10.0f;
     }
 
-    // 保存所有帧数据到 CPU 内存
-    size_t frame_size = width * height * 4; // RGBA
-    frame_data_.reserve(frames);
+    // 解码全部帧（逐帧合成）
+    size_t frame_size = static_cast<size_t>(width_) * height_ * 4;
+    frame_data_.reserve(frame_count);
 
-    for (int i = 0; i < frames; ++i) {
-        std::vector<uint8_t> frame_buffer(frame_size);
-        memcpy(frame_buffer.data(), data + i * frame_size, frame_size);
-        frame_data_.emplace_back(std::move(frame_buffer));
+    SkBitmap canvas_bm;
+    canvas_bm.allocPixels(info);
+
+    for (int i = 0; i < frame_count; ++i) {
+        SkCodec::Options opts;
+        opts.fFrameIndex = i;
+        // 需要的先验帧（用于帧间 delta 合成）
+        opts.fPriorFrame = (i > 0 && frame_infos[i].fRequiredFrame != SkCodec::kNoFrame)
+                               ? (i - 1)
+                               : SkCodec::kNoFrame;
+
+        SkCodec::Result res = codec->getPixels(info, canvas_bm.getPixels(),
+                                               canvas_bm.rowBytes(), &opts);
+        if (res != SkCodec::kSuccess && res != SkCodec::kIncompleteInput)
+            break;
+
+        std::vector<uint8_t> frame_buf(frame_size);
+        memcpy(frame_buf.data(), canvas_bm.getPixels(), frame_size);
+        frame_data_.emplace_back(std::move(frame_buf));
     }
 
-    // 创建单张纹理（复用）
-    texture_ = gl::createTexture(width, height, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
-
-    // 上传第一帧
-    if (!frame_data_.empty()) {
-        gl::updateTexture(texture_, frame_data_[0].data(), width, height);
+    if (frame_data_.empty()) {
+        setError("decode gif frames failed: " + file_path_);
+        return false;
     }
 
-    // 释放 stb_image 数据
-    stbi_image_free(data);
-    if (delays)
-        free(delays);
-
+    texture_ = gl::createTexture(width_, height_, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
+    gl::updateTexture(texture_, frame_data_[0].data(), width_, height_);
     return true;
 }
 

@@ -57,8 +57,9 @@ bool VideoEncoder::open(const std::string &output_file, const EncoderConfig &con
     codec_ctx_->bit_rate = config.bit_rate;
     codec_ctx_->width = width_;
     codec_ctx_->height = height_;
-    codec_ctx_->time_base = AVRational{1, 1000};  // 毫秒级时间基
-    codec_ctx_->framerate = AVRational{0, 1};     // 可变帧率
+    int fps = (config.fps > 0) ? config.fps : 30;
+    codec_ctx_->time_base = AVRational{1, 1000};           // 毫秒级时间基
+    codec_ctx_->framerate = AVRational{fps, 1};
     codec_ctx_->gop_size = 12;
     codec_ctx_->max_b_frames = 2;
     codec_ctx_->pix_fmt = AV_PIX_FMT_YUV420P;
@@ -96,12 +97,14 @@ bool VideoEncoder::open(const std::string &output_file, const EncoderConfig &con
         }
     }
 
-    // 9. 写文件头
+    // 9. 写文件头（header 写完后 stream_->time_base 由 muxer 最终确定）
     ret = avformat_write_header(fmt_ctx_, nullptr);
     if (ret < 0) {
         std::cerr << "Failed to write header" << std::endl;
         return false;
     }
+    stream_->avg_frame_rate = AVRational{fps, 1};
+    stream_->r_frame_rate   = AVRational{fps, 1};
 
     // 10. 分配帧
     frame_ = av_frame_alloc();

@@ -13,8 +13,10 @@ endif()
 
 if(APPLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15")
-    add_definitions(-DGL_SILENCE_DEPRECATION)
 endif()
+
+# 覆盖率插桩（仅 GTest 模式开启，gcov + gcovr）
+option(BUILD_COVERAGE "Enable gcov coverage instrumentation (only for tests)" OFF)
 
 # ========== 依赖 ==========
 
@@ -44,10 +46,6 @@ pkg_check_modules(FFMPEG REQUIRED
 
 # ========== 三方库 ==========
 
-# glm (header-only math library, via submodule)
-set(GLM_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-add_subdirectory(third_party/glm)
-
 # Skia 2D Graphics Library（预编译静态库 + 模块）
 set(SKIA_ROOT ${CMAKE_SOURCE_DIR}/third_party/skia)
 set(SKIA_OUT ${SKIA_ROOT}/out/Release)
@@ -64,8 +62,18 @@ if(NOT EXISTS ${SKIA_LIB})
     message(WARNING "⚠️ Skia 未编译 (${SKIA_LIB})，TextLayer 将不可用")
 endif()
 
-# GLAD（非 Apple 平台的 GL 函数加载器）
-set(GLAD_ROOT ${CMAKE_SOURCE_DIR}/third_party/glad)
+# ANGLE / EGL + GLES3
+# macOS：使用 Skia 构建产出的 ANGLE Metal 后端
+# Linux/Windows：使用系统 EGL/GLES
+if(APPLE)
+    set(ANGLE_INCLUDE_DIR "${SKIA_ROOT}/third_party/externals/angle2/include")
+    set(ANGLE_LIB_DIR "${SKIA_OUT}")
+    if(NOT EXISTS "${ANGLE_LIB_DIR}/libEGL.dylib")
+        message(FATAL_ERROR "ANGLE not found at ${ANGLE_LIB_DIR}. Run scripts/build_skia.sh first.")
+    endif()
+else()
+    pkg_check_modules(SYSTEM_EGL REQUIRED egl glesv2)
+endif()
 
 # ========== 源文件 ==========
 
@@ -74,17 +82,6 @@ set(GLAD_ROOT ${CMAKE_SOURCE_DIR}/third_party/glad)
 file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/src/*.cpp"
 )
-
-# 第三方库源文件（按需显式添加）
-set(THIRD_PARTY_SOURCES
-    ${CMAKE_SOURCE_DIR}/third_party/stb_image/stb_image_impl.cpp
-    ${CMAKE_SOURCE_DIR}/third_party/stb_image/stb_image_write_impl.cpp
-)
-
-# GLAD 源文件（.c，仅非 Apple 平台）
-if(NOT APPLE)
-    set(GLAD_SOURCES ${GLAD_ROOT}/src/glad.c)
-endif()
 
 # 排除 N-API 绑定层和备份文件
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*/addon\\.cpp$")
@@ -97,8 +94,6 @@ list(FILTER CORE_SOURCES EXCLUDE REGEX ".*\\.bak$")
 # 创建 OBJECT 库：核心渲染引擎
 add_library(video_player_core OBJECT
     ${CORE_SOURCES}
-    ${THIRD_PARTY_SOURCES}
-    ${GLAD_SOURCES}
 )
 
 # 核心库的编译配置
@@ -107,24 +102,18 @@ target_include_directories(video_player_core PUBLIC
     ${CMAKE_SOURCE_DIR}/third_party
     ${FFMPEG_INCLUDE_DIRS}
     ${SKIA_ROOT}
-    $<$<NOT:$<PLATFORM_ID:Darwin>>:${GLAD_ROOT}/include>
+    $<$<PLATFORM_ID:Darwin>:${ANGLE_INCLUDE_DIR}>
+    $<$<NOT:$<PLATFORM_ID:Darwin>>:${SYSTEM_EGL_INCLUDE_DIRS}>
 )
 
 target_compile_definitions(video_player_core PUBLIC
-    $<$<PLATFORM_ID:Darwin>:GL_SILENCE_DEPRECATION>
     SK_GL
     SK_RELEASE
+    VP_RESOURCES_DIR="${CMAKE_SOURCE_DIR}/resources"
 )
-
-target_link_libraries(video_player_core PUBLIC glm::glm)
 
 target_compile_options(video_player_core PRIVATE 
     -Wall -Wextra -Wno-unused-parameter
-)
-
-# 第三方库禁用所有警告
-set_source_files_properties(${THIRD_PARTY_SOURCES} PROPERTIES
-    COMPILE_FLAGS "-w"
 )
 
 # ========== Node.js 插件（主目标）==========
@@ -158,7 +147,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE video_player_core)
 
 # ---- 平台特定依赖 ----
 if(APPLE)
-    find_library(OPENGL_LIB OpenGL REQUIRED)
     find_library(COCOA_LIB Cocoa REQUIRED)
     find_library(CF_LIB CoreFoundation REQUIRED)
     find_library(COREVIDEO_LIB CoreVideo REQUIRED)
@@ -167,21 +155,18 @@ if(APPLE)
     find_library(CORE_TEXT_LIB CoreText REQUIRED)
 
     target_link_libraries(${PROJECT_NAME} PRIVATE
-        ${OPENGL_LIB} ${COCOA_LIB} ${CF_LIB}
+        "${ANGLE_LIB_DIR}/libEGL.dylib"
+        "${ANGLE_LIB_DIR}/libGLESv2.dylib"
+        ${COCOA_LIB} ${CF_LIB}
         ${COREVIDEO_LIB} ${IOSURFACE_LIB}
         ${CORE_GRAPHICS_LIB} ${CORE_TEXT_LIB}
     )
     set_target_properties(${PROJECT_NAME} PROPERTIES
         LINK_FLAGS "-undefined dynamic_lookup"
     )
-elseif(WIN32)
-    find_package(OpenGL REQUIRED)
-    target_link_libraries(${PROJECT_NAME} PRIVATE OpenGL::GL EGL)
-elseif(UNIX)
-    find_package(OpenGL REQUIRED)
-    pkg_check_modules(EGL REQUIRED egl)
-    target_link_libraries(${PROJECT_NAME} PRIVATE OpenGL::GL ${EGL_LIBRARIES})
-    target_link_directories(${PROJECT_NAME} PRIVATE ${EGL_LIBRARY_DIRS})
+elseif(WIN32 OR UNIX)
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${SYSTEM_EGL_LIBRARIES})
+    target_link_directories(${PROJECT_NAME} PRIVATE ${SYSTEM_EGL_LIBRARY_DIRS})
 endif()
 
 # ---- 公共依赖（所有平台） ----
@@ -203,10 +188,96 @@ endif()
 target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wno-unused-parameter)
 
 # ========== 测试 ==========
+# 启用方式：cmake -DBUILD_TESTING=ON -DBUILD_COVERAGE=ON  （或 ./build.sh GTest）
+# 输出：${CMAKE_BINARY_DIR}/video_player_tests
 
-# 测试子目录（可选，默认包含，适合开发）
-option(BUILD_TESTS "Build test cases" ON)
+include(CTest)   # 注册标准 BUILD_TESTING 选项 + ctest 支持
 
-if(BUILD_TESTS)
-    add_subdirectory(test)
+if(BUILD_TESTING)
+    if(BUILD_COVERAGE)
+        # 覆盖率插桩也作用于核心库（测试时重新链接）
+        target_compile_options(video_player_core PRIVATE -O0 -g --coverage)
+        target_link_options(video_player_core PUBLIC --coverage)
+    endif()
+
+    # ---- googletest（submodule 源码构建，产物隔离到 build 树）----
+    add_subdirectory(
+        ${CMAKE_SOURCE_DIR}/third_party/googletest
+        ${CMAKE_BINARY_DIR}/googletest
+        EXCLUDE_FROM_ALL
+    )
+
+    # ---- 测试源文件（test/*_test.cpp 扁平结构，无子目录）----
+    file(GLOB VP_TEST_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_SOURCE_DIR}/test/*_test.cpp"
+    )
+
+    add_executable(video_player_tests
+        ${VP_TEST_SOURCES}
+        $<TARGET_OBJECTS:video_player_core>
+    )
+
+    # 输出目录：build/<BuildType>/video_player_tests
+    set_target_properties(video_player_tests PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    )
+
+    target_link_libraries(video_player_tests PRIVATE
+        video_player_core
+        GTest::gtest_main
+    )
+
+    # 测试数据目录（媒体文件、JSON 配置）+ 资源目录（特效包）
+    target_compile_definitions(video_player_tests PRIVATE
+        VP_TEST_DIR="${CMAKE_SOURCE_DIR}/test"
+        VP_RESOURCES_DIR="${CMAKE_SOURCE_DIR}/resources"
+        VP_TEST_BINARY_DIR="${CMAKE_BINARY_DIR}"
+    )
+
+    # ---- 平台依赖（与主目标一致）----
+    if(APPLE)
+        target_link_libraries(video_player_tests PRIVATE
+            "${ANGLE_LIB_DIR}/libEGL.dylib"
+            "${ANGLE_LIB_DIR}/libGLESv2.dylib"
+            ${COCOA_LIB} ${CF_LIB}
+            ${COREVIDEO_LIB} ${IOSURFACE_LIB}
+            ${CORE_GRAPHICS_LIB} ${CORE_TEXT_LIB}
+        )
+        set_target_properties(video_player_tests PROPERTIES
+            BUILD_RPATH "${ANGLE_LIB_DIR}"
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+        )
+    elseif(WIN32 OR UNIX)
+        target_link_libraries(video_player_tests PRIVATE ${SYSTEM_EGL_LIBRARIES})
+        target_link_directories(video_player_tests PRIVATE ${SYSTEM_EGL_LIBRARY_DIRS})
+    endif()
+
+    # FFmpeg
+    target_link_libraries(video_player_tests PRIVATE ${FFMPEG_LIBRARIES})
+    target_link_directories(video_player_tests PRIVATE ${FFMPEG_LIBRARY_DIRS})
+
+    # Skia
+    if(EXISTS ${SKIA_LIB})
+        target_link_libraries(video_player_tests PRIVATE
+            ${SKIA_PARAGRAPH_LIB}
+            ${SKIA_SHAPER_LIB}
+            ${SKIA_UNICODE_ICU_LIB}
+            ${SKIA_UNICODE_CORE_LIB}
+            ${SKIA_HARFBUZZ_LIB}
+            ${SKIA_ICU_LIB}
+            ${SKIA_LIB}
+        )
+    endif()
+
+    if(BUILD_COVERAGE)
+        target_link_options(video_player_tests PRIVATE --coverage)
+    endif()
+
+    # ---- CTest 注册 ----
+    # PRE_TEST 模式：在 ctest 运行前才发现用例，不产生 cmake_test_discovery_*.json 副产物。
+    include(GoogleTest)
+    gtest_discover_tests(video_player_tests
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        DISCOVERY_MODE PRE_TEST
+    )
 endif()

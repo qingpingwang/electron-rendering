@@ -1,0 +1,63 @@
+{
+    "name": "波浪扭曲特效",
+    "desc": "使用sin函数对画面进行波浪式扭曲，产生水波纹效果",
+    "format": "effect",
+    "id": "effect_warp",
+    "suggestionDuration": 2000,
+
+    "renderPass": [
+        {
+            "fboSize": 1.0,
+            "shader": {
+                "vert": "shaders/pass0.vert",
+                "frag": "shaders/pass0.frag"
+            },
+            "asInputTexIndex": [],
+            "uniform": [
+                {
+                    "uniformTarget": "resolution",
+                    "type": "vec2",
+                    "value": [1920.0, 1080.0],
+                    "comment": "画布分辨率，实际由引擎自动设置"
+                }
+            ]
+        }
+    ],
+
+    "texture": [],
+
+    "animation": [],
+
+    "uniform": [
+        {
+            "name": "扭曲强度",
+            "description": "控制波浪扭曲的幅度",
+            "type": "float",
+            "uniformTarget": "intensity",
+            "defaultValue": 1.0,
+            "range": [0.0, 3.0],
+            "value": 1.0,
+            "renderPassIndex": [0]
+        },
+        {
+            "name": "波浪频率",
+            "description": "控制波浪的密集程度",
+            "type": "float",
+            "uniformTarget": "frequency",
+            "defaultValue": 20.0,
+            "range": [5.0, 50.0],
+            "value": 20.0,
+            "renderPassIndex": [0]
+        },
+        {
+            "name": "波浪速度",
+            "description": "控制波浪的移动速度",
+            "type": "float",
+            "uniformTarget": "speed",
+            "defaultValue": 1.0,
+            "range": [0.0, 5.0],
+            "value": 1.0,
+            "renderPassIndex": [0]
+        }
+    ]
+}

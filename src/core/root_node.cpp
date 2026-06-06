@@ -7,12 +7,13 @@
 #include <functional>
 #include <cstring>
 #include <nlohmann/json.hpp>
-#include <glm/glm.hpp>
-#include <glm/gtc/type_ptr.hpp>
+#include "include/core/SkM44.h"
 
 #include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/gpu/ganesh/gl/GrGLDirectContext.h"
 #include "include/gpu/ganesh/gl/GrGLInterface.h"
+#include "include/gpu/ganesh/gl/GrGLAssembleInterface.h"
+#include <EGL/egl.h>
 
 using json = nlohmann::json;
 
@@ -37,9 +38,13 @@ bool RootNode::init() {
     if (!gl::initContext(gl_ctx_))
         return false;
 
-    // 在同一个 CGL 上下文上创建 Skia GPU 上下文（用于文字渲染）
+    // 用 eglGetProcAddress 组装 Skia GLES 接口（ANGLE 环境，替代 GrGLMakeNativeInterface）
     gl::makeCurrent(gl_ctx_);
-    auto gl_interface = GrGLMakeNativeInterface();
+    auto gl_interface = GrGLMakeAssembledGLESInterface(
+        nullptr,
+        [](void *, const char *name) -> GrGLFuncPtr {
+            return reinterpret_cast<GrGLFuncPtr>(eglGetProcAddress(name));
+        });
     if (gl_interface) {
         auto ctx = GrDirectContexts::MakeGL(gl_interface);
         if (ctx) {
@@ -116,6 +121,10 @@ bool RootNode::renderFrame(TimeMs time_ms, uint8_t *out_buffer) {
 
     if (!gl::readPixels(render_fbo_, out_buffer, static_cast<int>(canvas_.width * canvas_.height * 4)))
         return false;
+
+    // 释放 EGL 上下文，使其可被其他线程（prepare_next 背景线程）取用。
+    // EGL spec 3.7.4：上下文正被某线程持有时，其他线程 eglMakeCurrent 会返回 EGL_BAD_ACCESS。
+    gl::releaseCurrent(gl_ctx_);
 
     return true;
 }
@@ -246,9 +255,11 @@ bool RootNode::load(const nlohmann::json &config, const std::string &base_path) 
         }
 
         // 初始化 shader uniform 默认值（GLSL uniform 默认全零）
-        static const glm::mat4 identity(1.0f);
+        static const SkM44 identity;
+        float col_major[16];
+        identity.getColMajor(col_major);
         shader_->use();
-        shader_->setMat4("uModel", glm::value_ptr(identity));
+        shader_->setMat4("uModel", col_major);
         shader_->setFloat("uAlpha", 1.0f);
         shader_->unuse();
 

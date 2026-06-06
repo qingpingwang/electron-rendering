@@ -1,10 +1,13 @@
 #include "functions.h"
 #include "shader.h"
-#include <stb_image/stb_image.h>
 
-#ifdef __APPLE__
+#include "include/codec/SkCodec.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkData.h"
+
+#if defined(__APPLE__)
+#include <EGL/eglext_angle.h>
 #include <CoreVideo/CoreVideo.h>
-#include <OpenGL/CGLIOSurface.h>
 #include <IOSurface/IOSurface.h>
 #endif
 
@@ -20,134 +23,122 @@ static const float QUAD_VERTICES[] = {
 
 // ========== 上下文 ==========
 
+static EGLDisplay createEGLDisplay() {
+    auto getPlatformDisplay = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(
+        eglGetProcAddress("eglGetPlatformDisplayEXT"));
+
+#if defined(__APPLE__)
+    if (getPlatformDisplay) {
+        static const EGLint attribs[] = {
+            EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE, EGL_NONE};
+        EGLDisplay display = getPlatformDisplay(EGL_PLATFORM_ANGLE_ANGLE, nullptr, attribs);
+        if (display != EGL_NO_DISPLAY)
+            return display;
+    }
+#else
+    if (getPlatformDisplay) {
+        EGLDisplay display =
+            getPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
+        if (display != EGL_NO_DISPLAY)
+            return display;
+    }
+#endif
+    return eglGetDisplay(EGL_DEFAULT_DISPLAY);
+}
+
 bool initContext(GLContext &ctx) {
     if (ctx.initialized)
         return true;
 
-#ifdef __APPLE__
-    CGLPixelFormatAttribute attrs[] = {
-        kCGLPFAOpenGLProfile,
-        (CGLPixelFormatAttribute)kCGLOGLPVersion_3_2_Core,
-        kCGLPFAColorSize,
-        (CGLPixelFormatAttribute)24,
-        kCGLPFAAlphaSize,
-        (CGLPixelFormatAttribute)8,
-        kCGLPFAAccelerated,
-        kCGLPFAAllowOfflineRenderers,
-        (CGLPixelFormatAttribute)0};
-
-    GLint num = 0;
-    if (CGLChoosePixelFormat(attrs, &ctx.cgl_pixel_format, &num) != kCGLNoError || num == 0)
-        return false;
-
-    if (CGLCreateContext(ctx.cgl_pixel_format, nullptr, &ctx.cgl_context) != kCGLNoError) {
-        CGLDestroyPixelFormat(ctx.cgl_pixel_format);
-        ctx.cgl_pixel_format = nullptr;
-        return false;
-    }
-
-    CGLSetCurrentContext(ctx.cgl_context);
-    ctx.initialized = true;
-    return true;
-#else
-    ctx.egl_display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    ctx.egl_display = createEGLDisplay();
     if (ctx.egl_display == EGL_NO_DISPLAY)
         return false;
 
     if (!eglInitialize(ctx.egl_display, nullptr, nullptr))
         return false;
 
-    EGLint config_attribs[] = {
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+    if (!eglBindAPI(EGL_OPENGL_ES_API))
+        return false;
+
+    const EGLint config_attribs[] = {
         EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
         EGL_RED_SIZE, 8,
         EGL_GREEN_SIZE, 8,
         EGL_BLUE_SIZE, 8,
         EGL_ALPHA_SIZE, 8,
         EGL_NONE};
 
+    EGLConfig egl_config = nullptr;
     EGLint num_configs = 0;
-    if (!eglChooseConfig(ctx.egl_display, config_attribs, &ctx.egl_config, 1, &num_configs) || num_configs == 0) {
+    if (!eglChooseConfig(ctx.egl_display, config_attribs, &egl_config, 1, &num_configs) ||
+        num_configs == 0) {
         eglTerminate(ctx.egl_display);
         ctx.egl_display = EGL_NO_DISPLAY;
         return false;
     }
 
-    if (!eglBindAPI(EGL_OPENGL_API)) {
+    const EGLint surface_attribs[] = {EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE};
+    ctx.egl_surface = eglCreatePbufferSurface(ctx.egl_display, egl_config, surface_attribs);
+    if (ctx.egl_surface == EGL_NO_SURFACE) {
         eglTerminate(ctx.egl_display);
         ctx.egl_display = EGL_NO_DISPLAY;
         return false;
     }
 
-    EGLint ctx_attribs[] = {
-        EGL_CONTEXT_MAJOR_VERSION, 3,
-        EGL_CONTEXT_MINOR_VERSION, 2,
-        EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
-        EGL_NONE};
-
-    ctx.egl_context = eglCreateContext(ctx.egl_display, ctx.egl_config, EGL_NO_CONTEXT, ctx_attribs);
+    const EGLint ctx_attribs[] = {EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE};
+    ctx.egl_context =
+        eglCreateContext(ctx.egl_display, egl_config, EGL_NO_CONTEXT, ctx_attribs);
     if (ctx.egl_context == EGL_NO_CONTEXT) {
+        eglDestroySurface(ctx.egl_display, ctx.egl_surface);
         eglTerminate(ctx.egl_display);
+        ctx.egl_surface = EGL_NO_SURFACE;
         ctx.egl_display = EGL_NO_DISPLAY;
         return false;
     }
 
-    if (!eglMakeCurrent(ctx.egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, ctx.egl_context)) {
+    if (!eglMakeCurrent(ctx.egl_display, ctx.egl_surface, ctx.egl_surface, ctx.egl_context)) {
         eglDestroyContext(ctx.egl_display, ctx.egl_context);
+        eglDestroySurface(ctx.egl_display, ctx.egl_surface);
         eglTerminate(ctx.egl_display);
         ctx.egl_context = EGL_NO_CONTEXT;
-        ctx.egl_display = EGL_NO_DISPLAY;
-        return false;
-    }
-
-    if (!gladLoadGLLoader((GLADloadproc)eglGetProcAddress)) {
-        eglDestroyContext(ctx.egl_display, ctx.egl_context);
-        eglTerminate(ctx.egl_display);
-        ctx.egl_context = EGL_NO_CONTEXT;
+        ctx.egl_surface = EGL_NO_SURFACE;
         ctx.egl_display = EGL_NO_DISPLAY;
         return false;
     }
 
     ctx.initialized = true;
     return true;
-#endif
 }
 
 void destroyContext(GLContext &ctx) {
     if (!ctx.initialized)
         return;
-#ifdef __APPLE__
-    if (ctx.cgl_context) {
-        CGLSetCurrentContext(nullptr);
-        CGLDestroyContext(ctx.cgl_context);
-        ctx.cgl_context = nullptr;
-    }
-    if (ctx.cgl_pixel_format) {
-        CGLDestroyPixelFormat(ctx.cgl_pixel_format);
-        ctx.cgl_pixel_format = nullptr;
-    }
-#else
     if (ctx.egl_display != EGL_NO_DISPLAY) {
         eglMakeCurrent(ctx.egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         if (ctx.egl_context != EGL_NO_CONTEXT) {
             eglDestroyContext(ctx.egl_display, ctx.egl_context);
             ctx.egl_context = EGL_NO_CONTEXT;
         }
+        if (ctx.egl_surface != EGL_NO_SURFACE) {
+            eglDestroySurface(ctx.egl_display, ctx.egl_surface);
+            ctx.egl_surface = EGL_NO_SURFACE;
+        }
         eglTerminate(ctx.egl_display);
         ctx.egl_display = EGL_NO_DISPLAY;
     }
-#endif
     ctx.initialized = false;
 }
 
-void makeCurrent(const GLContext &ctx) {
-#ifdef __APPLE__
-    if (ctx.cgl_context)
-        CGLSetCurrentContext(ctx.cgl_context);
-#else
-    if (ctx.egl_display != EGL_NO_DISPLAY && ctx.egl_context != EGL_NO_CONTEXT)
-        eglMakeCurrent(ctx.egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, ctx.egl_context);
-#endif
+bool makeCurrent(const GLContext &ctx) {
+    if (ctx.egl_display == EGL_NO_DISPLAY || ctx.egl_context == EGL_NO_CONTEXT)
+        return false;
+    return eglMakeCurrent(ctx.egl_display, ctx.egl_surface, ctx.egl_surface, ctx.egl_context) == EGL_TRUE;
+}
+
+void releaseCurrent(const GLContext &ctx) {
+    if (ctx.egl_display != EGL_NO_DISPLAY)
+        eglMakeCurrent(ctx.egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
 }
 
 std::string getGPUInfo(const GLContext &ctx) {
@@ -196,25 +187,47 @@ bool updateTexture(Texture &tex, const uint8_t *data, int width, int height) {
     tex.height = height;
 
     glBindTexture(GL_TEXTURE_2D, tex.id);
-    glTexImage2D(GL_TEXTURE_2D, 0, tex.internal_format, width, height, 0, tex.format, tex.type, data);
+    glTexImage2D(GL_TEXTURE_2D, 0, tex.internal_format, width, height, 0, tex.format, tex.type,
+                 data);
     glBindTexture(GL_TEXTURE_2D, 0);
     return true;
 }
 
 Texture createTextureFromFile(const char *path, bool flip_y) {
-    stbi_set_flip_vertically_on_load(flip_y ? 1 : 0);
+    auto sk_data = SkData::MakeFromFileName(path);
+    if (!sk_data)
+        return Texture{};
 
-    int width, height, channels;
-    unsigned char *data = stbi_load(path, &width, &height, &channels, 4); // 强制 RGBA
+    auto codec = SkCodec::MakeFromData(sk_data);
+    if (!codec)
+        return Texture{};
 
-    Texture tex;
-    if (!data)
-        return tex;
+    SkImageInfo info = codec->getInfo()
+                           .makeColorType(kRGBA_8888_SkColorType)
+                           .makeAlphaType(kUnpremul_SkAlphaType);
+    SkBitmap bitmap;
+    bitmap.allocPixels(info);
+    if (!bitmap.getPixels())
+        return Texture{};
 
-    tex = createTexture(width, height);
-    updateTexture(tex, data, width, height);
+    if (codec->getPixels(info, bitmap.getPixels(), bitmap.rowBytes()) != SkCodec::kSuccess)
+        return Texture{};
 
-    stbi_image_free(data);
+    if (flip_y) {
+        int h = info.height();
+        int row_bytes = static_cast<int>(bitmap.rowBytes());
+        std::vector<uint8_t> tmp(row_bytes);
+        auto *pixels = static_cast<uint8_t *>(bitmap.getPixels());
+        for (int i = 0; i < h / 2; ++i) {
+            memcpy(tmp.data(), pixels + i * row_bytes, row_bytes);
+            memcpy(pixels + i * row_bytes, pixels + (h - 1 - i) * row_bytes, row_bytes);
+            memcpy(pixels + (h - 1 - i) * row_bytes, tmp.data(), row_bytes);
+        }
+    }
+
+    Texture tex = createTexture(info.width(), info.height());
+    updateTexture(tex, static_cast<const uint8_t *>(bitmap.getPixels()), info.width(),
+                  info.height());
     return tex;
 }
 
@@ -241,7 +254,6 @@ void destroyTexture(Texture &tex) {
 // ========== FBO ==========
 
 FBO createFBO(int width, int height, GLenum internal_format, GLenum format, GLenum type) {
-    // 复用 createTexture 创建纹理
     Texture tex = createTexture(width, height, internal_format, format, type);
     if (!tex.isValid())
         return FBO{};
@@ -254,7 +266,6 @@ FBO createFBO(int width, int height, GLenum internal_format, GLenum format, GLen
     fbo.type = type;
     fbo.texture = tex.id;
 
-    // 创建 FBO 并附加纹理
     glGenFramebuffers(1, &fbo.fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo.fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbo.texture, 0);
@@ -309,11 +320,10 @@ QuadMesh createQuadMesh(const float *vertices, size_t size_bytes) {
     glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
     glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(size_bytes), vertices, GL_STATIC_DRAW);
 
-    // pos
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
-    // uv
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
+                          (void *)(2 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
     glBindVertexArray(0);
@@ -373,12 +383,12 @@ bool readPixels(const FBO &fbo, uint8_t *out_buffer, int buffer_size) {
     return true;
 }
 
-// ========== 原生缓冲区 → 纹理（零拷贝）==========
+// ========== 原生缓冲区 → 纹理（macOS CVPixelBuffer NV12）==========
 
-#ifdef __APPLE__
+#if defined(__APPLE__)
 
-static const char *s_nv12_vert = R"(
-    #version 330 core
+// NV12 → RGBA 转换 shader（GLES3，使用 GL_TEXTURE_2D）
+static const char *s_nv12_vert = R"(#version 300 es
     layout(location = 0) in vec2 aPos;
     layout(location = 1) in vec2 aUV;
     out vec2 vUV;
@@ -388,17 +398,15 @@ static const char *s_nv12_vert = R"(
     }
 )";
 
-static const char *s_nv12_frag = R"(
-    #version 330 core
+static const char *s_nv12_frag = R"(#version 300 es
+    precision highp float;
     in vec2 vUV;
     out vec4 FragColor;
-    uniform sampler2DRect uTexY;
-    uniform sampler2DRect uTexUV;
-    uniform vec2 uTexSize;
+    uniform sampler2D uTexY;
+    uniform sampler2D uTexUV;
     void main() {
-        vec2 coord = vUV * uTexSize;
-        float y = texture(uTexY, coord).r;
-        vec2 uv = texture(uTexUV, coord * 0.5).rg;
+        float y = texture(uTexY, vUV).r;
+        vec2 uv = texture(uTexUV, vUV).rg;
         y = 1.1644 * (y - 0.0625);
         float cb = uv.r - 0.5;
         float cr = uv.g - 0.5;
@@ -411,95 +419,125 @@ static const char *s_nv12_frag = R"(
 )";
 
 static struct {
-    GLuint rect[2] = {};
-    GLuint fbo[2] = {};
+    GLuint y_tex = 0;
+    GLuint uv_tex = 0;
+    GLuint fbo = 0;
     std::unique_ptr<Shader> nv12_shader;
     QuadMesh quad;
     bool ready = false;
 } s_ntx;
 
 static void ensureNativeResources() {
-    if (s_ntx.ready) return;
-    glGenTextures(2, s_ntx.rect);
-    glGenFramebuffers(2, s_ntx.fbo);
+    if (s_ntx.ready)
+        return;
+    glGenTextures(1, &s_ntx.y_tex);
+    glGenTextures(1, &s_ntx.uv_tex);
+    glGenFramebuffers(1, &s_ntx.fbo);
     s_ntx.nv12_shader = std::make_unique<Shader>(s_nv12_vert, s_nv12_frag);
     s_ntx.quad = createQuadMesh();
     s_ntx.ready = true;
 }
 
-static void bindIOSurface(GLuint tex, IOSurfaceRef surface, int plane,
-                          GLenum internal_fmt, GLenum fmt, GLenum type, int w, int h) {
-    glBindTexture(GL_TEXTURE_RECTANGLE, tex);
-    CGLTexImageIOSurface2D(CGLGetCurrentContext(),
-                           GL_TEXTURE_RECTANGLE, internal_fmt, w, h, fmt, type, surface, plane);
-}
-
-static void attachDrawTarget(Texture &tex, int w, int h) {
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_ntx.fbo[0]);
-    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex.id, 0);
-    glViewport(0, 0, w, h);
+static void uploadPlane(GLuint tex, GLenum internal_fmt, GLenum fmt, int w, int h,
+                        const void *data, size_t stride) {
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, static_cast<GLint>(stride / (fmt == GL_RG ? 2 : 1)));
+    glTexImage2D(GL_TEXTURE_2D, 0, internal_fmt, w, h, 0, fmt, GL_UNSIGNED_BYTE, data);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 #endif // __APPLE__
 
 bool updateTextureFromNativeBuffer(Texture &tex, void *native_buf) {
-#ifdef __APPLE__
-    if (!native_buf || !tex.isValid()) return false;
+#if defined(__APPLE__)
+    if (!native_buf || !tex.isValid())
+        return false;
 
     auto pixbuf = static_cast<CVPixelBufferRef>(native_buf);
-    IOSurfaceRef surface = CVPixelBufferGetIOSurface(pixbuf);
-    if (!surface) return false;
-
-    ensureNativeResources();
-
-    int w = static_cast<int>(IOSurfaceGetWidth(surface));
-    int h = static_cast<int>(IOSurfaceGetHeight(surface));
+    int w = static_cast<int>(CVPixelBufferGetWidth(pixbuf));
+    int h = static_cast<int>(CVPixelBufferGetHeight(pixbuf));
     OSType fmt = CVPixelBufferGetPixelFormatType(pixbuf);
 
     bool nv12 = (fmt == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange ||
                  fmt == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange);
 
+    CVPixelBufferLockBaseAddress(pixbuf, kCVPixelBufferLock_ReadOnly);
+
     if (nv12) {
-        if (!s_ntx.nv12_shader || !s_ntx.nv12_shader->isValid()) return false;
+        ensureNativeResources();
+        if (!s_ntx.nv12_shader || !s_ntx.nv12_shader->isValid()) {
+            CVPixelBufferUnlockBaseAddress(pixbuf, kCVPixelBufferLock_ReadOnly);
+            return false;
+        }
 
-        bindIOSurface(s_ntx.rect[0], surface, 0, GL_R8, GL_RED, GL_UNSIGNED_BYTE, w, h);
-        bindIOSurface(s_ntx.rect[1], surface, 1, GL_RG8, GL_RG, GL_UNSIGNED_BYTE, w / 2, h / 2);
+        void *y_ptr = CVPixelBufferGetBaseAddressOfPlane(pixbuf, 0);
+        size_t y_stride = CVPixelBufferGetBytesPerRowOfPlane(pixbuf, 0);
+        void *uv_ptr = CVPixelBufferGetBaseAddressOfPlane(pixbuf, 1);
+        size_t uv_stride = CVPixelBufferGetBytesPerRowOfPlane(pixbuf, 1);
 
-        attachDrawTarget(tex, w, h);
+        uploadPlane(s_ntx.y_tex, GL_R8, GL_RED, w, h, y_ptr, y_stride);
+        uploadPlane(s_ntx.uv_tex, GL_RG8, GL_RG, w / 2, h / 2, uv_ptr, uv_stride);
+
+        // 渲染 NV12 → RGBA 到目标纹理
+        glBindFramebuffer(GL_FRAMEBUFFER, s_ntx.fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex.id, 0);
+        glViewport(0, 0, w, h);
 
         s_ntx.nv12_shader->use();
-        bindTexture({s_ntx.rect[0], w, h}, 0, GL_TEXTURE_RECTANGLE);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, s_ntx.y_tex);
         s_ntx.nv12_shader->setInt("uTexY", 0);
-        bindTexture({s_ntx.rect[1], w / 2, h / 2}, 1, GL_TEXTURE_RECTANGLE);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, s_ntx.uv_tex);
         s_ntx.nv12_shader->setInt("uTexUV", 1);
-        s_ntx.nv12_shader->setVec2("uTexSize", static_cast<float>(w), static_cast<float>(h));
         drawQuad(s_ntx.quad);
         s_ntx.nv12_shader->unuse();
-    } else {
-        bindIOSurface(s_ntx.rect[0], surface, 0, GL_RGBA8, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, w, h);
 
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, s_ntx.fbo[1]);
-        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                               GL_TEXTURE_RECTANGLE, s_ntx.rect[0], 0);
-        attachDrawTarget(tex, w, h);
-        glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    } else {
+        // BGRA：软件 byte-swap → RGBA 再上传
+        const uint8_t *src = static_cast<const uint8_t *>(CVPixelBufferGetBaseAddress(pixbuf));
+        size_t stride = CVPixelBufferGetBytesPerRow(pixbuf);
+        std::vector<uint8_t> rgba(static_cast<size_t>(w * h * 4));
+        for (int row = 0; row < h; ++row) {
+            const uint8_t *s = src + row * stride;
+            uint8_t *d = rgba.data() + row * w * 4;
+            for (int col = 0; col < w; ++col, s += 4, d += 4) {
+                d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = s[3]; // BGRA → RGBA
+            }
+        }
+        glBindTexture(GL_TEXTURE_2D, tex.id);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+        glBindTexture(GL_TEXTURE_2D, 0);
     }
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    CVPixelBufferUnlockBaseAddress(pixbuf, kCVPixelBufferLock_ReadOnly);
     tex.width = w;
     tex.height = h;
     return true;
 #else
-    (void)tex; (void)native_buf;
+    (void)tex;
+    (void)native_buf;
     return false;
 #endif
 }
 
 void cleanupNativeTexture() {
-#ifdef __APPLE__
-    if (!s_ntx.ready) return;
-    glDeleteTextures(2, s_ntx.rect);
-    glDeleteFramebuffers(2, s_ntx.fbo);
+#if defined(__APPLE__)
+    if (!s_ntx.ready)
+        return;
+    glDeleteTextures(1, &s_ntx.y_tex);
+    glDeleteTextures(1, &s_ntx.uv_tex);
+    glDeleteFramebuffers(1, &s_ntx.fbo);
     s_ntx.nv12_shader.reset();
     destroyQuadMesh(s_ntx.quad);
     s_ntx = {};

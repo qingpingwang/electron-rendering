@@ -18,8 +18,11 @@ bool initContext(GLContext &ctx);
 // 销毁上下文
 void destroyContext(GLContext &ctx);
 
-// 设置当前上下文
-void makeCurrent(const GLContext &ctx);
+// 设置当前上下文（返回 false 表示 eglMakeCurrent 失败）
+bool makeCurrent(const GLContext &ctx);
+
+// 释放当前线程持有的上下文（让其他线程可以取用）
+void releaseCurrent(const GLContext &ctx);
 
 // 获取 GPU 信息
 std::string getGPUInfo(const GLContext &ctx);

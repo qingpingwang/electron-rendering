@@ -1,26 +1,17 @@
 #pragma once
 
-#ifdef __APPLE__
-#include <OpenGL/OpenGL.h>
-#include <OpenGL/gl3.h>
-#else
-#include <glad/glad.h>
 #include <EGL/egl.h>
-#endif
+#include <EGL/eglext.h>
+#include <GLES3/gl3.h>
 
 namespace vp {
 namespace gl {
 
-// OpenGL 上下文
+// OpenGL 上下文（统一使用 ANGLE EGL，macOS Metal 后端 / Linux Mesa）
 struct GLContext {
-#ifdef __APPLE__
-    CGLContextObj cgl_context = nullptr;
-    CGLPixelFormatObj cgl_pixel_format = nullptr;
-#else
     EGLDisplay egl_display = EGL_NO_DISPLAY;
+    EGLSurface egl_surface = EGL_NO_SURFACE;
     EGLContext egl_context = EGL_NO_CONTEXT;
-    EGLConfig egl_config = nullptr;
-#endif
     bool initialized = false;
 };
 

@@ -17,6 +17,7 @@ namespace vp {
 struct EncoderConfig {
     int width = 1920;
     int height = 1080;
+    int fps = 30;
     int bit_rate = 4000000;  // 4 Mbps
     std::string preset = "medium";
     int crf = 23;

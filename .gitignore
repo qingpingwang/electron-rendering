@@ -5,6 +5,11 @@ node_modules/
 build/
 dist/
 
+# CMake test discovery cache (gtest_discover_tests POST_BUILD 副产物)
+cmake_test_discovery_*.json
+# Coverage report
+coverage_report/
+
 # Logs
 *.log
 npm-debug.log*

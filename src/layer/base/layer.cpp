@@ -4,9 +4,7 @@
 #include "../../gl/shader.h"
 #include "../../resource/render_resource.h"
 #include <algorithm>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
+#include "include/core/SkM44.h"
 
 using json = nlohmann::json;
 
@@ -210,33 +208,35 @@ bool Layer::hasActiveEffects(TimeMs time_ms) const {
                        [offset](const auto &ei) { return ei.material->isActive(offset); });
 }
 
-static glm::mat4 computeModelMatrix(const Clip &clip, float aspect) {
-    // glm 左乘: m = m * Op, 对顶点实际执行顺序从下往上读:
-    // 1. scale(user)  2. scale(1/aspect)  3. rotate  4. scale(aspect)  5. translate
-    // 即: 先缩放 → 等比空间旋转 → 最后位移（位移不受旋转影响）
+// 顶点执行顺序（右乘）：scale(user) → scale(1/aspect) → rotate → scale(aspect) → translate
+static SkM44 computeModelMatrix(const Clip &clip, float aspect) {
     float sx = clip.flip_h ? -clip.scale_x : clip.scale_x;
     float sy = clip.flip_v ? -clip.scale_y : clip.scale_y;
-    glm::mat4 m(1.0f);
-    m = glm::translate(m, glm::vec3(clip.transform_x, clip.transform_y, 0.0f));
-    m = glm::scale(m, glm::vec3(1.0f, aspect, 1.0f));
-    m = glm::rotate(m, glm::radians(clip.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
-    m = glm::scale(m, glm::vec3(1.0f, 1.0f / aspect, 1.0f));
-    m = glm::scale(m, glm::vec3(sx, sy, 1.0f));
+    SkM44 m;
+    m = SkM44::Translate(clip.transform_x, clip.transform_y, 0.0f) * m;
+    m = SkM44::Scale(1.0f, aspect, 1.0f) * m;
+    m = SkM44::Rotate({0, 0, 1}, clip.rotation * (SK_ScalarPI / 180.0f)) * m;
+    m = SkM44::Scale(1.0f, 1.0f / aspect, 1.0f) * m;
+    m = SkM44::Scale(sx, sy, 1.0f) * m;
     return m;
 }
 
 static void setClipUniforms(gl::Shader *shader, const Clip &clip, float aspect) {
-    glm::mat4 model = computeModelMatrix(clip, aspect);
+    SkM44 model = computeModelMatrix(clip, aspect);
+    float col_major[16];
+    model.getColMajor(col_major);
     shader->use();
-    shader->setMat4("uModel", glm::value_ptr(model));
+    shader->setMat4("uModel", col_major);
     shader->setFloat("uAlpha", clip.alpha);
     shader->unuse();
 }
 
 static void resetClipUniforms(gl::Shader *shader) {
-    static const glm::mat4 identity(1.0f);
+    static const SkM44 identity;
+    float col_major[16];
+    identity.getColMajor(col_major);
     shader->use();
-    shader->setMat4("uModel", glm::value_ptr(identity));
+    shader->setMat4("uModel", col_major);
     shader->setFloat("uAlpha", 1.0f);
     shader->unuse();
 }

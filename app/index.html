@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>视频编辑器</title>
+    <link rel="stylesheet" href="../node_modules/@simonwep/pickr/dist/themes/nano.min.css">
+    <link rel="stylesheet" href="renderer/index.css">
+</head>
+<body>
+    <div class="main-area">
+        <div class="player-section" id="player-section">
+            <div class="video-wrapper">
+                <canvas id="canvas" width="640" height="360"></canvas>
+            </div>
+
+            <div class="controls">
+                <div class="ctrl-left">
+                    <span class="tc tc-cur" id="time-current">00:00:00:00</span>
+                    <span class="tc-sep">/</span>
+                    <span class="tc" id="time-total">00:00:00:00</span>
+                </div>
+                <div class="ctrl-center">
+                    <button class="btn-icon" id="btn-play" disabled title="播放/暂停">&#9654;</button>
+                </div>
+                <div class="ctrl-right"></div>
+            </div>
+        </div>
+
+        <div class="divider-h" id="divider-h"></div>
+        <div id="timeline"></div>
+    </div>
+
+    <div class="divider-v" id="divider-v"></div>
+
+    <div class="right-section" id="right-section">
+        <div class="inspector">
+            <div class="inspector-header">
+                <span>属性</span>
+                <button class="inspector-fold" id="panel-fold" title="折叠面板">&raquo;</button>
+            </div>
+            <div class="inspector-content" id="inspector-content">
+                <div class="insp-empty">未选择图层</div>
+            </div>
+        </div>
+        <div class="log-wrap" id="log-wrap">
+            <div class="log-bar" id="log-bar">
+                <span>日志</span>
+                <span id="file-info">未加载</span>
+                <button class="log-bar-btn" id="log-toggle-btn">&#9662;</button>
+            </div>
+            <div class="log-content" id="log-content"></div>
+        </div>
+    </div>
+
+    <button class="panel-expand" id="panel-expand" title="展开面板">&laquo;</button>
+
+    <script>require('./renderer/main.js')</script>
+</body>
+</html>
