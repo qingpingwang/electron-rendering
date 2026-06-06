@@ -46,7 +46,7 @@ TEST(VideoRenderTest, RenderAndEncodeFrames) {
     ASSERT_TRUE(root.init()) << "failed to init RootNode";
 
     nlohmann::json protocol = nlohmann::json::parse(json_str);
-    std::string base_path = fs::path(VP_RESOURCES_DIR).parent_path().string();
+    std::string base_path = VP_RESOURCES_DIR;
     ASSERT_TRUE(root.load(protocol, base_path)) << root.getErrorMessage();
 
     fs::path output_dir = fs::path(VP_TEST_BINARY_DIR) / "gtest_output";

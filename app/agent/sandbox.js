@@ -5,13 +5,14 @@
 const fs   = require('fs');
 const path = require('path');
 
-const ROOT_DIR = path.join(__dirname, '..');
+const APP_DIR      = path.join(__dirname, '..');
+const PROJECT_ROOT = path.join(APP_DIR, '..');
 
 let _sandboxRoot = null;
 
 function _readEnv() {
     try {
-        const content = fs.readFileSync(path.join(ROOT_DIR, '.env'), 'utf-8');
+        const content = fs.readFileSync(path.join(APP_DIR, '.env'), 'utf-8');
         const cfg = {};
         for (const line of content.split('\n')) {
             const t = line.trim();
@@ -29,8 +30,8 @@ function _readEnv() {
 function getSandboxRoot() {
     if (_sandboxRoot) return _sandboxRoot;
     const env = _readEnv();
-    const rel = env.RESOURCE_SANDBOX || './test/resources';
-    _sandboxRoot = path.resolve(ROOT_DIR, rel);
+    const rel = env.RESOURCE_SANDBOX || './resources';
+    _sandboxRoot = path.resolve(PROJECT_ROOT, rel);
     if (!fs.existsSync(_sandboxRoot)) {
         fs.mkdirSync(_sandboxRoot, { recursive: true });
     }

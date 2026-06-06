@@ -7,7 +7,7 @@
  *   - segment_1：extra_material_refs 挂 effect
  *   - materials.effects / transitions 运行时各最多 1 条
  *
- * 预览视频：默认使用项目根的 resources/test.mp4（相对于应用根目录）。
+ * 预览视频：默认使用仓库根目录的 resources/test.mp4（相对项目根解析）。
  * 如需替换，改此常量的 materials.videos[0].path 并重启 UI。
  */
 const path = require('path');
@@ -22,7 +22,7 @@ const PREVIEW_PROTOCOL = {
             {
                 id: 'material_video_0',
                 name: 'preview',
-                path: 'resources/test.mp4',  // 相对应用根目录；resolvePreviewPaths 会转为绝对路径
+                path: 'resources/test.mp4',  // 相对项目根；resolvePreviewPaths 会转为绝对路径
                 type: '',
             },
         ],
@@ -64,10 +64,10 @@ const PREVIEW_PROTOCOL = {
  * 不修改导出的常量，返回深拷贝。
  *
  * @param {object} protocol - PREVIEW_PROTOCOL 或带相对路径的同结构对象
- * @param {string} appRoot  - 应用根目录（通常为 path.join(__dirname, '..')）
+ * @param {string} projectRoot - 仓库根目录（含 resources/、build/；通常为 app 的上一级）
  */
-function resolvePreviewPaths(protocol, appRoot) {
-    const root = appRoot || path.join(__dirname, '..');
+function resolvePreviewPaths(protocol, projectRoot) {
+    const root = projectRoot || path.join(__dirname, '..', '..');
     const copy = JSON.parse(JSON.stringify(protocol));
 
     const resolvePath = (p) =>

@@ -183,6 +183,12 @@ bool RootNode::load(const nlohmann::json &config, const std::string &base_path) 
         canvas_.height = canvas_json.value("height", 0);
         canvas_.ratio = canvas_json.value("ratio", "");
 
+        // effect/transition 在 material->load 时编译 shader，必须先绑定 GL 上下文
+        if (!gl::makeCurrent(gl_ctx_)) {
+            setError("OpenGL context is not available");
+            return false;
+        }
+
         // 加载素材
         for (int i = 0; i < MATERIAL_TYPE_COUNT; i++) {
             materials_[i].clear();
@@ -212,7 +218,7 @@ bool RootNode::load(const nlohmann::json &config, const std::string &base_path) 
                 materials_[loader.type].reserve(arr.size());
                 for (const auto &mat : arr) {
                     auto material = loader.create();
-                    if (!material->load(mat)) {
+                    if (!material->load(mat, base_path)) {
                         setError("load " + std::string(loader.key) + " failed: " + material->getErrorMessage());
                         return false;
                     }

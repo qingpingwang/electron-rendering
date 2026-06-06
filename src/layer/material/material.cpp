@@ -1,7 +1,7 @@
 #include "material.h"
 #include "effect.h"
+#include "../../core/path_util.h"
 #include "../../resource/render_resource.h"
-#include <filesystem>
 
 using json = nlohmann::json;
 
@@ -17,7 +17,7 @@ const std::string &Material::getPath() const {
 
 bool Material::load(const json &config, const std::string &base_path) {
     id_ = config.value("id", "");
-    path_ = config.value("path", "");
+    path_ = resolvePath(base_path, config.value("path", ""));
     type_ = config.value("type", "");
     name_ = config.value("name", "");
     if (id_.empty()) {
@@ -101,13 +101,10 @@ bool EffectMaterial::load(const json &config, const std::string &base_path) {
     if (config.contains("config"))
         config_ = config["config"];
 
-    // 创建并加载 ResourceEffect
+    // 创建并加载 ResourceEffect（path_ 已由基类解析为最终路径）
     if (root_) {
         resource_effect_ = std::make_unique<ResourceEffect>(root_);
-        const std::string folder = std::filesystem::path(path_).is_absolute()
-                                       ? path_
-                                       : (base_path.empty() ? path_ : base_path + "/" + path_);
-        if (!resource_effect_->loadFromFolder(folder)) {
+        if (!resource_effect_->loadFromFolder(path_)) {
             setError("effect material[" + id_ + "]: " + resource_effect_->getErrorMessage());
             return false;
         }

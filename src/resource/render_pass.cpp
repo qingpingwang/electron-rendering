@@ -88,7 +88,8 @@ bool RenderPass::loadShader(const nlohmann::json &config, const std::string &bas
     }
 
     if (!shader_->isValid()) {
-        setError("shader is invalid");
+        const std::string &detail = shader_->getError();
+        setError(detail.empty() ? "shader is invalid" : detail);
         return false;
     }
 

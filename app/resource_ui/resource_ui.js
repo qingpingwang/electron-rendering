@@ -8,7 +8,8 @@ const { getSandboxRoot } = require('../agent/sandbox');
 const { PREVIEW_PROTOCOL, resolvePreviewPaths } = require('./preview_protocol');
 const VideoPlayer                      = require('../renderer/video/video_player');
 
-const ROOT_DIR = path.join(__dirname, '..');
+const APP_DIR      = path.join(__dirname, '..');
+const PROJECT_ROOT = path.join(APP_DIR, '..');
 
 // ─────────────────────────────────────────────
 // 预览播放器状态
@@ -231,7 +232,7 @@ function setupLogPanel() {
 function initPlayer() {
     log('初始化预览播放器...', 'info');
     try {
-        preview.addon = require(path.join(ROOT_DIR, '..', 'build', 'Release', 'video_player'));
+        preview.addon = require(path.join(PROJECT_ROOT, 'build', 'Release', 'video_player'));
         preview.root  = preview.addon.createRoot();
         preview.root.init();
         preview.video = new VideoPlayer(canvasEl);
@@ -266,13 +267,13 @@ function loadCurrentProtocol() {
         proto.materials.transitions = [];
     }
 
-    const resolved = resolvePreviewPaths(proto, ROOT_DIR);
+    const resolved = resolvePreviewPaths(proto, PROJECT_ROOT);
     log(`加载协议: ${_mountedEffect ? `effect=${_mountedEffect.name}` : '无 effect'}, ${_mountedTransition ? `transition=${_mountedTransition.name}` : '无 transition'}`, 'load');
 
     try {
         stopPlayback();
         const t0     = performance.now();
-        const result = preview.root.load(JSON.stringify(resolved), ROOT_DIR);
+        const result = preview.root.load(JSON.stringify(resolved), PROJECT_ROOT);
         const dt     = (performance.now() - t0).toFixed(1);
 
         if (!result || !result.success) {
