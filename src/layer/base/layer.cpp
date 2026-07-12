@@ -241,6 +241,19 @@ static void resetClipUniforms(gl::Shader *shader) {
     shader->unuse();
 }
 
+// 图层内容合成到 target 时启用/关闭混合。target 在一帧内会被多个 group/layer
+// 依次绘制，若不开混合，后绘制的图层会直接覆盖像素而非按 alpha 叠加，
+// 半透明图层、带透明通道的内容会出现"发黑/穿帮"。仅在合成瞬间开启，
+// 用完立即关闭，不污染其他绘制路径（如 Skia 文字自己管理混合状态）的 GL 状态。
+static void setBlendEnabled(bool enabled) {
+    if (enabled) {
+        glEnable(GL_BLEND);
+        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    } else {
+        glDisable(GL_BLEND);
+    }
+}
+
 bool Layer::draw(const gl::FBO &target, TimeMs time_ms) {
     if (!isVisible())
         return true;
@@ -259,7 +272,9 @@ bool Layer::draw(const gl::FBO &target, TimeMs time_ms) {
     setClipUniforms(shader, clip_, aspect);
 
     if (!hasActiveEffects(time_ms)) {
+        setBlendEnabled(true);
         bool ok = renderContent(target, time_ms);
+        setBlendEnabled(false);
         resetClipUniforms(shader);
         return ok;
     }
@@ -269,6 +284,10 @@ bool Layer::draw(const gl::FBO &target, TimeMs time_ms) {
         resetClipUniforms(shader);
         return false;
     }
+    // FBO 池中的 FBO 首次分配时纹理数据未初始化，显式清透明，避免脏数据参与后续混合
+    gl::bindFBO(temp_fbo);
+    gl::cleanColor(0.0f, 0.0f, 0.0f, 0.0f);
+    gl::unbindFBO();
 
     if (!renderContent(temp_fbo, time_ms)) {
         setError("render content failed");
@@ -285,8 +304,10 @@ bool Layer::draw(const gl::FBO &target, TimeMs time_ms) {
         return false;
     }
     resetClipUniforms(shader);
+    setBlendEnabled(true);
     gl::drawTextureQuad(target, gl::Texture{effect_out.texture, effect_out.width, effect_out.height},
                         shader, 0, "uTex", root_->getQuad());
+    setBlendEnabled(false);
     root_->getFBOPool()->release(effect_out);
     return true;
 }

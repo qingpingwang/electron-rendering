@@ -96,7 +96,7 @@ async function loadVideo() {
 
     const videoInfo = player.addon.getVideoInfo(filePath);
     if (!videoInfo.success) {
-        log(`加载失败: ${videoInfo.error || '未知错误'}`, 'error');
+        log(`加载失败: ${videoInfo.error || '未知错误'}`, 'err');
         return;
     }
 

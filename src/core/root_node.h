@@ -47,6 +47,8 @@ public:
 
     void setCurrentTime(TimeMs time_ms);
     bool isSameFrame(TimeMs time_ms) const;
+    // 返回值：0=命中缓存，1=实际渲染成功，-1=参数错误，-2=渲染失败（buffer 内容无效，
+    // 原因见 getErrorMessage()）。
     int draw(uint8_t *buffer, size_t buffer_size, bool force = false, bool prepare_next = true);
 
     int getWidth() const;

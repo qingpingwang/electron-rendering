@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <functional>
 #include <cstring>
+#include <thread>
 #include <nlohmann/json.hpp>
 #include "include/core/SkM44.h"
 
@@ -18,6 +19,23 @@
 using json = nlohmann::json;
 
 namespace vp {
+
+// EGL context 在同一时刻只能被一个线程持有（EGL spec 3.7.4：其他线程 eglMakeCurrent
+// 会返回 EGL_BAD_ACCESS）。用 RAII 保证“谁 makeCurrent 谁 releaseCurrent”，
+// 不管从哪个 return / 异常路径退出都自动归还，不靠手动在每个分支里补一行。
+namespace {
+struct ScopedGLContext {
+    const gl::GLContext &ctx;
+    bool acquired;
+    explicit ScopedGLContext(const gl::GLContext &c) : ctx(c), acquired(gl::makeCurrent(c)) {}
+    ~ScopedGLContext() {
+        if (acquired)
+            gl::releaseCurrent(ctx);
+    }
+    ScopedGLContext(const ScopedGLContext &) = delete;
+    ScopedGLContext &operator=(const ScopedGLContext &) = delete;
+};
+} // namespace
 
 static const char commonVertStr[] = {
 #include "../gl/shaders/common.vert"
@@ -100,17 +118,26 @@ bool RootNode::renderFrame(TimeMs time_ms, uint8_t *out_buffer) {
         return true;
     }
 
-    gl::makeCurrent(gl_ctx_);
+    ScopedGLContext ctx_guard(gl_ctx_);
+    if (!ctx_guard.acquired) {
+        // 拿不到 context 就必须直接失败，不能继续发 GL 调用（那些调用不检查
+        // 当前是否有合法 context，会静默 no-op，导致“假成功”污染帧缓存）。
+        setError("renderFrame failed: OpenGL context unavailable (EGL_BAD_ACCESS)");
+        return false;
+    }
 
     gl::bindFBO(render_fbo_);
     gl::cleanColor();
 
     for (auto &group : groups_) {
+        // 被取消是正常控制流（切换时间点时主动打断后台预渲染），不是错误，
+        // 不能调 setError——那是留给“真的渲染失败了”这种情况的。
         if (cancel_flag_) {
             gl::unbindFBO();
             return false;
         }
         if (!group->draw(render_fbo_, time_ms)) {
+            setError("renderFrame failed: layer draw error");
             gl::unbindFBO();
             return false;
         }
@@ -119,12 +146,10 @@ bool RootNode::renderFrame(TimeMs time_ms, uint8_t *out_buffer) {
     if (cancel_flag_)
         return false;
 
-    if (!gl::readPixels(render_fbo_, out_buffer, static_cast<int>(canvas_.width * canvas_.height * 4)))
+    if (!gl::readPixels(render_fbo_, out_buffer, static_cast<int>(canvas_.width * canvas_.height * 4))) {
+        setError("renderFrame failed: readPixels error");
         return false;
-
-    // 释放 EGL 上下文，使其可被其他线程（prepare_next 背景线程）取用。
-    // EGL spec 3.7.4：上下文正被某线程持有时，其他线程 eglMakeCurrent 会返回 EGL_BAD_ACCESS。
-    gl::releaseCurrent(gl_ctx_);
+    }
 
     return true;
 }
@@ -183,8 +208,12 @@ bool RootNode::load(const nlohmann::json &config, const std::string &base_path) 
         canvas_.height = canvas_json.value("height", 0);
         canvas_.ratio = canvas_json.value("ratio", "");
 
-        // effect/transition 在 material->load 时编译 shader，必须先绑定 GL 上下文
-        if (!gl::makeCurrent(gl_ctx_)) {
+        // effect/transition 在 material->load 时编译 shader，必须先绑定 GL 上下文。
+        // guard 生命周期覆盖整个 try 块，任何 return / 异常路径退出时都会自动
+        // releaseCurrent，避免 context 被 load() 所在线程一直攥住，导致后台
+        // 准备线程永远拿不到 context。
+        ScopedGLContext ctx_guard(gl_ctx_);
+        if (!ctx_guard.acquired) {
             setError("OpenGL context is not available");
             return false;
         }
@@ -243,8 +272,7 @@ bool RootNode::load(const nlohmann::json &config, const std::string &base_path) 
             return "canvas_config is invalid";
         }
 
-        // 创建 OpenGL 资源
-        gl::makeCurrent(gl_ctx_);
+        // 创建 OpenGL 资源（context 已由上面的 ctx_guard 持有，无需重复获取）
 
         // 从 FBO 池获取主渲染 FBO（不释放，生命周期与 RootNode 一致）
         render_fbo_ = fbo_pool_.acquire(canvas_.width, canvas_.height);
@@ -366,7 +394,12 @@ int RootNode::draw(uint8_t *buffer, size_t buffer_size, bool force, bool prepare
     } else {
         cancelPrepare();
         cancel_flag_ = false;
-        renderFrame(current_time_ms_, buffer);
+        clearError();
+        if (!renderFrame(current_time_ms_, buffer)) {
+            // 渲染真的失败了（不是 cache 命中/未命中的正常状态），必须让调用方能区分
+            // 出来——否则前端拿到的是一帧没被写过的旧数据，却以为渲染成功。
+            status = -2;
+        }
     }
 
     if (prepare_next) {

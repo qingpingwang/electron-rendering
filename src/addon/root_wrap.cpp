@@ -157,12 +157,20 @@ Napi::Value RootWrap::Draw(const Napi::CallbackInfo &info) {
     bool force = info.Length() > 0 && info[0].IsBoolean() && info[0].As<Napi::Boolean>().Value();
     bool prepare_next = !(info.Length() > 1 && info[1].IsBoolean() && !info[1].As<Napi::Boolean>().Value());
     int status = root_->draw(static_cast<uint8_t *>(ab.Data()), size, force, prepare_next);
-    if (status < 0)
+
+    // status == -1：参数错误（size 校验已在上面拦掉，这里理论不会出现）。
+    // status == -2：真的渲染失败了，buffer 内容不可信，不能当正常帧交给前端。
+    if (status == -1)
         return env.Null();
 
     Napi::Object result = Napi::Object::New(env);
-    result.Set("pixels", Napi::Uint8Array::New(env, size, ab, 0));
     result.Set("status", Napi::Number::New(env, status));
+    if (status == -2) {
+        const std::string error = root_->getErrorMessage();
+        result.Set("error", Napi::String::New(env, error.empty() ? "draw failed" : error));
+        return result;
+    }
+    result.Set("pixels", Napi::Uint8Array::New(env, size, ab, 0));
     return result;
 }
 

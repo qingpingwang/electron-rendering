@@ -9,6 +9,7 @@ R"(#version 300 es
 
     void main()
     {
-        FragColor = texture(uTex, vUV) * uAlpha;
+        vec4 color = texture(uTex, vUV);
+        FragColor = vec4(color.rgb, color.a * uAlpha);
     }
 )"

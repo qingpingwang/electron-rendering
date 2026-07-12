@@ -50,6 +50,11 @@ class VideoPlayer {
 
         const { pixels, status } = result;
 
+        if (status < 0) {
+            log(`#${this.frameCount + 1} | ${formatTime(this.currentTime)} | 渲染失败: ${result.error || '未知错误'}`, 'err');
+            return;
+        }
+
         if (this.canvas.width !== this.width || this.canvas.height !== this.height) {
             this.canvas.width = this.width;
             this.canvas.height = this.height;
