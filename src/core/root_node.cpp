@@ -27,7 +27,8 @@ namespace {
 struct ScopedGLContext {
     const gl::GLContext &ctx;
     bool acquired;
-    explicit ScopedGLContext(const gl::GLContext &c) : ctx(c), acquired(gl::makeCurrent(c)) {}
+    explicit ScopedGLContext(const gl::GLContext &c) : ctx(c), acquired(gl::makeCurrent(c)) {
+    }
     ~ScopedGLContext() {
         if (acquired)
             gl::releaseCurrent(ctx);
@@ -98,24 +99,33 @@ TimeMs RootNode::getHalfFrameMs() const {
     return (frame_rate_ > 0) ? static_cast<TimeMs>(500.0 / frame_rate_) : 20;
 }
 
-bool RootNode::isCacheHit(TimeMs time_ms) const {
-    if (cache_time_ms_ == kInvalidTime)
-        return false;
-    TimeMs diff = (time_ms >= cache_time_ms_) ? (time_ms - cache_time_ms_) : (cache_time_ms_ - time_ms);
+bool RootNode::isWithinHalfFrame(TimeMs a, TimeMs b) const {
+    TimeMs diff = (a >= b) ? (a - b) : (b - a);
     return diff < getHalfFrameMs();
 }
 
+// 调用者需持有 cache_mutex_
+RootNode::CacheLookup RootNode::classifyLocked(TimeMs time_ms) const {
+    if (!isWithinHalfFrame(time_ms, last_prepare_.time_ms))
+        return CacheLookup::kMiss;
+    return last_prepare_.ok ? CacheLookup::kHit : CacheLookup::kFailed;
+}
+
 bool RootNode::isSameFrame(TimeMs time_ms) const {
-    TimeMs diff = (time_ms >= current_time_ms_) ? (time_ms - current_time_ms_) : (current_time_ms_ - time_ms);
-    return diff < getHalfFrameMs();
+    return isWithinHalfFrame(time_ms, current_time_ms_);
+}
+
+void RootNode::invalidateCache() {
+    std::lock_guard<std::mutex> lock(cache_mutex_);
+    last_prepare_ = PrepareResult{};
 }
 
 // ========== 渲染 ==========
 
-bool RootNode::renderFrame(TimeMs time_ms, uint8_t *out_buffer) {
+RootNode::RenderStatus RootNode::renderFrame(TimeMs time_ms, uint8_t *out_buffer) {
     if (groups_.empty()) {
         std::memset(out_buffer, 0, static_cast<size_t>(canvas_.width) * canvas_.height * 4);
-        return true;
+        return RenderStatus::kOk;
     }
 
     ScopedGLContext ctx_guard(gl_ctx_);
@@ -123,7 +133,7 @@ bool RootNode::renderFrame(TimeMs time_ms, uint8_t *out_buffer) {
         // 拿不到 context 就必须直接失败，不能继续发 GL 调用（那些调用不检查
         // 当前是否有合法 context，会静默 no-op，导致“假成功”污染帧缓存）。
         setError("renderFrame failed: OpenGL context unavailable (EGL_BAD_ACCESS)");
-        return false;
+        return RenderStatus::kFailed;
     }
 
     gl::bindFBO(render_fbo_);
@@ -134,57 +144,84 @@ bool RootNode::renderFrame(TimeMs time_ms, uint8_t *out_buffer) {
         // 不能调 setError——那是留给“真的渲染失败了”这种情况的。
         if (cancel_flag_) {
             gl::unbindFBO();
-            return false;
+            return RenderStatus::kCancelled;
         }
         if (!group->draw(render_fbo_, time_ms)) {
             setError("renderFrame failed: layer draw error");
             gl::unbindFBO();
-            return false;
+            return RenderStatus::kFailed;
         }
     }
 
     if (cancel_flag_)
-        return false;
+        return RenderStatus::kCancelled;
 
     if (!gl::readPixels(render_fbo_, out_buffer, static_cast<int>(canvas_.width * canvas_.height * 4))) {
         setError("renderFrame failed: readPixels error");
-        return false;
+        return RenderStatus::kFailed;
     }
 
-    return true;
+    return RenderStatus::kOk;
+}
+
+void RootNode::renderIntoCache(TimeMs time_ms) {
+    clearError();
+    RenderStatus status = renderFrame(time_ms, cache_data_.data());
+
+    std::lock_guard<std::mutex> lock(cache_mutex_);
+    last_prepare_ = (status == RenderStatus::kCancelled) ? PrepareResult{} : PrepareResult{time_ms, status == RenderStatus::kOk};
 }
 
 void RootNode::startPrepareNextFrame(TimeMs next_time_ms) {
     if (next_time_ms > duration_ms_)
         return;
-    if (isCacheHit(next_time_ms))
-        return;
 
-    cancelPrepare();
-
-    // 立即设置缓存时间（标记正在准备）
     {
         std::lock_guard<std::mutex> lock(cache_mutex_);
-        cache_time_ms_ = next_time_ms;
+        if (classifyLocked(next_time_ms) != CacheLookup::kMiss)
+            return;
     }
 
-    cancel_flag_ = false;
-    preparing_ = true;
-    prepare_thread_ = std::thread([this, next_time_ms]() {
-        bool success = renderFrame(next_time_ms, cache_data_.data());
-        if (!success) {
-            std::lock_guard<std::mutex> lock(cache_mutex_);
-            cache_time_ms_ = kInvalidTime;
-        }
-        preparing_ = false;
-    });
+    preemptPrepare();
+
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex_);
+        last_prepare_ = PrepareResult{next_time_ms, true}; // 乐观占位，结果由 renderIntoCache 落定
+    }
+
+    prepare_thread_ = std::thread(&RootNode::renderIntoCache, this, next_time_ms);
+}
+
+void RootNode::joinPrepareThread() {
+    if (prepare_thread_.joinable())
+        prepare_thread_.join();
 }
 
 void RootNode::cancelPrepare() {
     cancel_flag_ = true;
-    if (prepare_thread_.joinable())
-        prepare_thread_.join();
-    preparing_ = false;
+    joinPrepareThread();
+    cancel_flag_ = false; // 线程已退出，复位标志供下一轮准备复用
+}
+
+void RootNode::preemptPrepare() {
+    cancelPrepare();
+    clearError(); // 即将开始新一轮渲染，上一轮遗留的错误状态没有意义了
+}
+
+RootNode::CacheLookup RootNode::lookupCache(TimeMs time_ms, uint8_t *out_buffer, size_t size) {
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex_);
+        if (classifyLocked(time_ms) == CacheLookup::kMiss)
+            return CacheLookup::kMiss;
+    }
+
+    joinPrepareThread(); // 结果还没落定，等后台线程跑完
+
+    std::lock_guard<std::mutex> lock(cache_mutex_);
+    CacheLookup result = classifyLocked(time_ms);
+    if (result == CacheLookup::kHit)
+        std::memcpy(out_buffer, cache_data_.data(), size);
+    return result;
 }
 
 // ========== 加载 ==========
@@ -232,11 +269,11 @@ bool RootNode::load(const nlohmann::json &config, const std::string &base_path) 
                 MaterialType type;
                 Factory create;
             } loaders[] = {
-                {"videos",      MATERIAL_TYPE_VIDEO,      []()       -> std::unique_ptr<Material> { return std::make_unique<VideoMaterial>(); }},
-                {"effects",     MATERIAL_TYPE_EFFECT,     [this]()   -> std::unique_ptr<Material> { return std::make_unique<EffectMaterial>(this); }},
-                {"texts",       MATERIAL_TYPE_TEXT,       []()       -> std::unique_ptr<Material> { return std::make_unique<TextMaterial>(); }},
-                {"transitions", MATERIAL_TYPE_TRANSITION, [this]()   -> std::unique_ptr<Material> { return std::make_unique<TransitionMaterial>(this); }},
-                {"audios",      MATERIAL_TYPE_AUDIO,      []()       -> std::unique_ptr<Material> { return std::make_unique<AudioMaterial>(); }},
+                {"videos", MATERIAL_TYPE_VIDEO, []() -> std::unique_ptr<Material> { return std::make_unique<VideoMaterial>(); }},
+                {"effects", MATERIAL_TYPE_EFFECT, [this]() -> std::unique_ptr<Material> { return std::make_unique<EffectMaterial>(this); }},
+                {"texts", MATERIAL_TYPE_TEXT, []() -> std::unique_ptr<Material> { return std::make_unique<TextMaterial>(); }},
+                {"transitions", MATERIAL_TYPE_TRANSITION, [this]() -> std::unique_ptr<Material> { return std::make_unique<TransitionMaterial>(this); }},
+                {"audios", MATERIAL_TYPE_AUDIO, []() -> std::unique_ptr<Material> { return std::make_unique<AudioMaterial>(); }},
             };
 
             for (const auto &loader : loaders) {
@@ -350,7 +387,7 @@ void RootNode::unload() {
     cancelPrepare();
     groups_.clear();
     cache_data_.clear();
-    cache_time_ms_ = kInvalidTime;
+    invalidateCache();
     current_time_ms_ = 0;
     id_.clear();
     canvas_ = CanvasConfig{};
@@ -380,26 +417,21 @@ int RootNode::draw(uint8_t *buffer, size_t buffer_size, bool force, bool prepare
     if (buffer_size < required)
         return -1;
 
-    if (force) {
-        cache_time_ms_ = kInvalidTime;
-    }
+    if (force)
+        invalidateCache(); // 使 last_prepare_ 的时间戳失配，下面 lookupCache 自然会判成 kMiss
 
-    int status = (!force && isCacheHit(current_time_ms_)) ? 0 : 1;
+    int status = 1;
+    CacheLookup lookup = lookupCache(current_time_ms_, buffer, required);
 
-    if (status == 0) {
-        if (prepare_thread_.joinable())
-            prepare_thread_.join();
-        std::lock_guard<std::mutex> lock(cache_mutex_);
-        std::memcpy(buffer, cache_data_.data(), required);
-    } else {
-        cancelPrepare();
-        cancel_flag_ = false;
-        clearError();
-        if (!renderFrame(current_time_ms_, buffer)) {
-            // 渲染真的失败了（不是 cache 命中/未命中的正常状态），必须让调用方能区分
-            // 出来——否则前端拿到的是一帧没被写过的旧数据，却以为渲染成功。
+    // 未命中缓存
+    if (lookup == CacheLookup::kMiss) {
+        preemptPrepare();
+        if (renderFrame(current_time_ms_, buffer) != RenderStatus::kOk) {
             status = -2;
         }
+    } else {
+        // 命中缓存，是否有错误
+        status = lookup == CacheLookup::kHit ? 0 : -2;
     }
 
     if (prepare_next) {

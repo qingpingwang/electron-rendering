@@ -95,13 +95,25 @@ public:
     bool setMaterialBoolParam(const std::string &materialId, const std::string &name, bool value);
 
 private:
-    // 渲染一帧
-    bool renderFrame(TimeMs time_ms, uint8_t *out_buffer);
-    // 异步准备
+    // 渲染一帧的结果：kCancelled 是正常控制流（被主动打断），不是错误；
+    // kFailed 才是真的渲染失败，此时 getErrorMessage() 里有原因。
+    enum class RenderStatus { kOk, kFailed, kCancelled };
+    RenderStatus renderFrame(TimeMs time_ms, uint8_t *out_buffer);
+
+    // 异步准备：后台线程入口，渲染到 cache_data_，结果记录到 last_prepare_
+    void renderIntoCache(TimeMs time_ms);
     void startPrepareNextFrame(TimeMs next_time_ms);
-    void cancelPrepare();
-    // 缓存
-    bool isCacheHit(TimeMs time_ms) const;
+    void cancelPrepare();     // 请求取消并等待后台线程结束
+    void joinPrepareThread(); // 只等待，不请求取消
+    void preemptPrepare();    // 取消旧的准备线程 + 清掉遗留错误，为新一轮渲染让路
+
+    // 缓存查询结果：kHit 时数据已拷进 out_buffer；kFailed 时该时间点此前真的
+    // 渲染失败过（非取消），错误信息见 getErrorMessage()，不必再同步渲染一遍。
+    enum class CacheLookup { kHit, kMiss, kFailed };
+    CacheLookup lookupCache(TimeMs time_ms, uint8_t *out_buffer, size_t size);
+    CacheLookup classifyLocked(TimeMs time_ms) const; // 调用者必须已持有 cache_mutex_
+    void invalidateCache();                           // 清空 last_prepare_（内部自行加锁）
+    bool isWithinHalfFrame(TimeMs a, TimeMs b) const;
     TimeMs getHalfFrameMs() const;
 
     // OpenGL 资源
@@ -127,14 +139,17 @@ private:
     double frame_rate_ = 0.0;
     TimeMs current_time_ms_ = 0;
 
-    // 帧缓存
+    // 帧缓存：cache_data_ 是像素数据，last_prepare_ 是最近一次准备的结果
     std::vector<uint8_t> cache_data_;
-    TimeMs cache_time_ms_ = kInvalidTime;
+    struct PrepareResult {
+        TimeMs time_ms = kInvalidTime;
+        bool ok = false;
+    };
+    PrepareResult last_prepare_;
     mutable std::mutex cache_mutex_;
 
     // 异步线程
     std::thread prepare_thread_;
-    std::atomic<bool> preparing_{false};
     std::atomic<bool> cancel_flag_{false};
 };
 
