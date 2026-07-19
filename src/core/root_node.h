@@ -12,6 +12,7 @@
 #include <vector>
 
 class GrDirectContext;
+class RootWrap; // N-API 绑定层；经 friend 访问 gl_ctx_，不暴露 public 拿/还 context 接口
 
 namespace gl {
 class Shader;
@@ -89,12 +90,16 @@ public:
     // 获取所有含音频的图层信息（layerId → {path, volume, layerType, sourceRange, targetRange}）
     nlohmann::json getAudioInfos() const;
 
-    // 通过素材 ID 设置 RenderResource 外部参数（特效/转场均可）
+    // 通过素材 ID 设置 RenderResource 外部参数（特效/转场均可）。
+    // 会直接下发 glUniform，调用方须先持有 GL context（由 N-API 绑定层负责）。
     bool setMaterialFloatParam(const std::string &materialId, const std::string &name, float value);
     bool setMaterialVecParam(const std::string &materialId, const std::string &name, const std::vector<float> &value);
     bool setMaterialBoolParam(const std::string &materialId, const std::string &name, bool value);
 
 private:
+    // 允许 RootWrap 直接操作 gl_ctx_，避免把 makeCurrent/releaseCurrent 做成 public API
+    friend class ::RootWrap;
+
     // 渲染一帧的结果：kCancelled 是正常控制流（被主动打断），不是错误；
     // kFailed 才是真的渲染失败，此时 getErrorMessage() 里有原因。
     enum class RenderStatus { kOk, kFailed, kCancelled };

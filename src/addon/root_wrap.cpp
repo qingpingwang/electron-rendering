@@ -2,6 +2,7 @@
 #include "group_layer_wrap.h"
 #include "layer_wrap.h"
 #include "../core/root_node.h"
+#include "../gl/functions.h"
 #include "../gl/types.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -9,6 +10,24 @@
 #include <filesystem>
 
 static Napi::FunctionReference g_constructor;
+
+// setMaterial*Param 会下发 glUniform；经 friend 访问 RootNode::gl_ctx_，不暴露 public API。
+bool RootWrap::acquireGL() {
+    return root_ && vp::gl::makeCurrent(root_->gl_ctx_);
+}
+
+void RootWrap::releaseGL() {
+    if (root_)
+        vp::gl::releaseCurrent(root_->gl_ctx_);
+}
+
+RootWrap::ScopedGLContext::ScopedGLContext(RootWrap *w) : self(w), acquired(w->acquireGL()) {
+}
+
+RootWrap::ScopedGLContext::~ScopedGLContext() {
+    if (acquired)
+        self->releaseGL();
+}
 
 Napi::Function RootWrap::GetClass(Napi::Env env) {
     auto cls = DefineClass(env, "Root", {
@@ -242,6 +261,9 @@ Napi::Value RootWrap::SetMaterialFloatParam(const Napi::CallbackInfo &info) {
         Napi::TypeError::New(env, "expected (materialId: string, name: string, value: number)").ThrowAsJavaScriptException();
         return env.Null();
     }
+    ScopedGLContext ctx_guard(this);
+    if (!ctx_guard.acquired)
+        return Napi::Boolean::New(env, false);
     bool ok = root_->setMaterialFloatParam(
         info[0].As<Napi::String>().Utf8Value(),
         info[1].As<Napi::String>().Utf8Value(),
@@ -261,6 +283,9 @@ Napi::Value RootWrap::SetMaterialVecParam(const Napi::CallbackInfo &info) {
     values.reserve(arr.Length());
     for (uint32_t i = 0; i < arr.Length(); ++i)
         values.push_back(arr.Get(i).As<Napi::Number>().FloatValue());
+    ScopedGLContext ctx_guard(this);
+    if (!ctx_guard.acquired)
+        return Napi::Boolean::New(env, false);
     bool ok = root_->setMaterialVecParam(
         info[0].As<Napi::String>().Utf8Value(),
         info[1].As<Napi::String>().Utf8Value(),
@@ -275,6 +300,9 @@ Napi::Value RootWrap::SetMaterialBoolParam(const Napi::CallbackInfo &info) {
         Napi::TypeError::New(env, "expected (materialId: string, name: string, value: boolean)").ThrowAsJavaScriptException();
         return env.Null();
     }
+    ScopedGLContext ctx_guard(this);
+    if (!ctx_guard.acquired)
+        return Napi::Boolean::New(env, false);
     bool ok = root_->setMaterialBoolParam(
         info[0].As<Napi::String>().Utf8Value(),
         info[1].As<Napi::String>().Utf8Value(),

@@ -304,6 +304,13 @@ function loadCurrentProtocol() {
     }
 }
 
+// 参数面板改动后触发重绘：播放中时间本来就在走，下一帧自然会用新参数重画，
+// 无需强制；暂停时时间点不变，必须强制重绘才能让改动立刻体现在画面上。
+function renderPreviewAfterParamChange() {
+    if (!preview.video) return;
+    preview.video.render(preview.video.currentTime || 0, !preview.playing);
+}
+
 function updatePlaybackUI() {
     if (!preview.video) return;
     const dur = preview.video.duration || 0;
@@ -572,7 +579,7 @@ function buildParamPanel() {
                 item.querySelector('input').addEventListener('change', (e) => {
                     if (preview.root) {
                         preview.root.setMaterialBoolParam(materialId, u.name, e.target.checked);
-                        preview.video && preview.video.render(preview.video.currentTime || 0);
+                        renderPreviewAfterParamChange();
                     }
                 });
             } else if (type === 'vec2' || type === 'vec3' || type === 'vec4') {
@@ -602,7 +609,7 @@ function buildParamPanel() {
                         if (span) span.textContent = curVals[idx].toFixed(3);
                         if (preview.root) {
                             preview.root.setMaterialVecParam(materialId, u.name, curVals);
-                            preview.video && preview.video.render(preview.video.currentTime || 0);
+                            renderPreviewAfterParamChange();
                         }
                     });
                 });
@@ -623,7 +630,7 @@ function buildParamPanel() {
                     if (span) span.textContent = v.toFixed(3);
                     if (preview.root) {
                         preview.root.setMaterialFloatParam(materialId, u.name, v);
-                        preview.video && preview.video.render(preview.video.currentTime || 0);
+                        renderPreviewAfterParamChange();
                     }
                 });
             }

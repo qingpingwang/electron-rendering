@@ -30,6 +30,18 @@ private:
     // 复用的像素缓冲区（V8 管理，避免每帧 malloc/GC）
     Napi::Reference<Napi::ArrayBuffer> pixel_ab_;
 
+    // friend 访问 RootNode::gl_ctx_；嵌套 RAII 通过这两个成员函数间接拿/还
+    bool acquireGL();
+    void releaseGL();
+    struct ScopedGLContext {
+        RootWrap *self;
+        bool acquired;
+        explicit ScopedGLContext(RootWrap *w);
+        ~ScopedGLContext();
+        ScopedGLContext(const ScopedGLContext &) = delete;
+        ScopedGLContext &operator=(const ScopedGLContext &) = delete;
+    };
+
     Napi::Value Init(const Napi::CallbackInfo &info);
     Napi::Value Load(const Napi::CallbackInfo &info);
     Napi::Value ExportConfig(const Napi::CallbackInfo &info);
