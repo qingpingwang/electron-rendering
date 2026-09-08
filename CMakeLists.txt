@@ -20,7 +20,6 @@ set(NLE_SDK_BUILD_DEMOS OFF CACHE BOOL "Build SDK demos" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Link SDK into the addon" FORCE)
 set(NLE_SDK_PLUGIN_DIR "${CMAKE_BINARY_DIR}/plugins" CACHE PATH "Codec plugin directory" FORCE)
 add_subdirectory(third_party/nle-sdk EXCLUDE_FROM_ALL)
-add_subdirectory(third_party/nle-sdk/plugins sdk-plugins EXCLUDE_FROM_ALL)
 execute_process(COMMAND node -p "require('node-addon-api').include"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" OUTPUT_VARIABLE NAPI_INCLUDE OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
 string(REPLACE "\"" "" NAPI_INCLUDE "${NAPI_INCLUDE}")
