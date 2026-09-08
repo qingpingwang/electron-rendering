@@ -1,15 +1,20 @@
 const path = require('path');
+const fs = require('fs');
 const { pathToFileURL } = require('url');
 const { formatTime } = require('../utils/logger');
 
 const TRACK_STYLE = {
-    video: { bg: '#1B9C8F', accent: '#24C4B4', icon: '\u{1F3AC}', name: '视频' },
-    text:  { bg: '#D4605A', accent: '#E8725C', icon: 'T',          name: '文本' },
+    video: { bg: '#075359', accent: '#24C4B4', icon: '\u{1F3AC}', name: '视频' },
+    text:  { bg: '#984a38', accent: '#E8725C', icon: 'T',          name: '文本' },
+    image: { bg: '#d29424', icon: '◔', name: '贴片' },
+    svg: { bg: '#d29424', icon: '◔', name: '贴片' },
+    sticker: { bg: '#d29424', icon: '◔', name: '贴纸' },
+    effect: { bg: '#744982', icon: '☆', name: '特效' },
+    filter: { bg: '#744982', icon: '◉', name: '滤镜' },
     audio: { bg: '#7B5DB8', accent: '#9B7DD4', icon: '\u{266A}',   name: '音频' },
 };
 
-const THUMB_PX = 80;
-const THUMB_RATIO = 1.8;
+const THUMB_PX = 60;
 const LABEL_W = 72;
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 20;
@@ -24,6 +29,7 @@ class Timeline {
         this.onTrackMute = null;
         this.onRefresh = null;
         this.onSelectLayer = null;
+        this._selectedId = null;
 
         this._materials = {};
         this._groups = [];
@@ -40,6 +46,8 @@ class Timeline {
         this._thumbGen = 0;
         this._stripCache = new Map();
         this._frameCache = new Map();
+        this._mediaVersions = new Map();
+        this._stickerHeads = new Map();
 
         this._build();
         this._bindEvents();
@@ -49,20 +57,41 @@ class Timeline {
         return this.duration * this._pxPerMs;
     }
 
-    load(config, groups, basePath = '') {
+    load(config, groups, basePath = '', proxies = {}) {
+        this._selectedId = null;
         this.duration = config.duration || 0;
         this.currentTime = 0;
 
         this._materials = {};
-        this._stripCache.clear();
-        this._frameCache.clear();
+        const previousScale = this._pxPerMs;
         for (const v of (config.materials?.videos || [])) {
+            const file = proxies[path.resolve(basePath, v.path)]?.thumbnail || path.resolve(basePath, v.path);
+            let version;
+            try { const stat = fs.statSync(file); version = `${stat.size}:${stat.mtimeMs}`; }
+            catch { version = 'missing'; }
+            if (this._mediaVersions.get(file) !== version) {
+                for (const key of this._stripCache.keys()) { if (key.startsWith(`${file}|`)) { this._stripCache.delete(key); } }
+                for (const key of this._frameCache.keys()) { if (key.startsWith(`${file}@`)) { this._frameCache.delete(key); } }
+                this._mediaVersions.set(file, version);
+            }
             this._materials[v.id] = {
-                path: path.resolve(basePath, v.path),
+                path: file,
+                name: path.basename(v.path),
+                proxy: Boolean(proxies[path.resolve(basePath, v.path)]),
                 duration: v.duration || 0,
             };
         }
 
+        for (const category of ['images', 'svgs', 'stickers', 'effects', 'filters', 'audios']) {
+            for (const material of config.materials?.[category] || []) {
+                let name = material.name;
+                const file = material.path ? path.resolve(basePath, material.path) : null;
+                if (file && ['effects', 'filters'].includes(category)) {
+                    try { name = JSON.parse(fs.readFileSync(path.join(file, 'config.json'), 'utf8')).name || name; } catch { /* Name remains optional. */ }
+                }
+                this._materials[material.id] = { ...material, name, path: file };
+            }
+        }
         this._groups = groups || [];
 
         this.tracks = (config.tracks || []).map((track, idx) => ({
@@ -71,7 +100,7 @@ class Timeline {
             group: this._groups[idx] || null,
             segments: (track.segments || []).map(seg => ({
                 id: seg.id || seg.material_id,
-                name: seg.id || seg.material_id,
+                name: this._materials[seg.material_id]?.name || TRACK_STYLE[track.type]?.name || track.type,
                 materialId: seg.material_id,
                 start: seg.target_timerange?.start || 0,
                 duration: seg.target_timerange?.duration || 0,
@@ -80,7 +109,7 @@ class Timeline {
             })),
         }));
 
-        this._pxPerMs = this._calcFitScale();
+        this._pxPerMs = previousScale || this._calcFitScale();
         this._updateZoomInput();
         this._render();
         this._thumbGen++;
@@ -107,6 +136,10 @@ class Timeline {
     }
 
     clear() {
+        this._thumbGen++;
+        clearTimeout(this._thumbTimer);
+        this._mediaVersions.clear();
+        this._stickerHeads.clear();
         this.tracks = [];
         this.duration = 0;
         this.currentTime = 0;
@@ -198,7 +231,7 @@ class Timeline {
         };
 
         const startDrag = (e) => {
-            if (e.target.closest('.tl-label')) return;
+            if (drag || e.target.closest('.tl-label, .tl-segment')) return;
             this._dragging = true;
             seek(e);
         };
@@ -243,26 +276,57 @@ class Timeline {
 
         window.addEventListener('resize', () => {
             this._updatePlayhead();
+            this._debouncedRefreshThumbs();
         });
 
-        let clickPos = null;
-        this._body.addEventListener('mousedown', (e) => {
-            clickPos = { x: e.clientX, y: e.clientY };
-        });
-        this._body.addEventListener('click', (e) => {
-            if (clickPos) {
-                const dx = e.clientX - clickPos.x;
-                const dy = e.clientY - clickPos.y;
-                if (dx * dx + dy * dy > 25) return;
+        let drag = null;
+        this._body.addEventListener('pointerdown', e => {
+            const el = e.target.closest('.tl-segment');
+            if (e.button !== 0 || e.target.closest('button, .tl-label')) { return; }
+            if (!el) { this._deselectSegment(); return; }
+            e.preventDefault();
+            const ti = Number(el.dataset.trackIdx), si = Number(el.dataset.segIdx);
+            const segment = this.tracks[ti].segments[si];
+            this._selectSegment(ti, si);
+            if (this.currentTime < segment.start || this.currentTime >= segment.start + segment.duration) {
+                this.onSeek?.(segment.start);
             }
-            if (e.target.closest('.tl-label')) return;
-            const segEl = e.target.closest('.tl-segment');
-            if (segEl && segEl.dataset.trackIdx !== undefined) {
-                this._selectSegment(parseInt(segEl.dataset.trackIdx), parseInt(segEl.dataset.segIdx));
-            } else {
-                this._deselectSegment();
+            drag = { el, ti, si, x: e.clientX, y: e.clientY, start: this.tracks[ti].segments[si].start, moved: false };
+            this._body.setPointerCapture(e.pointerId);
+        });
+        this._body.addEventListener('pointermove', e => {
+            if (!drag) { return; }
+            const delta = e.clientX - drag.x;
+            if (Math.hypot(delta, e.clientY - drag.y) < 4 && !drag.moved) { return; }
+            drag.moved = true;
+            drag.el.classList.add('dragging');
+            drag.time = Math.max(0, drag.start + delta / this._pxPerMs);
+            if (!e.altKey && Math.abs(drag.time - this.currentTime) * this._pxPerMs < 8) { drag.time = this.currentTime; }
+            const rows = [...this._body.querySelectorAll('.tl-track')];
+            rows.forEach(row => row.classList.remove('drop-target', 'drop-invalid'));
+            const row = rows.find(row => { const r = row.getBoundingClientRect(); return e.clientY >= r.top && e.clientY <= r.bottom; });
+            drag.target = row ? Number(row.dataset.trackIdx) : null;
+            const valid = drag.target !== null && this.tracks[drag.target].type === this.tracks[drag.ti].type;
+            if (row) { row.classList.add(valid ? 'drop-target' : 'drop-invalid'); }
+            drag.valid = valid;
+            drag.el.style.left = `${drag.time * this._pxPerMs}px`;
+            drag.el.style.transform = `translateY(${e.clientY - drag.y}px)`;
+        });
+        this._body.addEventListener('pointerup', e => {
+            if (!drag) { return; }
+            const d = drag; drag = null;
+            if (this._body.hasPointerCapture(e.pointerId)) { this._body.releasePointerCapture(e.pointerId); }
+            d.el.classList.remove('dragging');
+            d.el.style.transform = '';
+            this._body.querySelectorAll('.tl-track').forEach(row => row.classList.remove('drop-target', 'drop-invalid'));
+            if (d.moved && d.valid && this.onMoveSegment) {
+                this.onMoveSegment(this.tracks[d.ti].id, this.tracks[d.ti].segments[d.si].id, d.time, this.tracks[d.target].id);
+            } else if (d.moved) {
+                this._render();
             }
         });
+        this._body.addEventListener('pointercancel', () => { drag = null; this._render(); });
+
     }
 
     _updateZoomInput() {
@@ -312,12 +376,14 @@ class Timeline {
         const totalPx = this._totalPx;
         this._body.style.width = `${LABEL_W + totalPx}px`;
 
-        for (let trackIdx = 0; trackIdx < this.tracks.length; trackIdx++) {
+        // SDK 按协议顺序叠加，最后一轨在最上层；时间轴从上层向下展示。
+        for (let trackIdx = this.tracks.length - 1; trackIdx >= 0; trackIdx--) {
             const track = this.tracks[trackIdx];
-            const style = TRACK_STYLE[track.type] || TRACK_STYLE.video;
+            const style = TRACK_STYLE[track.type] || { bg: '#66686b', icon: '◇', name: track.type };
 
             const row = document.createElement('div');
             row.className = `tl-track tl-track-${track.type}`;
+            row.dataset.trackIdx = trackIdx;
 
             const label = document.createElement('div');
             label.className = 'tl-label';
@@ -375,6 +441,7 @@ class Timeline {
 
                 const segEl = document.createElement('div');
                 segEl.className = `tl-segment tl-seg-${track.type}`;
+                segEl.classList.toggle('selected', seg.id === this._selectedId);
                 segEl.dataset.trackIdx = trackIdx;
                 segEl.dataset.segIdx = segIdx;
                 segEl.style.left = `${leftPx}px`;
@@ -390,7 +457,7 @@ class Timeline {
 
                     const info = document.createElement('div');
                     info.className = 'tl-seg-info';
-                    const fname = mat ? path.basename(mat.path) : seg.name;
+                    const fname = mat ? (mat.name || path.basename(mat.path)) : seg.name;
                     const dur = mat ? mat.duration : seg.srcDuration;
                     info.textContent = `${fname}  ${formatTime(dur)}`;
                     segEl.appendChild(info);
@@ -399,15 +466,24 @@ class Timeline {
                     stripWrap.className = 'tl-seg-strip';
                     segEl.appendChild(stripWrap);
 
-                    const cachedStrip = this._stripCache.get(this._segKey(segEl.dataset));
-                    if (cachedStrip) {
-                        cachedStrip.classList.add('tl-thumb-old');
-                        stripWrap.appendChild(cachedStrip);
-                    }
-
                     const bottom = document.createElement('div');
                     bottom.className = 'tl-seg-pad';
                     segEl.appendChild(bottom);
+                } else if (['image', 'svg', 'sticker'].includes(track.type)) {
+                    const material = this._materials[seg.materialId];
+                    if (material?.path) {
+                        const icon = document.createElement('canvas');
+                        icon.className = 'tl-sticker-preview';
+                        icon.width = 40; icon.height = 40;
+                        icon.setAttribute('aria-label', seg.name);
+                        segEl.appendChild(icon);
+                        this._loadStickerHead(material.path).then(frame => {
+                            if (icon.isConnected) { icon.getContext('2d').drawImage(frame, 0, 0); }
+                        }).catch(error => {
+                            icon.title = '贴片预览加载失败';
+                            console.warn('贴片预览加载失败', material.path, error);
+                        });
+                    }
                 } else {
                     const segName = document.createElement('span');
                     segName.className = 'tl-seg-name';
@@ -419,9 +495,17 @@ class Timeline {
                             label = t
                                 ? (t.length > 28 ? `${t.slice(0, 28)}…` : t)
                                 : (layer.id || seg.name);
-                        } else if (layer.id) {
-                            label = layer.id;
                         }
+                    }
+                    if (track.type === 'effect') {
+                        const star = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                        star.setAttribute('viewBox', '0 0 24 24');
+                        star.setAttribute('aria-hidden', 'true');
+                        star.classList.add('tl-effect-icon');
+                        const outline = document.createElementNS(star.namespaceURI, 'path');
+                        outline.setAttribute('d', 'm12 2 3 7 7 1-5 5 1 7-6-4-6 4 1-7-5-5 7-1Z');
+                        star.appendChild(outline);
+                        segEl.appendChild(star);
                     }
                     segName.textContent = label;
                     segEl.title = `${label}\n${formatTime(seg.start)} ~ ${formatTime(seg.start + seg.duration)}`;
@@ -433,6 +517,11 @@ class Timeline {
 
             row.appendChild(segsEl);
             this._body.appendChild(row);
+        }
+        for (const el of this._body.querySelectorAll('.tl-seg-video[data-video-path]')) {
+            this._updateThumbMetrics(el);
+            const cached = this._stripCache.get(this._segKey(el.dataset));
+            if (cached) { this._attachStrip(el, cached); }
         }
     }
 
@@ -474,8 +563,17 @@ class Timeline {
 
     // ---- Selection ----
 
+    selectLayer(id) {
+        for (let ti = 0; ti < this.tracks.length; ti++) {
+            const si = this.tracks[ti].segments.findIndex(s => s.id === id);
+            if (si >= 0) { this._selectSegment(ti, si); return; }
+        }
+        this._deselectSegment();
+    }
+
     _selectSegment(trackIdx, segIdx) {
         try {
+            this._selectedId = this.tracks[trackIdx]?.segments[segIdx]?.id || null;
             const old = this._body.querySelector('.tl-segment.selected');
             if (old) old.classList.remove('selected');
 
@@ -487,7 +585,7 @@ class Timeline {
             if (!track?.group) return;
             const isAudioTrack = track.type === 'audio';
 
-            // 音频轨道不访问 group.layers（native getter），先确认是否因此导致崩溃
+            // 音频片段没有画布图层，只同步时间轴与音频属性。
             let layer = null;
             if (!isAudioTrack) {
                 const layers = track.group.layers;
@@ -510,20 +608,78 @@ class Timeline {
     }
 
     _deselectSegment() {
+        this._selectedId = null;
         const old = this._body.querySelector('.tl-segment.selected');
         if (old) old.classList.remove('selected');
         if (this.onSelectLayer) this.onSelectLayer(null);
     }
 
-    // ---- Strip & Frame Cache ----
-
-    _segKey(dataset) {
-        return `${dataset.videoPath}|${dataset.srcStart}|${dataset.srcDuration}`;
+    async _loadStickerHead(file) {
+        const stat = fs.statSync(file);
+        let source = file, sequence;
+        if (path.extname(file).toLowerCase() === '.json') {
+            sequence = JSON.parse(fs.readFileSync(file, 'utf8'));
+            source = path.resolve(path.dirname(file), sequence.path);
+            if (!(sequence.singleWidth > 0 && sequence.singleHeight > 0)) {
+                return Promise.reject(new Error('无效的序列帧尺寸'));
+            }
+        }
+        const sourceStat = fs.statSync(source);
+        const key = `${file}:${stat.mtimeMs}:${stat.size}:${sourceStat.mtimeMs}:${sourceStat.size}`;
+        if (this._stickerHeads.has(key)) { return this._stickerHeads.get(key); }
+        const pending = (async () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 40; canvas.height = 40;
+            const draw = (image, width, height) => {
+                const scale = Math.min(40 / width, 40 / height);
+                const w = width * scale, h = height * scale;
+                canvas.getContext('2d').drawImage(image, 0, 0, width, height, (40 - w) / 2, (40 - h) / 2, w, h);
+            };
+            if (path.extname(source).toLowerCase() === '.gif') {
+                const decoder = new ImageDecoder({ data: new Uint8Array(fs.readFileSync(source)), type: 'image/gif' });
+                try {
+                    const { image } = await decoder.decode({ frameIndex: 0 });
+                    try { draw(image, image.displayWidth, image.displayHeight); }
+                    finally { image.close(); }
+                } finally { decoder.close(); }
+            } else {
+                const image = new Image();
+                image.src = pathToFileURL(source).href;
+                await image.decode();
+                draw(image, sequence?.singleWidth || image.naturalWidth, sequence?.singleHeight || image.naturalHeight);
+            }
+            return canvas;
+        })();
+        this._stickerHeads.set(key, pending);
+        pending.catch(() => this._stickerHeads.delete(key));
+        if (this._stickerHeads.size > 200) { this._stickerHeads.delete(this._stickerHeads.keys().next().value); }
+        return pending;
     }
 
-    _frameCacheKey(videoPath, timeSec) {
+    // ---- Strip & Frame Cache ----
+
+    _updateThumbMetrics(el) {
+        const box = el.querySelector('.tl-seg-strip');
+        el.dataset.thumbWidth = box.clientWidth;
+        el.dataset.thumbHeight = box.clientHeight;
+        el.dataset.thumbDpr = window.devicePixelRatio || 1;
+    }
+
+    _attachStrip(el, cached) {
+        const copy = document.createElement('canvas');
+        copy.width = cached.width; copy.height = cached.height;
+        copy.getContext('2d').drawImage(cached, 0, 0);
+        copy.style.cssText = `width:${el.dataset.thumbWidth}px;height:${el.dataset.thumbHeight}px;display:block;`;
+        el.querySelector('.tl-seg-strip').replaceChildren(copy);
+    }
+
+    _segKey(dataset) {
+        return `${dataset.videoPath}|${dataset.srcStart}|${dataset.srcDuration}|${dataset.thumbWidth}|${dataset.thumbHeight}|${dataset.thumbDpr}`;
+    }
+
+    _frameCacheKey(videoPath, timeSec, width, height, dpr) {
         const rt = Math.round(timeSec * 2) / 2;
-        return `${videoPath}@${rt.toFixed(1)}`;
+        return `${videoPath}@${rt.toFixed(1)}|${width}x${height}|${dpr}`;
     }
 
     _frameCacheStore(key, canvas) {
@@ -541,7 +697,7 @@ class Timeline {
             const canvas = segEl.querySelector('.tl-seg-strip canvas');
             if (!canvas || !canvas.width) continue;
             canvas.classList.remove('tl-thumb-new');
-            canvas.style.cssText = '';
+
             this._stripCache.set(this._segKey(segEl.dataset), canvas);
         }
     }
@@ -567,6 +723,11 @@ class Timeline {
 
         const groups = new Map();
         for (const el of videoSegs) {
+            const previous = this._segKey(el.dataset);
+            this._updateThumbMetrics(el);
+            if (previous === this._segKey(el.dataset) && el.querySelector('.tl-seg-strip canvas')) { continue; }
+            const cached = this._stripCache.get(this._segKey(el.dataset));
+            if (cached) { this._attachStrip(el, cached); continue; }
             const vp = el.dataset.videoPath;
             if (!groups.has(vp)) groups.set(vp, []);
             groups.get(vp).push(el);
@@ -578,7 +739,12 @@ class Timeline {
                 const video = await this._loadVideoEl(filePath);
                 for (const segEl of segs) {
                     if (genId !== this._thumbGen) { video.src = ''; return; }
-                    await this._fillFilmstrip(video, segEl);
+                    const cached = this._stripCache.get(this._segKey(segEl.dataset));
+                    if (cached) {
+                        this._attachStrip(segEl, cached);
+                    } else {
+                        await this._fillFilmstrip(video, segEl, genId);
+                    }
                 }
                 video.src = '';
                 video.load();
@@ -599,7 +765,7 @@ class Timeline {
         });
     }
 
-    async _fillFilmstrip(video, segEl) {
+    async _fillFilmstrip(video, segEl, genId) {
         const stripWrap = segEl.querySelector('.tl-seg-strip');
         if (!stripWrap) return;
 
@@ -611,58 +777,82 @@ class Timeline {
 
         if (segW <= 0 || srcDur <= 0 || segH <= 0) return;
 
-        const thumbW = Math.round(segH * THUMB_RATIO);
+        const dpr = window.devicePixelRatio || 1;
+        const thumbW = THUMB_PX;
+        const cellAspect = thumbW / segH;
         const count = Math.max(1, Math.ceil(segW / THUMB_PX));
-        const canvasW = count * thumbW;
+        const canvasW = segW;
 
         const strip = document.createElement('canvas');
-        strip.width = canvasW;
-        strip.height = segH;
+        strip.width = Math.ceil(canvasW * dpr);
+        strip.height = Math.ceil(segH * dpr);
         const ctx = strip.getContext('2d');
+        ctx.scale(dpr, dpr);
+        ctx.imageSmoothingQuality = 'high';
 
         const vw = video.videoWidth;
         const vh = video.videoHeight;
         const vidAspect = vw / vh;
         let sx, sy, sw, sh;
-        if (vidAspect > THUMB_RATIO) {
-            sh = vh; sw = vh * THUMB_RATIO;
+        if (vidAspect > cellAspect) {
+            sh = vh; sw = vh * cellAspect;
             sx = (vw - sw) / 2; sy = 0;
         } else {
-            sw = vw; sh = vw / THUMB_RATIO;
+            sw = vw; sh = vw / cellAspect;
             sx = 0; sy = (vh - sh) / 2;
         }
 
         for (let i = 0; i < count; i++) {
+            if (genId !== this._thumbGen || !segEl.isConnected) { return; }
             const dx = i * thumbW;
             const dw = Math.min(thumbW, canvasW - dx);
             const ratio = dw / thumbW;
-            const t = srcStart + srcDur * (i + 0.5) / count;
-            const fKey = this._frameCacheKey(videoPath, t);
+            const t = Math.floor(srcStart + srcDur * (i + 0.5) / count);
+            const fKey = this._frameCacheKey(videoPath, t, thumbW, segH, dpr);
             const cached = this._frameCache.get(fKey);
 
             if (cached) {
-                ctx.drawImage(cached, 0, 0, cached.width, cached.height, dx, 0, dw, segH);
+                ctx.drawImage(cached, 0, 0, cached.width * ratio, cached.height, dx, 0, dw, segH);
             } else {
-                video.currentTime = Math.min(t, video.duration - 0.01);
-                await new Promise(r => { video.onseeked = r; });
+                const target = Math.max(0, Math.min(t, video.duration - 0.01));
+                if (Math.abs(video.currentTime - target) > 0.001) {
+                    await new Promise((resolve, reject) => {
+                        const finish = error => {
+                            clearTimeout(timer);
+                            video.removeEventListener('seeked', ready);
+                            video.removeEventListener('error', failed);
+                            error ? reject(error) : resolve();
+                        };
+                        const ready = () => finish();
+                        const failed = () => finish(new Error('视频缩略图定位失败'));
+                        const timer = setTimeout(() => finish(new Error('视频缩略图定位超时')), 5000);
+                        video.addEventListener('seeked', ready, { once: true });
+                        video.addEventListener('error', failed, { once: true });
+                        video.currentTime = target;
+                    });
+                }
                 ctx.drawImage(video, sx, sy, sw * ratio, sh, dx, 0, dw, segH);
 
                 const fc = document.createElement('canvas');
-                fc.width = thumbW;
-                fc.height = segH;
-                fc.getContext('2d').drawImage(video, sx, sy, sw, sh, 0, 0, thumbW, segH);
+                fc.width = Math.ceil(thumbW * dpr);
+                fc.height = Math.ceil(segH * dpr);
+                const frameCtx = fc.getContext('2d');
+                frameCtx.imageSmoothingQuality = 'high';
+                frameCtx.drawImage(video, sx, sy, sw, sh, 0, 0, fc.width, fc.height);
                 this._frameCacheStore(fKey, fc);
             }
         }
 
-        strip.style.cssText = 'width:100%;height:100%;display:block;';
+        if (genId !== this._thumbGen || !segEl.isConnected) { return; }
+        strip.style.cssText = `width:${segW}px;height:${segH}px;display:block;`;
         strip.classList.add('tl-thumb-new');
-        stripWrap.appendChild(strip);
+        stripWrap.replaceChildren(strip);
 
         const old = stripWrap.querySelector('.tl-thumb-old');
         if (old) old.remove();
 
         this._stripCache.set(this._segKey(segEl.dataset), strip);
+        if (this._stripCache.size > 200) { this._stripCache.delete(this._stripCache.keys().next().value); }
     }
 }
 

@@ -27,6 +27,7 @@ function notifyProjectOpened(wc, uuid, options) {
 // ─────────────────────────────────────────────
 
 app.whenReady().then(() => {
+    require('./preprocess/ipc')();
     try {
         require('@electron/remote/main').initialize();
     } catch { }

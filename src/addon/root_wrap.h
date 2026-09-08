@@ -246,6 +246,8 @@ private:
     Napi::Value SetCurrentTime(const Napi::CallbackInfo &info);
     Napi::Value IsSameFrame(const Napi::CallbackInfo &info);
     Napi::Value Draw(const Napi::CallbackInfo &info);
+    Napi::Value HitTest(const Napi::CallbackInfo &info);
+    Napi::Value GetLayerBounds(const Napi::CallbackInfo &info);
     Napi::Value GetGroups(const Napi::CallbackInfo &info);
     Napi::Value FindLayerById(const Napi::CallbackInfo &info);
     Napi::Value GetAudioInfos(const Napi::CallbackInfo &info);

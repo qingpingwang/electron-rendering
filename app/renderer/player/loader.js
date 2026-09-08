@@ -6,10 +6,14 @@ const { log, formatTime } = require('../utils/logger');
 
 async function loadFromConfig(config, protocolPath = '') {
     return player.scheduleProjectOp(async () => {
-        document.getElementById('file-info').textContent = '加载中...';
 
         try {
+            player.beforeProjectLoad?.();
             stop();
+            player.loading = true;
+            updateUI();
+            protocolPath = path.resolve(protocolPath || player.projectBase || process.cwd());
+            player.mediaProxies = await require('../editor/media_cache')(config, protocolPath);
 
             const jsonStr = JSON.stringify(config);
             log(`加载配置: ${config.tracks?.length || 0} 轨道`, 'info');
@@ -19,14 +23,23 @@ async function loadFromConfig(config, protocolPath = '') {
             if (!result.success) {
                 throw new Error(`C++ 加载失败: ${result.error}`);
             }
+            for (const track of config.tracks || []) {
+                if (track.type !== 'video') { continue; }
+                for (const segment of track.segments || []) {
+                    const material = config.materials.videos.find(item => item.id === segment.material_id);
+                    const proxy = player.mediaProxies[path.resolve(protocolPath, material.path)];
+                    player.root.findLayerById(segment.id).setProxyPath(proxy.video);
+                }
+            }
             const t1 = performance.now();
 
+            player.projectBase = protocolPath;
             player.video.load(player.root);
+            player.mediaLibrary?.sync(config, protocolPath);
 
             const groups = player.root.getGroups();
-            if (player.timeline) player.timeline.load(config, groups, protocolPath);
+            if (player.timeline) player.timeline.load(config, groups, protocolPath, player.mediaProxies);
 
-            document.getElementById('file-info').textContent = '已加载';
 
             log(`✓ 加载成功 (${(t1-t0).toFixed(1)}ms) | ID: ${player.root.id || '-'} | ${player.video.width}×${player.video.height} | ${player.video.frameRate.toFixed(2)}fps | ${formatTime(player.video.duration)}`, 'ok');
             log(`轨道组: ${groups.length}`, 'info');
@@ -40,6 +53,7 @@ async function loadFromConfig(config, protocolPath = '') {
                 });
             });
 
+            player.video.render(0);
             try {
                 const audioInfos = player.root.getAudioInfos();
                 const infoKeys = Object.keys(audioInfos);
@@ -48,7 +62,7 @@ async function loadFromConfig(config, protocolPath = '') {
                     log(`  ${k}: vol=${v.volume} path=${v.path} type=${v.layerType}`, 'info');
                 }
 
-                const audioCount = await player.audio.load(player.root);
+                const audioCount = await player.audio.load(player.root, player.mediaProxies);
                 log(`✓ 音频解码: ${audioCount}/${infoKeys.length} 条成功 | ctx=${player.audio.ctx.state}`, audioCount > 0 ? 'ok' : 'warn');
 
                 for (const [id, track] of player.audio.tracks) {
@@ -62,9 +76,12 @@ async function loadFromConfig(config, protocolPath = '') {
             updateUI();
 
         } catch (e) {
-            document.getElementById('file-info').textContent = '错误';
             log(`✗ ${e.message}`, 'err');
             console.error(e);
+            throw e;
+        } finally {
+            player.loading = false;
+            updateUI();
         }
     });
 }
@@ -112,8 +129,10 @@ async function loadVideo() {
             ratio: `${videoInfo.width}:${videoInfo.height}`
         },
         tracks: [{
+            id: 'track_0',
             type: 'video',
             segments: [{
+                id: 'segment_0',
                 material_id: 'mat_0',
                 target_timerange: { start: 0, duration: videoInfo.durationMs },
                 source_timerange: { start: 0, duration: videoInfo.durationMs }

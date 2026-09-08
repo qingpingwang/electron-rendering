@@ -22,20 +22,24 @@ class AudioPlayer {
         return Math.min(this._startOffset + elapsed, this.duration);
     }
 
-    async load(root) {
+    async load(root, proxies = {}) {
         this.stop();
         this.tracks.clear();
         this.duration = root.durationMs;
 
         const audioInfos = root.getAudioInfos();
         const loadPromises = [];
+        const decoded = new Map();
 
         for (const [layerId, info] of Object.entries(audioInfos)) {
             if (info.volume <= 0) continue;
 
-            const filePath = path.resolve(info.path);
+            const proxy = info.layerType === 'video' ? proxies[path.resolve(info.path)] : null;
+            if (proxy && !proxy.audio) { continue; }
+            const filePath = proxy ? proxy.audio : path.resolve(info.path);
+            if (!decoded.has(filePath)) { decoded.set(filePath, this._decodeFile(filePath)); }
             loadPromises.push(
-                this._decodeFile(filePath).then(buffer => {
+                decoded.get(filePath).then(buffer => {
                     if (buffer) {
                         this.tracks.set(layerId, {
                             buffer, volume: info.volume, info,
@@ -105,7 +109,7 @@ class AudioPlayer {
     // ========== internal ==========
 
     async _decodeFile(filePath) {
-        const fileData = fs.readFileSync(filePath);
+        const fileData = await fs.promises.readFile(filePath);
         const ab = fileData.buffer.slice(
             fileData.byteOffset,
             fileData.byteOffset + fileData.byteLength

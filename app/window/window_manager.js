@@ -9,6 +9,8 @@ class WindowManager {
         this.mainWindow = null;
         this.editorView = null;
         this.chatView = null;
+        this.logView = null;
+        this.logs = [];
         this.chatWindow = null;
         this.chatDetached = false;
         this.activeTab = 'editor';
@@ -85,7 +87,7 @@ class WindowManager {
         this.mainWindow = new BrowserWindow({
             width: 1200,
             height: 800,
-            minWidth: 640,
+            minWidth: 780,
             minHeight: 480,
             show: false,
             backgroundColor: '#1a1a2e',
@@ -101,6 +103,7 @@ class WindowManager {
 
         this._createEditorView();
         this._createChatView();
+        this._createLogView();
 
         if (!this._ipcSetup) {
             this._setupIPC();
@@ -132,6 +135,9 @@ class WindowManager {
             this.mainWindow.removeAllListeners();
             this.mainWindow.destroy();
         }
+        if (this.logView && !this.logView.webContents.isDestroyed()) { this.logView.webContents.close(); }
+        this.logView = null;
+        this.logs = [];
         this.mainWindow = null;
         this.editorView = null;
         this.chatView = null;
@@ -173,25 +179,46 @@ class WindowManager {
         } catch (_) {}
     }
 
+    _createLogView() {
+        this.logView = new BrowserView({ webPreferences: { nodeIntegration: true, contextIsolation: false } });
+        this.mainWindow.addBrowserView(this.logView);
+        this.logView.webContents.loadFile(path.join(__dirname, 'logs.html'));
+    }
+
     // ---- Layout ----
 
     _layoutViews() {
         if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
         const [w, h] = this.mainWindow.getContentSize();
 
-        if (this.chatDetached) {
-            this.editorView.setBounds({ x: 0, y: 0, width: w, height: h });
-        } else {
-            const contentY = TAB_BAR_HEIGHT;
-            const contentH = Math.max(0, h - TAB_BAR_HEIGHT);
-            this.editorView.setBounds({ x: 0, y: contentY, width: w, height: contentH });
-            this.chatView.setBounds({ x: 0, y: contentY, width: w, height: contentH });
+        const bounds = { x: 0, y: TAB_BAR_HEIGHT, width: w, height: Math.max(0, h - TAB_BAR_HEIGHT) };
+        this.editorView.setBounds(bounds);
+        this.logView.setBounds(bounds);
+        if (!this.chatDetached) {
+            this.chatView.setBounds(bounds);
         }
     }
 
     // ---- Tab / Detach IPC ----
 
     _setupIPC() {
+        ipcMain.on('editor-log', (event, entry) => {
+            if (event.sender !== this.editorView?.webContents) { return; }
+            const row = { time: entry.time, type: entry.type, message: String(entry.message) };
+            this.logs.push(row);
+            if (this.logs.length > 1000) { this.logs.shift(); }
+            if (this.logView && !this.logView.webContents.isDestroyed()) {
+                this.logView.webContents.send('logs-append', row);
+            }
+        });
+        ipcMain.on('logs-subscribe', event => {
+            if (event.sender === this.logView?.webContents) { event.reply('logs-snapshot', this.logs); }
+        });
+        ipcMain.on('logs-clear', event => {
+            if (event.sender !== this.logView?.webContents) { return; }
+            this.logs = [];
+            event.reply('logs-snapshot', this.logs);
+        });
         ipcMain.on('tab-switch', (_event, tabId) => {
             this.switchTab(tabId);
         });
@@ -207,14 +234,14 @@ class WindowManager {
         };
 
         this.mainWindow.webContents.on('before-input-event', devToolsHandler);
-        for (const view of [this.editorView, this.chatView]) {
+        for (const view of [this.editorView, this.chatView, this.logView]) {
             if (!view) continue;
             view.webContents.on('before-input-event', devToolsHandler);
         }
     }
 
     _toggleActiveDevTools() {
-        const wc = this.activeTab === 'chat'
+        const wc = this.activeTab === 'logs' ? this.logView?.webContents : this.activeTab === 'chat'
             ? this.chatView?.webContents
             : this.editorView?.webContents;
         if (!wc) return;
@@ -227,15 +254,11 @@ class WindowManager {
     }
 
     switchTab(tabId) {
-        if (this.chatDetached) return;
-
+        const view = { editor: this.editorView, chat: this.chatView, logs: this.logView }[tabId];
+        if (!view || (tabId === 'chat' && this.chatDetached)) { return; }
         this.activeTab = tabId;
-
-        if (tabId === 'editor') {
-            this.mainWindow.setTopBrowserView(this.editorView);
-        } else {
-            this.mainWindow.setTopBrowserView(this.chatView);
-        }
+        this.mainWindow.setTopBrowserView(view);
+        view.webContents.focus();
 
         this._notifyTabBar();
     }
@@ -257,6 +280,7 @@ class WindowManager {
         this.mainWindow.removeBrowserView(this.chatView);
         this.chatDetached = true;
         this.activeTab = 'editor';
+        this.mainWindow.setTopBrowserView(this.editorView);
 
         this._layoutViews();
         this._notifyTabBar();
@@ -307,6 +331,7 @@ class WindowManager {
 
         this.mainWindow.addBrowserView(this.chatView);
         this.activeTab = 'editor';
+        this.mainWindow.setTopBrowserView(this.editorView);
 
         this._layoutViews();
         this.mainWindow.setTopBrowserView(this.editorView);

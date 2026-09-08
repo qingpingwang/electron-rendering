@@ -26,6 +26,8 @@ Napi::Function LayerWrap::GetClass(Napi::Env env) {
                                              InstanceMethod("setStyleRunStrokeWidth", &LayerWrap::JsSetStyleRunStrokeWidth),
                                              InstanceMethod("setStyleRunStrokeColor", &LayerWrap::JsSetStyleRunStrokeColor),
                                              InstanceAccessor("videoFrameRate", &LayerWrap::GetVideoFrameRate, nullptr),
+                                             InstanceMethod("setProxyPath", &LayerWrap::SetProxyPath),
+                                             InstanceAccessor("proxyPath", &LayerWrap::GetProxyPath, nullptr),
                                              InstanceAccessor("videoLoaded", &LayerWrap::GetVideoLoaded, nullptr),
                                              InstanceAccessor("visible", &LayerWrap::GetVisible, &LayerWrap::SetVisible),
                                              InstanceAccessor("muted", &LayerWrap::GetMuted, &LayerWrap::SetMuted),
@@ -419,4 +421,26 @@ Napi::Value LayerWrap::JsSetStyleRunStrokeColor(const Napi::CallbackInfo &info) 
                                                          info[3].As<Napi::Number>().FloatValue(),
                                                          info[4].As<Napi::Number>().FloatValue(),
                                                          info[5].As<Napi::Number>().FloatValue()));
+}
+
+Napi::Value LayerWrap::GetProxyPath(const Napi::CallbackInfo &info) {
+    auto *video = dynamic_cast<nle_sdk::VideoLayer *>(getLayer(info.Env()));
+    return video ? Napi::String::New(info.Env(), video->getProxyPath()) : info.Env().Undefined();
+}
+
+Napi::Value LayerWrap::SetProxyPath(const Napi::CallbackInfo &info) {
+    if (info.Length() != 1 || !info[0].IsString()) {
+        Napi::TypeError::New(info.Env(), "expected proxy path").ThrowAsJavaScriptException();
+        return info.Env().Undefined();
+    }
+    auto *video = dynamic_cast<nle_sdk::VideoLayer *>(getLayer(info.Env()));
+    if (!video) {
+        Napi::TypeError::New(info.Env(), "proxy requires a video layer").ThrowAsJavaScriptException();
+        return info.Env().Undefined();
+    }
+    if (!video->setProxyPath(info[0].As<Napi::String>().Utf8Value())) {
+        Napi::Error::New(info.Env(), video->getErrorMessage()).ThrowAsJavaScriptException();
+        return info.Env().Undefined();
+    }
+    return info.Env().Undefined();
 }

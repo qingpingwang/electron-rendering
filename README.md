@@ -142,7 +142,7 @@ npm install
 npm start
 ```
 
-配置 **LLM**（如 `OPENAI_API_KEY`、方舟/兼容端点等）于 `app/.env` 后，即可使用内置智能助手；数据库与 checkpoint 由应用自动维护。
+配置 **LLM**（如 `OPENAI_API_KEY`、方舟/兼容端点等）于项目根目录 `.env` 后，即可使用内置智能助手；数据库与 checkpoint 由应用自动维护。
 
 ### 渲染 API 示例
 
@@ -184,3 +184,44 @@ root.cleanup();
 ## License
 
 MIT
+
+## 编辑器画布操作
+
+- 左侧导入视频；双击素材或拖入时间轴添加片段。切换「文本」后点击添加按钮创建文本。
+- 点选画布中的图层，或选择时间轴片段：拖动选框移动，拖动角点等比缩放，拖动圆点旋转。
+- 移动时按 Shift 约束水平/垂直方向；旋转时按 Shift 吸附到 15°；Escape 取消当前画布手势。
+- ⌘Z / ⇧⌘Z 撤销、重做画布变换（Windows/Linux 使用 Ctrl）。属性面板修改或重载项目会清空这段历史。
+- 在时间轴内横向拖动片段改变起始时间，吸附播放头；按 Alt 临时关闭吸附。
+- 按 ⌘S 保存 SDK 导出的项目协议。支持同类型片段跨轨道拖拽，移空后自动删除轨道；暂未提供裁切手柄和全项目撤销。
+
+## 本地资源目录
+
+`resources/resources.json` 是编辑器素材库清单，路径相对于 `resources/`。分类为 `media`、`audio`、`texts`、`stickers`、`effects`、`transitions`、`captions`、`filters`、`adjustments`；没有资源的分类保持空数组。新增资源时填写唯一 `id`、`name`、`type` 和 `path`，特效与转场的路径指向包含 SDK `config.json` 的资源目录，转场 `duration` 单位为毫秒。
+
+当前收录 1 个视频、1 个音频、6 个特效、1 个转场。产品截图和特效内部依赖（例如蒙版视频）不作为独立素材收录；亮度资源遵循其 SDK 特效类型归入特效。特效与转场卡片使用配置中的 `preview_video`，预览区固定 88×88，下方显示名称（视频文件保持 200×200），鼠标悬浮静音循环播放，离开后暂停。
+
+左侧支持分类、搜索、名称排序、本地/项目/素材库来源筛选和自适应卡片排列。视频、音频可添加到时间轴；特效应用到选中视频片段，转场应用到同轨道相邻片段之间。空资源分类仍显示入口与空状态。
+
+编辑器上方三栏可拖动两条竖分割条，下方时间轴通过横分割条分配高度。素材区、播放器和属性区的最小宽度分别为 280、220、240 px；上半区和时间轴最小高度分别为 210、160 px。顶部不显示品牌与操作工具栏，保存使用 ⌘S，画布撤销/重做使用 ⌘Z / ⇧⌘Z。
+
+日志在窗口顶部独立「日志」页查看，接收编辑器实时输出，保留最近 1000 条并支持清空。三条分割条的可见宽度均为 3 px。图层与轨道片段双向联动选择，选中当前时间之外的片段会定位到其开始时间。旋转按钮位于选框下方，按顺时针拖动即顺时针旋转。
+
+
+### 视频预处理
+
+工程打开时，前端从 `materials.videos` 收集视频绝对路径、去重，通过 Electron IPC 调用主进程的 `app/preprocess/cache.js`。系统需安装 `ffmpeg` 和 `ffprobe`；也可以设置 `NLE_FFMPEG_PATH`、`NLE_FFPROBE_PATH`。
+
+```js
+const { preprocess } = require('./app/preprocess/cache');
+const results = await preprocess(videoPaths, cacheDir, onProgress);
+```
+
+`cacheDir` 为工程根目录下的 `.cache`。输出保存到 `.cache/{原视频绝对路径的 MD5}/`：`1fps_200.mp4`（长边最多 200、1fps、保留音频）、`720p.mp4`（横屏最多 1280×720，竖屏最多 720×1280，无音频）、`audio.wav`（PCM16、44.1kHz、双声道）。无音轨时 `audio` 返回 `null`。存在的文件直接跳过，不检查损坏或源文件更新；需要重建时删除对应缓存文件。新文件写入临时文件，成功后改名。
+
+返回数组与输入顺序一致，每项包含 `{ source, outputDir, thumbnail, video, audio, skipped }`。重复路径只处理一次，返回数组仍与输入一一对应。`skipped` 表示此次没有生成任何文件。
+
+进度回调字段为 `{ type, status, total, completed, source?, index?, outputDir?, stage?, stages?, message?, result?, error? }`。`total` 是去重后的文件数，缓存命中计入 `completed`。事件依次包含 `batch-start`、`file-start`、`file-progress`、`file-complete`、`batch-complete`；文件失败发出 `file-error` 并拒绝 Promise。`stage` 为 `transcode`，`stages` 数组列出本次需要生成的 `thumbnail`、`video`、`audio`。IPC 请求使用 `media-cache:prepare`，进度使用 `media-cache:progress`，以 `requestId` 隔离请求。
+
+SDK 视频层的 `setProxyPath(path)` 硬切换解码来源，`setProxyPath('')` 恢复原素材；`proxyPath` 可读取当前代理。项目协议和原始素材尺寸不变。时间轴及媒体卡片使用小视频，保留现有缩略图帧缓存、胶片缓存；前端音频使用分离文件，同文件共享一次解码。
+
+预处理采用单输入、多输出的 FFmpeg 命令，通过 `split/asplit` 共用解码帧；只连接缺失输出分支。素材任务并发数设为系统可用逻辑核数；每个任务的解码、滤镜、小视频及主视频编码线程数也均设为该核数。这些是各阶段线程配置，不是整个进程的线程总数。

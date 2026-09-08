@@ -3,7 +3,7 @@ const { updateUI } = require('./renderer');
 const { log } = require('../utils/logger');
 
 async function play() {
-    if (!player.video || player.video.duration === 0) return;
+    if (player.loading || !player.video || player.video.duration === 0) return;
 
     if (player.audio.playing) {
         player.audio.pause();
@@ -37,7 +37,7 @@ function stop() {
 }
 
 function seek(ratio) {
-    if (!player.video || player.video.duration === 0) return;
+    if (player.loading || !player.video || player.video.duration === 0) return;
     const timeMs = player.video.duration * Math.max(0, Math.min(1, ratio));
     player.audio.seek(timeMs);
     player.video.render(timeMs, false, player.audio.playing);

@@ -44,6 +44,8 @@ private:
     Napi::Value JsSetStyleRunStrokeColor(const Napi::CallbackInfo &info);
 
     Napi::Value GetVideoFrameRate(const Napi::CallbackInfo &info);
+    Napi::Value GetProxyPath(const Napi::CallbackInfo &info);
+    Napi::Value SetProxyPath(const Napi::CallbackInfo &info);
     Napi::Value GetVideoLoaded(const Napi::CallbackInfo &info);
 
     Napi::Value GetVisible(const Napi::CallbackInfo &info);

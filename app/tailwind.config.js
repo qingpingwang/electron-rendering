@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-    content: ['./chat/**/*.{html,js}'],
+    content: { relative: true, files: ['./chat/**/*.{html,js}'] },
     darkMode: 'class',
     theme: {
         extend: {

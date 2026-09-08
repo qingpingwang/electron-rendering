@@ -42,6 +42,8 @@ Napi::Function RootWrap::GetClass(Napi::Env env) {
                                             InstanceMethod("isSameFrame", &RootWrap::IsSameFrame),
                                             InstanceMethod("draw", &RootWrap::Draw),
                                             InstanceMethod("getGroups", &RootWrap::GetGroups),
+                                            InstanceMethod("hitTest", &RootWrap::HitTest),
+                                            InstanceMethod("getLayerBounds", &RootWrap::GetLayerBounds),
                                             InstanceMethod("findLayerById", &RootWrap::FindLayerById),
                                             InstanceMethod("getAudioInfos", &RootWrap::GetAudioInfos),
 
@@ -418,4 +420,26 @@ bool NativeRootState::load(const nlohmann::json &config, const std::string &base
     }
     sdk_.releaseCurrent();
     return ok;
+}
+
+Napi::Value RootWrap::HitTest(const Napi::CallbackInfo &info) {
+    if (info.Length() < 2 || !info[0].IsNumber() || !info[1].IsNumber()) {
+        Napi::TypeError::New(info.Env(), "expected canvas x and y").ThrowAsJavaScriptException();
+        return info.Env().Null();
+    }
+    if (!root_->isLoaded()) {
+        return info.Env().Null();
+    }
+    return jsonToNapi(info.Env(), nlohmann::json::parse(root_->hitTestJson(info[0].As<Napi::Number>().FloatValue(), info[1].As<Napi::Number>().FloatValue())));
+}
+
+Napi::Value RootWrap::GetLayerBounds(const Napi::CallbackInfo &info) {
+    if (info.Length() < 1 || !info[0].IsString()) {
+        Napi::TypeError::New(info.Env(), "expected layer id").ThrowAsJavaScriptException();
+        return info.Env().Null();
+    }
+    if (!root_->isLoaded()) {
+        return info.Env().Null();
+    }
+    return jsonToNapi(info.Env(), nlohmann::json::parse(root_->getLayerBoundingBoxJson(info[0].As<Napi::String>().Utf8Value())));
 }

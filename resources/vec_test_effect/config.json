@@ -72,5 +72,7 @@
         }
     ],
     "animation": [],
-    "texture": []
+    "texture": [],
+    "origin_video": "origin.mp4",
+    "preview_video": "preview_video.mp4"
 }

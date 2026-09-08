@@ -537,8 +537,13 @@ window.__onProjectOpened = async function (uuid, options = {}) {
     currentProjectUUID = uuid;
     currentMode = options.mode || agentClient.DEFAULT_MODE || 'editor';
     applyModeUI(currentMode);
-    await agentClient.notifyProjectOpened(uuid, { ...options, mode: currentMode });
-    if (currentMode === 'editor' && mediaLib) await mediaLib.setProject(uuid);
+    try {
+        await agentClient.notifyProjectOpened(uuid, { ...options, mode: currentMode });
+        if (currentMode === 'editor' && mediaLib) await mediaLib.setProject(uuid);
+    } catch (error) {
+        console.error('[Chat] Failed to open project:', error);
+        addAIBubble(`发生错误: ${error.message}`);
+    }
 };
 
 window.__deleteProjectChatContext = function (uuid, mode) {

@@ -22,7 +22,7 @@ function resolveThreadId(uuid, mode) {
 }
 
 function getConfig() {
-    const dotenvPath = path.join(__dirname, '..', '.env');
+    const dotenvPath = path.join(__dirname, '..', '..', '.env');
     try {
         const content = fs.readFileSync(dotenvPath, 'utf-8');
         const config = {};
@@ -57,7 +57,7 @@ function ensureLLM() {
     const modelName = config.OPENAI_MODEL_NAME || process.env.OPENAI_MODEL_NAME || undefined;
 
     if (!apiKey || !modelName || !baseURL) {
-        throw new Error('Missing OPENAI_API_KEY / MODEL_NAME / BASE_URL in .env');
+        throw new Error('Missing OPENAI_API_KEY / OPENAI_MODEL_NAME / OPENAI_BASE_URL in project root .env');
     }
 
     if (baseURL) baseURL = baseURL.replace(/\/chat\/completions\/?$/i, '').replace(/\/$/, '');
@@ -160,12 +160,11 @@ function flushPendingToolCallChunks(buf, onToolCall) {
 async function loadDisplayHistory(uuid, mode) {
     const threadId = resolveThreadId(uuid, mode);
     if (!threadId) return [];
-    const a = getAgent(mode);
     try {
-        const state = await a.graph.getState({ configurable: { thread_id: threadId } });
-        return serializeLangGraphMessages(state.values?.messages);
+        const tuple = await ensureCheckpointer().getTuple({ configurable: { thread_id: threadId } });
+        return serializeLangGraphMessages(tuple?.checkpoint.channel_values?.messages);
     } catch (e) {
-        console.warn(`[Agent] getState failed for ${threadId}:`, e.message);
+        console.warn(`[Agent] load history failed for ${threadId}:`, e.message);
         return [];
     }
 }

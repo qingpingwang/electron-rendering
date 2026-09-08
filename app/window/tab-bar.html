@@ -80,6 +80,7 @@ html, body {
         <span>聊天</span>
         <button class="tab-action" id="btn-detach" title="弹出为独立窗口">⧉</button>
     </div>
+    <div class="tab" data-tab="logs" id="tab-logs"><span class="tab-icon">≡</span><span>日志</span></div>
 </div>
 
 <script>
@@ -94,6 +95,8 @@ document.getElementById('tab-chat').addEventListener('click', (e) => {
     ipcRenderer.send('tab-switch', 'chat');
 });
 
+document.getElementById('tab-logs').addEventListener('click', () => ipcRenderer.send('tab-switch', 'logs'));
+
 document.getElementById('btn-detach').addEventListener('click', (e) => {
     e.stopPropagation();
     ipcRenderer.send('tab-detach-chat');
@@ -104,7 +107,8 @@ ipcRenderer.on('tab-state', (_event, state) => {
     const editorTab = document.getElementById('tab-editor');
     const chatTab = document.getElementById('tab-chat');
 
-    tabBar.classList.toggle('hidden', state.chatDetached);
+    chatTab.style.display = state.chatDetached ? 'none' : '';
+    document.getElementById('tab-logs').classList.toggle('active', state.activeTab === 'logs');
     editorTab.classList.toggle('active', state.activeTab === 'editor');
     chatTab.classList.toggle('active', state.activeTab === 'chat');
 });

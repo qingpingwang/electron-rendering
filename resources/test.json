@@ -4,7 +4,7 @@
     "ratio": "16:9",
     "width": 720
   },
-  "duration": 6000,
+  "duration": 10082,
   "fps": 30.0,
   "id": "test",
   "materials": {
@@ -12,7 +12,7 @@
       {
         "id": "material_audio_0",
         "name": "test.wav",
-        "path": "./test.wav",
+        "path": "/Users/beyond-today/Proj/self/electron-rendering/resources/test.wav",
         "type": ""
       }
     ],
@@ -20,7 +20,7 @@
       {
         "id": "effect_0",
         "name": "",
-        "path": "./sprint_effect",
+        "path": "/Users/beyond-today/Proj/self/electron-rendering/resources/sprint_effect",
         "type": "effect"
       }
     ],
@@ -39,7 +39,7 @@
         "duration": 1000,
         "id": "transition_0",
         "name": "",
-        "path": "./transition_test",
+        "path": "/Users/beyond-today/Proj/self/electron-rendering/resources/transition_test",
         "type": "transition"
       }
     ],
@@ -49,7 +49,70 @@
         "height": 1920,
         "id": "material_video_0",
         "name": "",
-        "path": "./test.mp4",
+        "path": "/Users/beyond-today/Proj/self/electron-rendering/resources/test.mp4",
+        "type": "",
+        "width": 1088
+      },
+      {
+        "duration": 5041,
+        "height": 1920,
+        "id": "5ba4f8bd-282b-4243-bfb2-a072a42bf1e5",
+        "name": "",
+        "path": "/Users/beyond-today/Proj/self/electron-rendering/resources/test.mp4",
+        "type": "",
+        "width": 1088
+      },
+      {
+        "duration": 5041,
+        "height": 1920,
+        "id": "081100b1-dbcb-4fdd-aa90-0947e4a7a377",
+        "name": "",
+        "path": "/Users/beyond-today/Proj/self/electron-rendering/resources/test.mp4",
+        "type": "",
+        "width": 1088
+      },
+      {
+        "duration": 5041,
+        "height": 1920,
+        "id": "88398cd2-3431-4f9d-8bbc-c7a1b2787704",
+        "name": "",
+        "path": "/Users/beyond-today/Proj/self/electron-rendering/resources/test.mp4",
+        "type": "",
+        "width": 1088
+      },
+      {
+        "duration": 5041,
+        "height": 1920,
+        "id": "c4da1a9f-66fb-4d63-96d6-5881b3e1fd0c",
+        "name": "",
+        "path": "/Users/beyond-today/Proj/self/electron-rendering/resources/test.mp4",
+        "type": "",
+        "width": 1088
+      },
+      {
+        "duration": 5041,
+        "height": 1920,
+        "id": "7e460e5a-c99e-4f37-a754-3d3f1c9c6a8b",
+        "name": "",
+        "path": "/Users/beyond-today/Proj/self/electron-rendering/resources/test.mp4",
+        "type": "",
+        "width": 1088
+      },
+      {
+        "duration": 5041,
+        "height": 1920,
+        "id": "052137f3-3b58-4846-810d-7e52f37e2994",
+        "name": "",
+        "path": "/Users/beyond-today/Proj/self/electron-rendering/resources/test.mp4",
+        "type": "",
+        "width": 1088
+      },
+      {
+        "duration": 5041,
+        "height": 1920,
+        "id": "bd238397-83d5-4ade-b631-349c2b13b212",
+        "name": "",
+        "path": "/Users/beyond-today/Proj/self/electron-rendering/resources/test.mp4",
         "type": "",
         "width": 1088
       }
@@ -143,14 +206,14 @@
               "horizontal": false,
               "vertical": false
             },
-            "rotation": 0.0,
+            "rotation": 0.8897215723991394,
             "scale": {
               "x": 1.0,
               "y": 1.0
             },
             "transform": {
-              "x": 0.0,
-              "y": 0.0
+              "x": -0.0017822196241468191,
+              "y": 0.0010693359654396772
             }
           },
           "id": "segment_2",
@@ -185,6 +248,255 @@
         }
       ],
       "type": "audio",
+      "visible": true
+    },
+    {
+      "id": "65b6d45a-42fc-4eab-a131-0bebd9917d4d",
+      "muted": false,
+      "segments": [
+        {
+          "clip": {
+            "alpha": 1.0,
+            "flip": {
+              "horizontal": false,
+              "vertical": false
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "transform": {
+              "x": 0.0,
+              "y": 0.0
+            }
+          },
+          "id": "31dfe8aa-09f6-469d-a1db-96003f8e2605",
+          "material_id": "5ba4f8bd-282b-4243-bfb2-a072a42bf1e5",
+          "muted": false,
+          "source_timerange": {
+            "duration": 5041,
+            "start": 0
+          },
+          "target_timerange": {
+            "duration": 5041,
+            "start": 0
+          },
+          "visible": false,
+          "volume": 1.0
+        }
+      ],
+      "type": "video",
+      "visible": true
+    },
+    {
+      "id": "3b1a2097-0bf1-4a76-90df-299ef10b18f4",
+      "muted": false,
+      "segments": [
+        {
+          "clip": {
+            "alpha": 1.0,
+            "flip": {
+              "horizontal": false,
+              "vertical": false
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "transform": {
+              "x": 0.0,
+              "y": 0.0
+            }
+          },
+          "id": "3541b4c5-d678-48ed-96a0-e6742c098fd4",
+          "material_id": "081100b1-dbcb-4fdd-aa90-0947e4a7a377",
+          "muted": false,
+          "source_timerange": {
+            "duration": 5041,
+            "start": 0
+          },
+          "target_timerange": {
+            "duration": 5041,
+            "start": 0
+          },
+          "visible": true,
+          "volume": 1.0
+        },
+        {
+          "clip": {
+            "alpha": 1.0,
+            "flip": {
+              "horizontal": false,
+              "vertical": false
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "transform": {
+              "x": 0.0,
+              "y": 0.0
+            }
+          },
+          "id": "692946c3-684f-4149-88bf-37039e6ec998",
+          "material_id": "052137f3-3b58-4846-810d-7e52f37e2994",
+          "muted": false,
+          "source_timerange": {
+            "duration": 5041,
+            "start": 0
+          },
+          "target_timerange": {
+            "duration": 5041,
+            "start": 5041
+          },
+          "visible": true,
+          "volume": 1.0
+        }
+      ],
+      "type": "video",
+      "visible": true
+    },
+    {
+      "id": "720ae3b8-0356-4ac1-9758-f5dfbe79214d",
+      "muted": false,
+      "segments": [
+        {
+          "clip": {
+            "alpha": 1.0,
+            "flip": {
+              "horizontal": false,
+              "vertical": false
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "transform": {
+              "x": 0.0,
+              "y": 0.0
+            }
+          },
+          "id": "5ee4256e-1b76-419d-a967-4d444c987587",
+          "material_id": "88398cd2-3431-4f9d-8bbc-c7a1b2787704",
+          "muted": false,
+          "source_timerange": {
+            "duration": 5041,
+            "start": 0
+          },
+          "target_timerange": {
+            "duration": 5041,
+            "start": 0
+          },
+          "visible": true,
+          "volume": 1.0
+        },
+        {
+          "clip": {
+            "alpha": 1.0,
+            "flip": {
+              "horizontal": false,
+              "vertical": false
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "transform": {
+              "x": 0.0,
+              "y": 0.0
+            }
+          },
+          "id": "4cab0d33-b6d7-41e7-8612-5f9ba8ab3ed7",
+          "material_id": "c4da1a9f-66fb-4d63-96d6-5881b3e1fd0c",
+          "muted": false,
+          "source_timerange": {
+            "duration": 5041,
+            "start": 0
+          },
+          "target_timerange": {
+            "duration": 5041,
+            "start": 5041
+          },
+          "visible": true,
+          "volume": 1.0
+        }
+      ],
+      "type": "video",
+      "visible": true
+    },
+    {
+      "id": "523a4712-2b59-445c-9d5d-eb279ea3c12d",
+      "muted": false,
+      "segments": [
+        {
+          "clip": {
+            "alpha": 1.0,
+            "flip": {
+              "horizontal": false,
+              "vertical": false
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "transform": {
+              "x": 0.0,
+              "y": 0.0
+            }
+          },
+          "id": "5ece2e50-28b5-4a4c-9cfb-6d32181ce22a",
+          "material_id": "7e460e5a-c99e-4f37-a754-3d3f1c9c6a8b",
+          "muted": false,
+          "source_timerange": {
+            "duration": 5041,
+            "start": 0
+          },
+          "target_timerange": {
+            "duration": 5041,
+            "start": 0
+          },
+          "visible": true,
+          "volume": 1.0
+        },
+        {
+          "clip": {
+            "alpha": 1.0,
+            "flip": {
+              "horizontal": false,
+              "vertical": false
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "transform": {
+              "x": 0.0,
+              "y": 0.0
+            }
+          },
+          "id": "cf47276d-7694-439b-921b-5e0628291e23",
+          "material_id": "bd238397-83d5-4ade-b631-349c2b13b212",
+          "muted": false,
+          "source_timerange": {
+            "duration": 5041,
+            "start": 0
+          },
+          "target_timerange": {
+            "duration": 5041,
+            "start": 5041
+          },
+          "visible": true,
+          "volume": 1.0
+        }
+      ],
+      "type": "video",
       "visible": true
     }
   ]

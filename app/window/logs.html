@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>日志</title>
+<style>
+* { box-sizing:border-box; }
+html,body { height:100%; margin:0; }
+body { display:flex; flex-direction:column; background:#1b1c1e; color:#c9cbd0; font:11px -apple-system,BlinkMacSystemFont,sans-serif; }
+header { display:flex; align-items:center; gap:12px; height:36px; flex-shrink:0; padding:0 14px; border-bottom:1px solid #303235; }
+header span { color:#838990; } button { margin-left:auto; background:#2a2c30; color:#ccc; border:1px solid #3b3e43; border-radius:4px; padding:3px 10px; font:inherit; cursor:pointer; }
+#logs { flex:1; overflow:auto; padding:8px 14px; font:11px/1.7 Menlo,monospace; }
+.row { display:flex; gap:12px; border-bottom:1px solid #ffffff08; padding:3px 0; }
+time { flex-shrink:0; color:#7b828a; } .message { white-space:pre-wrap; overflow-wrap:anywhere; min-width:0; }
+.err { color:#ed8585; } .warn { color:#d9b96e; } .ok { color:#55c8bd; }
+#logs:empty::before { content:'暂无日志'; color:#737981; }
+</style>
+</head>
+<body>
+<header>运行日志 <span>保留最近 1000 条</span><button id="clear">清空</button></header>
+<div id="logs" role="log" aria-label="编辑器运行日志"></div>
+<script>
+const { ipcRenderer } = require('electron');
+const list = document.getElementById('logs');
+let ready = false;
+function append(entry) {
+    const follow = list.scrollHeight - list.scrollTop - list.clientHeight < 32;
+    const row = document.createElement('div'); row.className = 'row';
+    const time = document.createElement('time'); time.textContent = new Date(entry.time).toLocaleTimeString();
+    const text = document.createElement('span'); text.className = 'message';
+    if (['err','warn','ok'].includes(entry.type)) { text.classList.add(entry.type); }
+    text.textContent = entry.message; row.append(time,text); list.appendChild(row);
+    while (list.children.length > 1000) { list.firstElementChild.remove(); }
+    if (follow) { list.scrollTop = list.scrollHeight; }
+}
+ipcRenderer.on('logs-snapshot', (_, entries) => { list.replaceChildren(); entries.forEach(append); ready = true; });
+ipcRenderer.on('logs-append', (_, entry) => { if (ready) { append(entry); } });
+ipcRenderer.send('logs-subscribe');
+document.getElementById('clear').onclick = () => ipcRenderer.send('logs-clear');
+</script>
+</body>
+</html>

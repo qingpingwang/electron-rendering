@@ -7,8 +7,21 @@
     <link rel="stylesheet" href="renderer/index.css">
 </head>
 <body>
+    <aside class="media-panel">
+        <nav class="resource-tabs" id="resource-tabs" aria-label="资源分类"></nav>
+        <div class="resource-body">
+            <nav class="resource-sidebar" aria-label="素材来源"><button data-source="local" class="active">▾ 本地</button><button id="sidebar-import">导入</button><button data-source="project">项目素材</button><button data-source="library">素材库</button></nav>
+            <section class="resource-content">
+                <input id="media-search" class="media-search" placeholder="搜索文件名称、资源名称" aria-label="搜索资源">
+                <div class="resource-tools"><button class="import-button" id="btn-import">⊕ 导入</button><button id="btn-add-text" hidden>＋ 默认文本</button><div class="resource-tools-right"><button id="resource-sort" title="切换名称排序">名称 ↓</button><select id="resource-filter" aria-label="资源筛选"><option value="all">全部</option><option value="video">视频</option><option value="audio">音频</option></select></div></div>
+                <div class="media-heading"><span id="resource-heading">全部</span><span id="media-count">0 项</span></div>
+                <div class="media-list" id="media-list"></div>
+            </section>
+        </div>
+    </aside>
     <div class="main-area">
         <div class="player-section" id="player-section">
+            <div class="preview-heading"><strong>播放器</strong></div>
             <div class="video-wrapper">
                 <canvas id="canvas" width="640" height="360"></canvas>
             </div>
@@ -22,7 +35,7 @@
                 <div class="ctrl-center">
                     <button class="btn-icon" id="btn-play" disabled title="播放/暂停">&#9654;</button>
                 </div>
-                <div class="ctrl-right"></div>
+                <div class="ctrl-right"><span class="preview-fit">适应画布</span></div>
             </div>
         </div>
 
@@ -30,26 +43,20 @@
         <div id="timeline"></div>
     </div>
 
-    <div class="divider-v" id="divider-v"></div>
+    <div class="divider-v" id="divider-media" title="调整素材区和播放器宽度"></div>
+    <div class="divider-v" id="divider-v" title="调整播放器和属性区宽度"></div>
 
     <div class="right-section" id="right-section">
         <div class="inspector">
             <div class="inspector-header">
-                <span>属性</span>
+                <span>画面 · 基础</span>
                 <button class="inspector-fold" id="panel-fold" title="折叠面板">&raquo;</button>
             </div>
             <div class="inspector-content" id="inspector-content">
-                <div class="insp-empty">未选择图层</div>
+                <div class="insp-empty">点选画布或时间轴中的片段<br><small>拖拽移动 · 角点缩放 · 圆点旋转</small></div>
             </div>
         </div>
-        <div class="log-wrap" id="log-wrap">
-            <div class="log-bar" id="log-bar">
-                <span>日志</span>
-                <span id="file-info">未加载</span>
-                <button class="log-bar-btn" id="log-toggle-btn">&#9662;</button>
-            </div>
-            <div class="log-content" id="log-content"></div>
-        </div>
+
     </div>
 
     <button class="panel-expand" id="panel-expand" title="展开面板">&laquo;</button>

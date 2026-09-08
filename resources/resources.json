@@ -1,0 +1,83 @@
+{
+  "media": [
+    {
+      "id": "sample_video",
+      "name": "test.mp4",
+      "type": "video",
+      "path": "test.mp4"
+    }
+  ],
+  "audio": [
+    {
+      "id": "sample_audio",
+      "name": "test.wav",
+      "type": "audio",
+      "path": "test.wav"
+    }
+  ],
+  "texts": [],
+  "stickers": [],
+  "effects": [
+    {
+      "id": "effect_gaussian_blur",
+      "name": "高斯模糊",
+      "type": "effect",
+      "path": "blur_effect",
+      "description": "双pass高斯模糊效果（水平+垂直）",
+      "duration": 1000
+    },
+    {
+      "id": "effect_internal_uniform_test",
+      "name": "内部Uniform测试",
+      "type": "effect",
+      "path": "internal_uniform_test",
+      "description": "测试 renderPass 级别的内部 uniform（不对外暴露）",
+      "duration": 1000
+    },
+    {
+      "id": "effect_brightness",
+      "name": "简单亮度调节",
+      "type": "effect",
+      "path": "simple_effect",
+      "description": "单pass亮度调节效果",
+      "duration": 1000
+    },
+    {
+      "id": "effect_sprint",
+      "name": "冲刺",
+      "type": "effect",
+      "path": "sprint_effect",
+      "description": "冲刺特效，带抖动和蒙版混合",
+      "duration": 3000
+    },
+    {
+      "id": "effect_vec_test",
+      "name": "向量参数测试",
+      "type": "effect",
+      "path": "vec_test_effect",
+      "description": "测试 float/vec2/vec3/vec4 统一支持",
+      "duration": 1000
+    },
+    {
+      "id": "effect_warp",
+      "name": "波浪扭曲特效",
+      "type": "effect",
+      "path": "warp_effect",
+      "description": "使用sin函数对画面进行波浪式扭曲，产生水波纹效果",
+      "duration": 2000
+    }
+  ],
+  "transitions": [
+    {
+      "id": "transition_crossfade",
+      "name": "crossfade",
+      "type": "transition",
+      "path": "transition_test",
+      "description": "简单交叉溶解转场",
+      "duration": 1000
+    }
+  ],
+  "captions": [],
+  "filters": [],
+  "adjustments": []
+}

@@ -26,11 +26,7 @@ function formatTime(ms) {
 }
 
 function log(msg, type = 'info') {
-    const el = document.getElementById('log-content');
-    if (!el) return;
-    const t = new Date().toLocaleTimeString();
-    el.innerHTML += `<div class="log-${type}">[${t}] ${msg}</div>`;
-    el.scrollTop = el.scrollHeight;
+    require('electron').ipcRenderer.send('editor-log', { time: Date.now(), type, message: String(msg) });
 }
 
 module.exports = { log, formatTime, formatTimeHMS, formatTimecode };
