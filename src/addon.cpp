@@ -2,7 +2,7 @@
 #include "addon/root_wrap.h"
 #include "addon/group_layer_wrap.h"
 #include "addon/layer_wrap.h"
-#include "codec/video_decoder.h"
+#include "media/moov_helper.h"
 
 static Napi::Value CreateRoot(const Napi::CallbackInfo &info) {
     return RootWrap::NewInstance(info.Env());
@@ -18,8 +18,8 @@ static Napi::Value GetVideoInfo(const Napi::CallbackInfo &info) {
 
     std::string video_path = info[0].As<Napi::String>().Utf8Value();
 
-    vp::VideoDecoder decoder;
-    if (!decoder.open(video_path)) {
+    nle_sdk::MoovHelper decoder;
+    if (!decoder.loadFromFile(video_path) || !decoder.hasVideoTrack()) {
         Napi::Object result = Napi::Object::New(env);
         result.Set("success", Napi::Boolean::New(env, false));
         result.Set("error", Napi::String::New(env, "cannot open video file"));
@@ -28,11 +28,11 @@ static Napi::Value GetVideoInfo(const Napi::CallbackInfo &info) {
 
     Napi::Object result = Napi::Object::New(env);
     result.Set("success", Napi::Boolean::New(env, true));
-    result.Set("width", Napi::Number::New(env, decoder.getWidth()));
-    result.Set("height", Napi::Number::New(env, decoder.getHeight()));
-    result.Set("durationMs", Napi::Number::New(env, decoder.getDurationMs()));
-    result.Set("frameRate", Napi::Number::New(env, decoder.getFrameRate()));
-    result.Set("hasAlpha", Napi::Boolean::New(env, decoder.hasAlpha()));
+    result.Set("width", Napi::Number::New(env, decoder.width()));
+    result.Set("height", Napi::Number::New(env, decoder.height()));
+    result.Set("durationMs", Napi::Number::New(env, decoder.durationMs()));
+    result.Set("frameRate", Napi::Number::New(env, decoder.frameRate()));
+    result.Set("hasAlpha", Napi::Boolean::New(env, false));
 
     return result;
 }

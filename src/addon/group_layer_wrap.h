@@ -3,22 +3,24 @@
 #include <napi.h>
 #include <cstdint>
 
-namespace vp { class GroupLayer; }
+namespace nle_sdk {
+class GroupLayer;
+}
 
 class GroupLayerWrap : public Napi::ObjectWrap<GroupLayerWrap> {
 public:
     static Napi::Function GetClass(Napi::Env env);
-    static Napi::Object NewInstance(Napi::Env env, vp::GroupLayer *group,
-                                     Napi::Object root_obj, uint32_t gen);
+    static Napi::Object NewInstance(Napi::Env env, nle_sdk::GroupLayer *group,
+                                    Napi::Object root_obj, uint32_t gen);
 
     GroupLayerWrap(const Napi::CallbackInfo &info);
 
 private:
-    vp::GroupLayer *group_ = nullptr;
+    nle_sdk::GroupLayer *group_ = nullptr;
     Napi::ObjectReference root_ref_;
     uint32_t gen_ = 0;
 
-    vp::GroupLayer *getGroup(Napi::Env env);
+    nle_sdk::GroupLayer *getGroup(Napi::Env env);
 
     Napi::Value GetId(const Napi::CallbackInfo &info);
     Napi::Value GetType(const Napi::CallbackInfo &info);

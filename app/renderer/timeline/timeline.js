@@ -1,4 +1,5 @@
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { formatTime } = require('../utils/logger');
 
 const TRACK_STYLE = {
@@ -48,7 +49,7 @@ class Timeline {
         return this.duration * this._pxPerMs;
     }
 
-    load(config, groups) {
+    load(config, groups, basePath = '') {
         this.duration = config.duration || 0;
         this.currentTime = 0;
 
@@ -57,7 +58,7 @@ class Timeline {
         this._frameCache.clear();
         for (const v of (config.materials?.videos || [])) {
             this._materials[v.id] = {
-                path: path.resolve(v.path),
+                path: path.resolve(basePath, v.path),
                 duration: v.duration || 0,
             };
         }
@@ -592,7 +593,7 @@ class Timeline {
             const video = document.createElement('video');
             video.muted = true;
             video.preload = 'auto';
-            video.src = `file://${filePath}`;
+            video.src = pathToFileURL(filePath).href;
             video.onloadeddata = () => resolve(video);
             video.onerror = () => reject(new Error(`cannot load ${filePath}`));
         });

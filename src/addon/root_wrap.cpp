@@ -1,32 +1,34 @@
 #include "root_wrap.h"
 #include "group_layer_wrap.h"
 #include "layer_wrap.h"
-#include "../core/root_node.h"
-#include "../gl/functions.h"
-#include "../gl/types.h"
+#include "core/root_node.h"
+
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <sstream>
+#include <string>
 #include <filesystem>
 
 static Napi::FunctionReference g_constructor;
 
-// setMaterial*Param 会下发 glUniform；经 friend 访问 RootNode::gl_ctx_，不暴露 public API。
+// 素材参数修改由 SDK 执行，上下文与异步预取串行交接。
 bool RootWrap::acquireGL() {
-    return root_ && vp::gl::makeCurrent(root_->gl_ctx_);
+    return root_ && root_->access()->makeCurrent();
 }
 
 void RootWrap::releaseGL() {
-    if (root_)
-        vp::gl::releaseCurrent(root_->gl_ctx_);
+    if (root_) {
+        root_->access()->releaseCurrent();
+    }
 }
 
 RootWrap::ScopedGLContext::ScopedGLContext(RootWrap *w) : self(w), acquired(w->acquireGL()) {
 }
 
 RootWrap::ScopedGLContext::~ScopedGLContext() {
-    if (acquired)
+    if (acquired) {
         self->releaseGL();
+    }
 }
 
 Napi::Function RootWrap::GetClass(Napi::Env env) {
@@ -44,8 +46,8 @@ Napi::Function RootWrap::GetClass(Napi::Env env) {
                                             InstanceMethod("getAudioInfos", &RootWrap::GetAudioInfos),
 
                                             InstanceMethod("setMaterialFloatParam", &RootWrap::SetMaterialFloatParam),
-                                            InstanceMethod("setMaterialVecParam",   &RootWrap::SetMaterialVecParam),
-                                            InstanceMethod("setMaterialBoolParam",  &RootWrap::SetMaterialBoolParam),
+                                            InstanceMethod("setMaterialVecParam", &RootWrap::SetMaterialVecParam),
+                                            InstanceMethod("setMaterialBoolParam", &RootWrap::SetMaterialBoolParam),
 
                                             InstanceAccessor("width", &RootWrap::GetWidth, nullptr),
                                             InstanceAccessor("height", &RootWrap::GetHeight, nullptr),
@@ -67,7 +69,7 @@ Napi::Object RootWrap::NewInstance(Napi::Env env) {
 
 RootWrap::RootWrap(const Napi::CallbackInfo &info) :
     Napi::ObjectWrap<RootWrap>(info),
-    root_(std::make_unique<vp::RootNode>()) {
+    root_(std::make_unique<NativeRootState>()) {
 }
 
 RootWrap::~RootWrap() = default;
@@ -122,8 +124,9 @@ Napi::Value RootWrap::Load(const Napi::CallbackInfo &info) {
 
 Napi::Value RootWrap::ExportConfig(const Napi::CallbackInfo &info) {
     Napi::Env env = info.Env();
-    if (!root_->isLoaded())
+    if (!root_->isLoaded()) {
         return env.Null();
+    }
 
     return Napi::String::New(env, root_->dump().dump(2));
 }
@@ -146,7 +149,7 @@ Napi::Value RootWrap::SetCurrentTime(const Napi::CallbackInfo &info) {
         Napi::TypeError::New(env, "expected time in ms").ThrowAsJavaScriptException();
         return env.Null();
     }
-    root_->setCurrentTime(static_cast<vp::TimeMs>(info[0].As<Napi::Number>().Int64Value()));
+    root_->setCurrentTime(static_cast<nle_sdk::TimeMs>(info[0].As<Napi::Number>().Int64Value()));
     return env.Undefined();
 }
 
@@ -156,21 +159,24 @@ Napi::Value RootWrap::IsSameFrame(const Napi::CallbackInfo &info) {
         Napi::TypeError::New(env, "expected time in ms").ThrowAsJavaScriptException();
         return env.Null();
     }
-    auto time_ms = static_cast<vp::TimeMs>(info[0].As<Napi::Number>().Int64Value());
+    auto time_ms = static_cast<nle_sdk::TimeMs>(info[0].As<Napi::Number>().Int64Value());
     return Napi::Boolean::New(env, root_->isSameFrame(time_ms));
 }
 
 Napi::Value RootWrap::Draw(const Napi::CallbackInfo &info) {
     Napi::Env env = info.Env();
-    if (!root_->isLoaded())
+    if (!root_->isLoaded()) {
         return env.Null();
+    }
 
     size_t size = static_cast<size_t>(root_->getWidth()) * root_->getHeight() * 4;
-    if (size == 0)
+    if (size == 0) {
         return env.Null();
+    }
 
-    if (pixel_ab_.IsEmpty() || pixel_ab_.Value().ByteLength() != size)
+    if (pixel_ab_.IsEmpty() || pixel_ab_.Value().ByteLength() != size) {
         pixel_ab_ = Napi::Persistent(Napi::ArrayBuffer::New(env, size));
+    }
 
     auto ab = pixel_ab_.Value();
     bool force = info.Length() > 0 && info[0].IsBoolean() && info[0].As<Napi::Boolean>().Value();
@@ -179,8 +185,9 @@ Napi::Value RootWrap::Draw(const Napi::CallbackInfo &info) {
 
     // status == -1：参数错误（size 校验已在上面拦掉，这里理论不会出现）。
     // status == -2：真的渲染失败了，buffer 内容不可信，不能当正常帧交给前端。
-    if (status == -1)
+    if (status == -1) {
         return env.Null();
+    }
 
     Napi::Object result = Napi::Object::New(env);
     result.Set("status", Napi::Number::New(env, status));
@@ -200,9 +207,10 @@ Napi::Value RootWrap::GetGroups(const Napi::CallbackInfo &info) {
     Napi::Array arr = Napi::Array::New(env, groups.size());
     Napi::Object self = info.This().As<Napi::Object>();
 
-    for (size_t i = 0; i < groups.size(); ++i)
+    for (size_t i = 0; i < groups.size(); ++i) {
         arr.Set(static_cast<uint32_t>(i),
                 GroupLayerWrap::NewInstance(env, groups[i].get(), self, gen_));
+    }
 
     return arr;
 }
@@ -219,30 +227,42 @@ Napi::Value RootWrap::FindLayerById(const Napi::CallbackInfo &info) {
     }
     const std::string id = info[0].As<Napi::String>().Utf8Value();
     Napi::Object self = info.This().As<Napi::Object>();
-    vp::Layer *layer = root_->findLayerById(id);
+    auto layer = root_->findLayerById(id);
     if (!layer) {
-        Napi::Error::New(env, "未找到 id 为 \"" + id + "\" 的图层").ThrowAsJavaScriptException();
+        Napi::Error::New(env, std::string("未找到 id 为 \"") + id + "\" 的图层").ThrowAsJavaScriptException();
         return env.Undefined();
     }
-    return LayerWrap::NewInstance(env, layer, self, gen_);
+    return LayerWrap::NewInstance(env, layer.get(), self, gen_);
 }
 
 static Napi::Value jsonToNapi(Napi::Env env, const nlohmann::json &j) {
     if (j.is_object()) {
         Napi::Object obj = Napi::Object::New(env);
-        for (auto &[key, val] : j.items())
+        for (auto &[key, val] : j.items()) {
             obj.Set(key, jsonToNapi(env, val));
+        }
         return obj;
     }
-    if (j.is_string()) return Napi::String::New(env, j.get<std::string>());
-    if (j.is_number_float()) return Napi::Number::New(env, j.get<double>());
-    if (j.is_number_unsigned()) return Napi::Number::New(env, static_cast<double>(j.get<uint64_t>()));
-    if (j.is_number_integer()) return Napi::Number::New(env, static_cast<double>(j.get<int64_t>()));
-    if (j.is_boolean()) return Napi::Boolean::New(env, j.get<bool>());
+    if (j.is_string()) {
+        return Napi::String::New(env, j.get<std::string>());
+    }
+    if (j.is_number_float()) {
+        return Napi::Number::New(env, j.get<double>());
+    }
+    if (j.is_number_unsigned()) {
+        return Napi::Number::New(env, static_cast<double>(j.get<uint64_t>()));
+    }
+    if (j.is_number_integer()) {
+        return Napi::Number::New(env, static_cast<double>(j.get<int64_t>()));
+    }
+    if (j.is_boolean()) {
+        return Napi::Boolean::New(env, j.get<bool>());
+    }
     if (j.is_array()) {
         Napi::Array arr = Napi::Array::New(env, j.size());
-        for (size_t i = 0; i < j.size(); ++i)
+        for (size_t i = 0; i < j.size(); ++i) {
             arr.Set(static_cast<uint32_t>(i), jsonToNapi(env, j[i]));
+        }
         return arr;
     }
     return env.Null();
@@ -262,8 +282,9 @@ Napi::Value RootWrap::SetMaterialFloatParam(const Napi::CallbackInfo &info) {
         return env.Null();
     }
     ScopedGLContext ctx_guard(this);
-    if (!ctx_guard.acquired)
+    if (!ctx_guard.acquired) {
         return Napi::Boolean::New(env, false);
+    }
     bool ok = root_->setMaterialFloatParam(
         info[0].As<Napi::String>().Utf8Value(),
         info[1].As<Napi::String>().Utf8Value(),
@@ -281,11 +302,13 @@ Napi::Value RootWrap::SetMaterialVecParam(const Napi::CallbackInfo &info) {
     auto arr = info[2].As<Napi::Array>();
     std::vector<float> values;
     values.reserve(arr.Length());
-    for (uint32_t i = 0; i < arr.Length(); ++i)
+    for (uint32_t i = 0; i < arr.Length(); ++i) {
         values.push_back(arr.Get(i).As<Napi::Number>().FloatValue());
+    }
     ScopedGLContext ctx_guard(this);
-    if (!ctx_guard.acquired)
+    if (!ctx_guard.acquired) {
         return Napi::Boolean::New(env, false);
+    }
     bool ok = root_->setMaterialVecParam(
         info[0].As<Napi::String>().Utf8Value(),
         info[1].As<Napi::String>().Utf8Value(),
@@ -301,8 +324,9 @@ Napi::Value RootWrap::SetMaterialBoolParam(const Napi::CallbackInfo &info) {
         return env.Null();
     }
     ScopedGLContext ctx_guard(this);
-    if (!ctx_guard.acquired)
+    if (!ctx_guard.acquired) {
         return Napi::Boolean::New(env, false);
+    }
     bool ok = root_->setMaterialBoolParam(
         info[0].As<Napi::String>().Utf8Value(),
         info[1].As<Napi::String>().Utf8Value(),
@@ -338,4 +362,60 @@ Napi::Value RootWrap::GetGpuInfo(const Napi::CallbackInfo &info) {
 
 Napi::Value RootWrap::GetId(const Napi::CallbackInfo &info) {
     return Napi::String::New(info.Env(), root_->getId());
+}
+
+#include "plugin/plugin_loader.h"
+#include <filesystem>
+
+bool NativeRootState::init() {
+    // Codec capabilities are process-wide; register once before concurrent roots access them.
+    static std::once_flag once;
+    try {
+        std::call_once(once, [] {
+            if (!nle_sdk::loadPluginFromDirectory(NLE_PLUGIN_DIR, NLE_PLUGIN_NAME)) {
+                throw std::runtime_error(nle_sdk::pluginLoaderError());
+            }
+        });
+        if (!initialized_) {
+            initialized_ = sdk_.init();
+        }
+        if (!initialized_) {
+            error_ = sdk_.getErrorMessage();
+        }
+        sdk_.releaseCurrent();
+        return initialized_;
+    } catch (const std::exception &e) {
+        error_ = e.what();
+        return false;
+    }
+}
+
+bool NativeRootState::load(const nlohmann::json &config, const std::string &base) {
+    join();
+    clearCache();
+    current_ = 0;
+    displayed_ = -1;
+    error_.clear();
+    if (!initialized_ && !init()) {
+        return false;
+    }
+    bool ok = false;
+    try {
+        const auto &c = config.at("canvas_config");
+        const int w = c.at("width"), h = c.at("height");
+        if (w <= 0 || h <= 0 || w > 8192 || h > 8192) {
+            throw std::runtime_error("Invalid canvas dimensions");
+        }
+        if (!sdk_.makeCurrent()) {
+            throw std::runtime_error("SDK GL context unavailable");
+        }
+        ok = sdk_.load(config, base);
+        if (!ok) {
+            error_ = sdk_.getErrorMessage();
+        }
+    } catch (const std::exception &e) {
+        error_ = e.what();
+    }
+    sdk_.releaseCurrent();
+    return ok;
 }

@@ -40,7 +40,7 @@ function seek(ratio) {
     if (!player.video || player.video.duration === 0) return;
     const timeMs = player.video.duration * Math.max(0, Math.min(1, ratio));
     player.audio.seek(timeMs);
-    player.video.render(timeMs);
+    player.video.render(timeMs, false, player.audio.playing);
 }
 
 module.exports = { play, stop, seek };

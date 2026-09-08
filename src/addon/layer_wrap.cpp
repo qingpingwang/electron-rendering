@@ -1,9 +1,9 @@
 #include "layer_wrap.h"
 #include "root_wrap.h"
-#include "../core/root_node.h"
-#include "../layer/base/layer.h"
-#include "../layer/video/video_layer.h"
-#include "../layer/material/material.h"
+#include "core/root_node.h"
+#include "layer/base/layer.h"
+#include "layer/video/video_layer.h"
+#include "material/material.h"
 
 static Napi::FunctionReference g_constructor;
 
@@ -47,7 +47,7 @@ Napi::Function LayerWrap::GetClass(Napi::Env env) {
     return cls;
 }
 
-Napi::Object LayerWrap::NewInstance(Napi::Env env, vp::Layer *layer,
+Napi::Object LayerWrap::NewInstance(Napi::Env env, nle_sdk::Layer *layer,
                                     Napi::Object root_obj, uint32_t gen) {
     Napi::Object obj = g_constructor.New({});
     auto *wrap = Napi::ObjectWrap<LayerWrap>::Unwrap(obj);
@@ -61,12 +61,13 @@ LayerWrap::LayerWrap(const Napi::CallbackInfo &info) :
     Napi::ObjectWrap<LayerWrap>(info) {
 }
 
-vp::Layer *LayerWrap::getLayer(Napi::Env env) {
+nle_sdk::Layer *LayerWrap::getLayer(Napi::Env env) {
     auto *root = RootWrap::Unwrap(root_ref_.Value().As<Napi::Object>());
     if (!root || root->gen() != gen_) {
         Napi::Error::New(env, "layer reference invalidated").ThrowAsJavaScriptException();
         return nullptr;
     }
+    root->root(); // join prefetch before touching SDK objects
     return layer_;
 }
 
@@ -79,12 +80,14 @@ Napi::Value LayerWrap::GetId(const Napi::CallbackInfo &info) {
 
 Napi::Value LayerWrap::GetType(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    if (!l) return info.Env().Undefined();
+    if (!l) {
+        return info.Env().Undefined();
+    }
 
     switch (l->getMaterialType()) {
-    case vp::MATERIAL_TYPE_TEXT: return Napi::String::New(info.Env(), "text");
-    case vp::MATERIAL_TYPE_VIDEO: return Napi::String::New(info.Env(), "video");
-    case vp::MATERIAL_TYPE_AUDIO: return Napi::String::New(info.Env(), "audio");
+    case nle_sdk::MATERIAL_TYPE_TEXT: return Napi::String::New(info.Env(), "text");
+    case nle_sdk::MATERIAL_TYPE_VIDEO: return Napi::String::New(info.Env(), "video");
+    case nle_sdk::MATERIAL_TYPE_AUDIO: return Napi::String::New(info.Env(), "audio");
     default: return Napi::String::New(info.Env(), "unknown");
     }
 }
@@ -106,7 +109,9 @@ Napi::Value LayerWrap::GetDurationMs(const Napi::CallbackInfo &info) {
 
 Napi::Value LayerWrap::GetActive(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    if (!l) return info.Env().Undefined();
+    if (!l) {
+        return info.Env().Undefined();
+    }
     auto *rw = RootWrap::Unwrap(root_ref_.Value().As<Napi::Object>());
     return Napi::Boolean::New(info.Env(), l->isActive(rw->root()->getCurrentTime()));
 }
@@ -115,24 +120,28 @@ Napi::Value LayerWrap::GetActive(const Napi::CallbackInfo &info) {
 
 Napi::Value LayerWrap::GetText(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    if (!l || l->getMaterialType() != vp::MATERIAL_TYPE_TEXT)
+    if (!l || l->getMaterialType() != nle_sdk::MATERIAL_TYPE_TEXT) {
         return info.Env().Undefined();
+    }
 
-    auto *tm = dynamic_cast<vp::TextMaterial *>(l->getMaterial());
+    auto *tm = dynamic_cast<nle_sdk::TextMaterial *>(l->getMaterial());
     return tm ? Napi::String::New(info.Env(), tm->getText()) : info.Env().Undefined();
 }
 
 Napi::Value LayerWrap::GetAlignment(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    if (!l || l->getMaterialType() != vp::MATERIAL_TYPE_TEXT)
+    if (!l || l->getMaterialType() != nle_sdk::MATERIAL_TYPE_TEXT) {
         return info.Env().Undefined();
+    }
 
-    auto *tm = dynamic_cast<vp::TextMaterial *>(l->getMaterial());
-    if (!tm) return info.Env().Undefined();
+    auto *tm = dynamic_cast<nle_sdk::TextMaterial *>(l->getMaterial());
+    if (!tm) {
+        return info.Env().Undefined();
+    }
 
     switch (tm->getAlignment()) {
-    case vp::TEXT_ALIGN_CENTER: return Napi::String::New(info.Env(), "center");
-    case vp::TEXT_ALIGN_RIGHT: return Napi::String::New(info.Env(), "right");
+    case nle_sdk::TEXT_ALIGN_CENTER: return Napi::String::New(info.Env(), "center");
+    case nle_sdk::TEXT_ALIGN_RIGHT: return Napi::String::New(info.Env(), "right");
     default: return Napi::String::New(info.Env(), "left");
     }
 }
@@ -141,19 +150,21 @@ Napi::Value LayerWrap::GetAlignment(const Napi::CallbackInfo &info) {
 
 Napi::Value LayerWrap::GetVideoFrameRate(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    if (!l || l->getMaterialType() != vp::MATERIAL_TYPE_VIDEO)
+    if (!l || l->getMaterialType() != nle_sdk::MATERIAL_TYPE_VIDEO) {
         return info.Env().Undefined();
+    }
 
-    auto *vl = dynamic_cast<vp::VideoLayer *>(l);
+    auto *vl = dynamic_cast<nle_sdk::VideoLayer *>(l);
     return vl ? Napi::Number::New(info.Env(), vl->getFrameRate()) : info.Env().Undefined();
 }
 
 Napi::Value LayerWrap::GetVideoLoaded(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    if (!l || l->getMaterialType() != vp::MATERIAL_TYPE_VIDEO)
+    if (!l || l->getMaterialType() != nle_sdk::MATERIAL_TYPE_VIDEO) {
         return info.Env().Undefined();
+    }
 
-    auto *vl = dynamic_cast<vp::VideoLayer *>(l);
+    auto *vl = dynamic_cast<nle_sdk::VideoLayer *>(l);
     return vl ? Napi::Boolean::New(info.Env(), vl->isLoaded()) : info.Env().Undefined();
 }
 
@@ -166,8 +177,9 @@ Napi::Value LayerWrap::GetVisible(const Napi::CallbackInfo &info) {
 
 void LayerWrap::SetVisible(const Napi::CallbackInfo &info, const Napi::Value &value) {
     auto *l = getLayer(info.Env());
-    if (l && value.IsBoolean())
+    if (l && value.IsBoolean()) {
         l->setVisible(value.As<Napi::Boolean>().Value());
+    }
 }
 
 // ========== Muted (read/write) ==========
@@ -179,8 +191,9 @@ Napi::Value LayerWrap::GetMuted(const Napi::CallbackInfo &info) {
 
 void LayerWrap::SetMuted(const Napi::CallbackInfo &info, const Napi::Value &value) {
     auto *l = getLayer(info.Env());
-    if (l && value.IsBoolean())
+    if (l && value.IsBoolean()) {
         l->setMuted(value.As<Napi::Boolean>().Value());
+    }
 }
 
 // ========== Common Getters (all layers) ==========
@@ -194,19 +207,21 @@ Napi::Value LayerWrap::GetVolume(const Napi::CallbackInfo &info) {
 
 Napi::Value LayerWrap::GetAudioPath(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    if (!l || l->getMaterialType() != vp::MATERIAL_TYPE_AUDIO)
+    if (!l || l->getMaterialType() != nle_sdk::MATERIAL_TYPE_AUDIO) {
         return info.Env().Undefined();
+    }
 
-    auto *mat = dynamic_cast<vp::AudioMaterial *>(l->getMaterial());
+    auto *mat = dynamic_cast<nle_sdk::AudioMaterial *>(l->getMaterial());
     return mat ? Napi::String::New(info.Env(), mat->getPath()) : info.Env().Undefined();
 }
 
 Napi::Value LayerWrap::GetAudioName(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    if (!l || l->getMaterialType() != vp::MATERIAL_TYPE_AUDIO)
+    if (!l || l->getMaterialType() != nle_sdk::MATERIAL_TYPE_AUDIO) {
         return info.Env().Undefined();
+    }
 
-    auto *mat = dynamic_cast<vp::AudioMaterial *>(l->getMaterial());
+    auto *mat = dynamic_cast<nle_sdk::AudioMaterial *>(l->getMaterial());
     return mat ? Napi::String::New(info.Env(), mat->getName()) : info.Env().Undefined();
 }
 
@@ -222,15 +237,15 @@ Napi::Value LayerWrap::GetSourceDuration(const Napi::CallbackInfo &info) {
 
 // ========== Clip Properties (read/write) ==========
 
-#define LAYER_FLOAT_ACCESSOR(Name, getter, setter)                          \
-    Napi::Value LayerWrap::Get##Name(const Napi::CallbackInfo &info) {      \
-        auto *l = getLayer(info.Env());                                     \
-        return l ? Napi::Number::New(info.Env(), l->getter()) : info.Env().Undefined(); \
-    }                                                                       \
+#define LAYER_FLOAT_ACCESSOR(Name, getter, setter)                                        \
+    Napi::Value LayerWrap::Get##Name(const Napi::CallbackInfo &info) {                    \
+        auto *l = getLayer(info.Env());                                                   \
+        return l ? Napi::Number::New(info.Env(), l->getter()) : info.Env().Undefined();   \
+    }                                                                                     \
     void LayerWrap::Set##Name(const Napi::CallbackInfo &info, const Napi::Value &value) { \
-        auto *l = getLayer(info.Env());                                     \
-        if (l && value.IsNumber())                                          \
-            l->setter(static_cast<float>(value.As<Napi::Number>().FloatValue())); \
+        auto *l = getLayer(info.Env());                                                   \
+        if (l && value.IsNumber())                                                        \
+            l->setter(static_cast<float>(value.As<Napi::Number>().FloatValue()));         \
     }
 
 LAYER_FLOAT_ACCESSOR(Alpha, getAlpha, setAlpha)
@@ -246,44 +261,62 @@ LAYER_FLOAT_ACCESSOR(TransformY, getTransformY, setTransformY)
 
 void LayerWrap::SetText(const Napi::CallbackInfo &info, const Napi::Value &value) {
     auto *l = getLayer(info.Env());
-    if (!l || l->getMaterialType() != vp::MATERIAL_TYPE_TEXT || !value.IsString()) return;
-    auto *tm = dynamic_cast<vp::TextMaterial *>(l->getMaterial());
-    if (tm) tm->setText(value.As<Napi::String>().Utf8Value());
+    if (!l || l->getMaterialType() != nle_sdk::MATERIAL_TYPE_TEXT || !value.IsString()) {
+        return;
+    }
+    auto *tm = dynamic_cast<nle_sdk::TextMaterial *>(l->getMaterial());
+    if (tm) {
+        tm->setText(value.As<Napi::String>().Utf8Value());
+    }
 }
 
 void LayerWrap::SetAlignment(const Napi::CallbackInfo &info, const Napi::Value &value) {
     auto *l = getLayer(info.Env());
-    if (!l || l->getMaterialType() != vp::MATERIAL_TYPE_TEXT || !value.IsString()) return;
-    auto *tm = dynamic_cast<vp::TextMaterial *>(l->getMaterial());
-    if (!tm) return;
+    if (!l || l->getMaterialType() != nle_sdk::MATERIAL_TYPE_TEXT || !value.IsString()) {
+        return;
+    }
+    auto *tm = dynamic_cast<nle_sdk::TextMaterial *>(l->getMaterial());
+    if (!tm) {
+        return;
+    }
     std::string a = value.As<Napi::String>().Utf8Value();
-    if (a == "center") tm->setAlignment(vp::TEXT_ALIGN_CENTER);
-    else if (a == "right") tm->setAlignment(vp::TEXT_ALIGN_RIGHT);
-    else tm->setAlignment(vp::TEXT_ALIGN_LEFT);
+    if (a == "center") {
+        tm->setAlignment(nle_sdk::TEXT_ALIGN_CENTER);
+    } else if (a == "right") {
+        tm->setAlignment(nle_sdk::TEXT_ALIGN_RIGHT);
+    } else {
+        tm->setAlignment(nle_sdk::TEXT_ALIGN_LEFT);
+    }
 }
 
 // ========== Style Run Accessors ==========
 
 Napi::Value LayerWrap::GetStyleRunCount(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    if (!l || l->getMaterialType() != vp::MATERIAL_TYPE_TEXT)
+    if (!l || l->getMaterialType() != nle_sdk::MATERIAL_TYPE_TEXT) {
         return Napi::Number::New(info.Env(), 0);
-    auto *tm = dynamic_cast<vp::TextMaterial *>(l->getMaterial());
+    }
+    auto *tm = dynamic_cast<nle_sdk::TextMaterial *>(l->getMaterial());
     return Napi::Number::New(info.Env(), tm ? static_cast<double>(tm->getRunCount()) : 0);
 }
 
 Napi::Value LayerWrap::JsGetStyleRun(const Napi::CallbackInfo &info) {
     auto env = info.Env();
     auto *l = getLayer(env);
-    if (!l || l->getMaterialType() != vp::MATERIAL_TYPE_TEXT || info.Length() < 1 || !info[0].IsNumber())
+    if (!l || l->getMaterialType() != nle_sdk::MATERIAL_TYPE_TEXT || info.Length() < 1 || !info[0].IsNumber()) {
         return env.Undefined();
+    }
 
-    auto *tm = dynamic_cast<vp::TextMaterial *>(l->getMaterial());
-    if (!tm) return env.Undefined();
+    auto *tm = dynamic_cast<nle_sdk::TextMaterial *>(l->getMaterial());
+    if (!tm) {
+        return env.Undefined();
+    }
 
     size_t idx = static_cast<size_t>(info[0].As<Napi::Number>().Uint32Value());
     const auto &runs = tm->getStyleRuns();
-    if (idx >= runs.size()) return env.Undefined();
+    if (idx >= runs.size()) {
+        return env.Undefined();
+    }
 
     const auto &r = runs[idx];
     auto obj = Napi::Object::New(env);
@@ -315,16 +348,16 @@ Napi::Value LayerWrap::JsGetStyleRun(const Napi::CallbackInfo &info) {
     return obj;
 }
 
-#define TEXT_RUN_SETTER(Name, method)                                              \
-    Napi::Value LayerWrap::JsSetStyleRun##Name(const Napi::CallbackInfo &info) {  \
-        auto *l = getLayer(info.Env());                                           \
-        if (!l || l->getMaterialType() != vp::MATERIAL_TYPE_TEXT                  \
-            || info.Length() < 2 || !info[0].IsNumber() || !info[1].IsNumber())   \
-            return Napi::Boolean::New(info.Env(), false);                         \
-        auto *tm = dynamic_cast<vp::TextMaterial *>(l->getMaterial());            \
+#define TEXT_RUN_SETTER(Name, method)                                               \
+    Napi::Value LayerWrap::JsSetStyleRun##Name(const Napi::CallbackInfo &info) {    \
+        auto *l = getLayer(info.Env());                                             \
+        if (!l || l->getMaterialType() != nle_sdk::MATERIAL_TYPE_TEXT               \
+            || info.Length() < 2 || !info[0].IsNumber() || !info[1].IsNumber())     \
+            return Napi::Boolean::New(info.Env(), false);                           \
+        auto *tm = dynamic_cast<nle_sdk::TextMaterial *>(l->getMaterial());         \
         size_t idx = static_cast<size_t>(info[0].As<Napi::Number>().Uint32Value()); \
-        bool ok = tm && tm->method(idx, info[1].As<Napi::Number>().FloatValue()); \
-        return Napi::Boolean::New(info.Env(), ok);                                \
+        bool ok = tm && tm->method(idx, info[1].As<Napi::Number>().FloatValue());   \
+        return Napi::Boolean::New(info.Env(), ok);                                  \
     }
 
 TEXT_RUN_SETTER(FontSize, setRunFontSize)
@@ -336,16 +369,19 @@ TEXT_RUN_SETTER(LineHeight, setRunLineHeight)
 Napi::Value LayerWrap::JsSetStyleRunFill(const Napi::CallbackInfo &info) {
     auto env = info.Env();
     auto *l = getLayer(env);
-    if (!l || l->getMaterialType() != vp::MATERIAL_TYPE_TEXT || info.Length() < 5)
+    if (!l || l->getMaterialType() != nle_sdk::MATERIAL_TYPE_TEXT || info.Length() < 5) {
         return Napi::Boolean::New(env, false);
-    auto *tm = dynamic_cast<vp::TextMaterial *>(l->getMaterial());
-    if (!tm) return Napi::Boolean::New(env, false);
+    }
+    auto *tm = dynamic_cast<nle_sdk::TextMaterial *>(l->getMaterial());
+    if (!tm) {
+        return Napi::Boolean::New(env, false);
+    }
     size_t idx = static_cast<size_t>(info[0].As<Napi::Number>().Uint32Value());
     bool ok = tm->setRunFill(idx,
-        info[1].As<Napi::Number>().FloatValue(),
-        info[2].As<Napi::Number>().FloatValue(),
-        info[3].As<Napi::Number>().FloatValue(),
-        info[4].As<Napi::Number>().FloatValue());
+                             info[1].As<Napi::Number>().FloatValue(),
+                             info[2].As<Napi::Number>().FloatValue(),
+                             info[3].As<Napi::Number>().FloatValue(),
+                             info[4].As<Napi::Number>().FloatValue());
     return Napi::Boolean::New(env, ok);
 }
 
@@ -353,10 +389,13 @@ Napi::Value LayerWrap::JsSetStyleRunFill(const Napi::CallbackInfo &info) {
 Napi::Value LayerWrap::JsSetStyleRunStrokeWidth(const Napi::CallbackInfo &info) {
     auto env = info.Env();
     auto *l = getLayer(env);
-    if (!l || l->getMaterialType() != vp::MATERIAL_TYPE_TEXT || info.Length() < 3)
+    if (!l || l->getMaterialType() != nle_sdk::MATERIAL_TYPE_TEXT || info.Length() < 3) {
         return Napi::Boolean::New(env, false);
-    auto *tm = dynamic_cast<vp::TextMaterial *>(l->getMaterial());
-    if (!tm) return Napi::Boolean::New(env, false);
+    }
+    auto *tm = dynamic_cast<nle_sdk::TextMaterial *>(l->getMaterial());
+    if (!tm) {
+        return Napi::Boolean::New(env, false);
+    }
     size_t ri = static_cast<size_t>(info[0].As<Napi::Number>().Uint32Value());
     size_t si = static_cast<size_t>(info[1].As<Napi::Number>().Uint32Value());
     return Napi::Boolean::New(env, tm->setRunStrokeWidth(ri, si, info[2].As<Napi::Number>().FloatValue()));
@@ -366,15 +405,18 @@ Napi::Value LayerWrap::JsSetStyleRunStrokeWidth(const Napi::CallbackInfo &info) 
 Napi::Value LayerWrap::JsSetStyleRunStrokeColor(const Napi::CallbackInfo &info) {
     auto env = info.Env();
     auto *l = getLayer(env);
-    if (!l || l->getMaterialType() != vp::MATERIAL_TYPE_TEXT || info.Length() < 6)
+    if (!l || l->getMaterialType() != nle_sdk::MATERIAL_TYPE_TEXT || info.Length() < 6) {
         return Napi::Boolean::New(env, false);
-    auto *tm = dynamic_cast<vp::TextMaterial *>(l->getMaterial());
-    if (!tm) return Napi::Boolean::New(env, false);
+    }
+    auto *tm = dynamic_cast<nle_sdk::TextMaterial *>(l->getMaterial());
+    if (!tm) {
+        return Napi::Boolean::New(env, false);
+    }
     size_t ri = static_cast<size_t>(info[0].As<Napi::Number>().Uint32Value());
     size_t si = static_cast<size_t>(info[1].As<Napi::Number>().Uint32Value());
     return Napi::Boolean::New(env, tm->setRunStrokeColor(ri, si,
-        info[2].As<Napi::Number>().FloatValue(),
-        info[3].As<Napi::Number>().FloatValue(),
-        info[4].As<Napi::Number>().FloatValue(),
-        info[5].As<Napi::Number>().FloatValue()));
+                                                         info[2].As<Napi::Number>().FloatValue(),
+                                                         info[3].As<Napi::Number>().FloatValue(),
+                                                         info[4].As<Napi::Number>().FloatValue(),
+                                                         info[5].As<Napi::Number>().FloatValue()));
 }

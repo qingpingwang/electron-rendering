@@ -24,7 +24,7 @@ async function loadFromConfig(config, protocolPath = '') {
             player.video.load(player.root);
 
             const groups = player.root.getGroups();
-            if (player.timeline) player.timeline.load(config, groups);
+            if (player.timeline) player.timeline.load(config, groups, protocolPath);
 
             document.getElementById('file-info').textContent = '已加载';
 

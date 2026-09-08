@@ -12,7 +12,7 @@
       {
         "id": "material_audio_0",
         "name": "test.wav",
-        "path": "./test/test.wav",
+        "path": "./test.wav",
         "type": ""
       }
     ],
@@ -20,10 +20,13 @@
       {
         "id": "effect_0",
         "name": "",
-        "path": "./test/resources/sprint_effect",
+        "path": "./sprint_effect",
         "type": "effect"
       }
     ],
+    "htmls": [],
+    "images": [],
+    "svgs": [],
     "texts": [
       {
         "alignment": 1,
@@ -36,7 +39,7 @@
         "duration": 1000,
         "id": "transition_0",
         "name": "",
-        "path": "./test/resources/transition_test",
+        "path": "./transition_test",
         "type": "transition"
       }
     ],
@@ -46,7 +49,7 @@
         "height": 1920,
         "id": "material_video_0",
         "name": "",
-        "path": "./test/test.mp4",
+        "path": "./test.mp4",
         "type": "",
         "width": 1088
       }
@@ -169,7 +172,7 @@
         {
           "id": "segment_3",
           "material_id": "material_audio_0",
-          "muted_": false,
+          "muted": false,
           "source_timerange": {
             "duration": 5000,
             "start": 0

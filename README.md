@@ -95,6 +95,13 @@ Agent 生成的着色器可直接使用以下内置变量，**无需在 `config.
 
 ## 架构鸟瞰
 
+`third_party/nle-sdk` 是唯一直接子模块，统一提供渲染、图层、素材与编解码。
+`src/` 仅保留 N-API 适配：对象生命周期、参数转换，以及双缓冲和下一帧异步预取的交接状态。
+本仓库不保留 `vendor/`、`playback/`、`test/` 或 `work/` 目录；核心单测在 nle-sdk 维护。
+macOS 构建并加载 `media_codec_apple`，其他平台使用 `media_codec_ffmpeg`。
+编解码插件产物位于 `build/<配置>/plugins`，需要与 `.node` 一起保留。
+
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Electron 前端 · 时间轴 / 预览 / 聊天                        │
@@ -107,7 +114,7 @@ Agent 生成的着色器可直接使用以下内置变量，**无需在 `config.
 └───────────────────────────┬─────────────────────────────────┘
                             │
 ┌───────────────────────────▼─────────────────────────────────┐
-│  C++ 渲染引擎（ANGLE EGL/GLES3）                              │
+│  nle-sdk 渲染引擎（ANGLE EGL/GLES3）                              │
 │  RootNode 合成 → VideoLayer(Texture+HW 解码) + TextLayer(Skia) │
 │  → FBO → glReadPixels → 像素回传 JS                           │
 └─────────────────────────────────────────────────────────────┘
@@ -121,20 +128,17 @@ Agent 生成的着色器可直接使用以下内置变量，**无需在 `config.
 # macOS 依赖
 brew install cmake ffmpeg pkg-config
 
-# 初始化 submodule（googletest 等）
-git submodule update --init --recursive
+# 初始化完整 nle-sdk 及其嵌套依赖
+bash scripts/init_submodule.sh
 
-# 构建 C++ 渲染引擎（默认 Debug）
-./build.sh           # Debug
-./build.sh Release   # Release
-./build.sh GTest     # Debug + googletest + gcov 覆盖率插桩
+# 首次构建 SDK 的 Skia / ANGLE 依赖
+bash scripts/build_skia.sh
 
-# 运行单测并生成覆盖率报告
-pip install -r requirements.txt
-./run_test.sh        # 报告输出至 coverage_report/index.html
-
-# 前端依赖 & 启动
+# 安装依赖并构建 .node（macOS 使用 media_codec_apple）
 npm install
+# 后续单独重编译：./build.sh [Debug|Release]，默认 Release
+
+# 启动
 npm start
 ```
 
@@ -149,9 +153,9 @@ const root = createRoot();
 root.init();
 root.load(JSON.stringify(config));
 
-const layers = root.getLayers();
+const groups = root.getGroups();
 root.setCurrentTime(5000);
-const pixels = root.draw();
+const { pixels } = root.draw();
 root.cleanup();
 ```
 
@@ -164,7 +168,7 @@ root.cleanup();
 | AI 编排 | LangGraph、流式 messages、工具绑定与结构化回调 |
 | 持久化 | SqliteSaver、thread 级 checkpoint、历史序列化 |
 | **Shader 创作** | **GLSL 特效 / 转场 Agent**、`config.json` 声明式资源协议、uniform 参数面板 |
-| 视频解码 | FFmpeg；H.264/HEVC → VideoToolbox（macOS） |
+| 视频解码 | nle-sdk 插件：macOS media_codec_apple，其他平台 media_codec_ffmpeg |
 | 合成 | ANGLE EGL/GLES3、FBO、纹理混合、硬件帧直传纹理 |
 | 文字 | Skia skparagraph、GPU 直绘 |
 | JS 绑定 | N-API ObjectWrap、generation 安全 |
