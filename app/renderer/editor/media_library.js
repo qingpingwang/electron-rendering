@@ -144,9 +144,8 @@ class MediaLibrary {
         if (player.root.loaded) { return JSON.parse(player.root.exportConfig()); }
         return { id: randomUUID(), duration: 5000, fps: 30, canvas_config: { width: 1920, height: 1080, ratio: '16:9' }, materials: { videos: [], texts: [] }, tracks: [] };
     }
-    async apply(config, id, time) {
-        await require('../player/loader').loadFromConfig(config, player.projectBase || '');
-        player.video.render(time, true, false);
+    async apply(config, id, time, prepareCache = false) {
+        await require('../player/loader').loadFromConfig(config, player.projectBase || '', { editing: true, timeMs: time, prepareCache });
         player.timeline.selectLayer(id);
     }
     async addMany(paths, time, targetId) {
@@ -161,7 +160,7 @@ class MediaLibrary {
             this.insertSegment(config, 'video', { id: lastId, material_id: materialId, source_timerange: { start: 0, duration: item.duration }, target_timerange: { start: time, duration: item.duration } }, targetId);
             config.duration = Math.max(config.duration, time + item.duration);
         }
-        if (lastId) { await this.apply(config, lastId, time); }
+        if (lastId) { await this.apply(config, lastId, time, true); }
     }
     insertSegment(config, type, segment, targetId) {
         const target = targetId ? config.tracks.find(t => t.id === targetId) : null;

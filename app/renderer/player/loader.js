@@ -4,16 +4,24 @@ const { updateUI } = require('./renderer');
 const { stop } = require('./controls');
 const { log, formatTime } = require('../utils/logger');
 
-async function loadFromConfig(config, protocolPath = '') {
+async function loadFromConfig(config, protocolPath = '', { editing = false, timeMs = 0, prepareCache = !editing } = {}) {
     return player.scheduleProjectOp(async () => {
 
         try {
             player.beforeProjectLoad?.();
-            stop();
+            if (editing) {
+                player.audio.stop();
+                player.video.stopRenderLoop();
+            } else {
+                stop();
+            }
             player.loading = true;
             updateUI();
             protocolPath = path.resolve(protocolPath || player.projectBase || process.cwd());
-            player.mediaProxies = await require('../editor/media_cache')(config, protocolPath);
+            if (prepareCache) {
+                const ready = editing && protocolPath === player.projectBase ? player.mediaProxies : {};
+                player.mediaProxies = await require('../editor/media_cache')(config, protocolPath, ready);
+            }
 
             const jsonStr = JSON.stringify(config);
             log(`加载配置: ${config.tracks?.length || 0} 轨道`, 'info');
@@ -53,7 +61,7 @@ async function loadFromConfig(config, protocolPath = '') {
                 });
             });
 
-            player.video.render(0);
+            player.video.render(Math.max(0, Math.min(timeMs, player.video.duration)), true, false);
             try {
                 const audioInfos = player.root.getAudioInfos();
                 const infoKeys = Object.keys(audioInfos);
@@ -72,7 +80,7 @@ async function loadFromConfig(config, protocolPath = '') {
                 log(`⚠ 音频加载失败: ${e.message}`, 'warn');
             }
 
-            player.video.render(0);
+            player.audio.seek(player.video.currentTime);
             updateUI();
 
         } catch (e) {
