@@ -232,7 +232,7 @@ function setupLogPanel() {
 function initPlayer() {
     log('初始化预览播放器...', 'info');
     try {
-        preview.addon = require(path.join(PROJECT_ROOT, 'build', 'Release', 'video_player'));
+        preview.addon = require(path.join(PROJECT_ROOT, 'deploy', 'video_player.node'));
         preview.root  = preview.addon.createRoot();
         preview.root.init();
         preview.video = new VideoPlayer(canvasEl);

@@ -42,3 +42,8 @@ data/
 
 # Project media preprocessing
 cache/
+# All project resource videos are managed by LFS.
+!resources/**/*.mp4
+
+!deploy/
+!deploy/**

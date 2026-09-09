@@ -8,6 +8,11 @@
 #include <sstream>
 #include <string>
 #include <filesystem>
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
 
 static Napi::FunctionReference g_constructor;
 
@@ -369,12 +374,36 @@ Napi::Value RootWrap::GetId(const Napi::CallbackInfo &info) {
 #include "plugin/plugin_loader.h"
 #include <filesystem>
 
+namespace {
+std::filesystem::path addonDirectory() {
+#ifdef _WIN32
+    HMODULE module = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCWSTR>(&addonDirectory), &module)) {
+        throw std::runtime_error("Cannot locate addon module");
+    }
+    wchar_t file[32768];
+    const auto length = GetModuleFileNameW(module, file, 32768);
+    if (!length || length == 32768) {
+        throw std::runtime_error("Cannot locate addon path");
+    }
+    return std::filesystem::path(file).parent_path();
+#else
+    Dl_info info{};
+    if (!dladdr(reinterpret_cast<const void *>(&addonDirectory), &info) || !info.dli_fname) {
+        throw std::runtime_error("Cannot locate addon path");
+    }
+    return std::filesystem::absolute(info.dli_fname).parent_path();
+#endif
+}
+}
+
 bool NativeRootState::init() {
     // Codec capabilities are process-wide; register once before concurrent roots access them.
     static std::once_flag once;
     try {
         std::call_once(once, [] {
-            if (!nle_sdk::loadPluginFromDirectory(NLE_PLUGIN_DIR, NLE_PLUGIN_NAME)) {
+            if (!nle_sdk::loadPluginFromDirectory((addonDirectory() / "plugins").string(), NLE_PLUGIN_NAME)) {
                 throw std::runtime_error(nle_sdk::pluginLoaderError());
             }
         });

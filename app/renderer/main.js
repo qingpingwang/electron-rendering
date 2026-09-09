@@ -26,7 +26,7 @@ function init() {
     log('初始化...', 'info');
 
     try {
-        player.addon = require(path.join(ROOT_DIR, '..', 'build', 'Release', 'video_player'));
+        player.addon = require(path.join(ROOT_DIR, '..', 'deploy', 'video_player.node'));
         player.root = player.addon.createRoot();
         player.root.init();
 
@@ -42,6 +42,25 @@ function init() {
     player.initTimeline(document.getElementById('timeline'));
 
     const inspector = new Inspector(document.getElementById('inspector-content'));
+    inspector.getProjectInfo = () => {
+        if (!player.root?.loaded) { return null; }
+        const config = JSON.parse(player.root.exportConfig());
+        const canvas = config.canvas_config || {};
+        const width = player.root.width, height = player.root.height;
+        const gcd = (a, b) => b ? gcd(b, a % b) : a;
+        const divisor = gcd(width, height) || 1;
+        const file = _currentConfigPath ? path.resolve(ROOT_DIR, _currentConfigPath) : null;
+        const project = _currentUUID ? db.projects.get(_currentUUID) : null;
+        return {
+            name: project?.name || config.name || (file ? path.basename(file, path.extname(file)) : '未命名工程'),
+            location: file ? path.dirname(file) : '尚未保存',
+            ratio: `${width / divisor}:${height / divisor}`,
+            resolution: `${width} × ${height}`,
+            frameRate: `${player.root.frameRate.toFixed(2)} 帧/秒`,
+        };
+    };
+    player.refreshProjectInspector = () => { if (!inspector.getCurrentInfo()) { inspector.clear(); } };
+    inspector.clear();
     inspector.onChange = () => {
         if (player.timeline && player.timeline.onRefresh) {
             player.timeline.onRefresh();
@@ -89,7 +108,7 @@ function init() {
             if (result.canceled) { return; }
             _currentConfigPath = result.filePath;
         }
-        try { _saveCurrentProject(); log('项目已保存', 'ok'); }
+        try { _saveCurrentProject(); player.refreshProjectInspector(); log('项目已保存', 'ok'); }
         catch (e) { log(`保存失败：${e.message}`, 'err'); }
     };
 
@@ -144,12 +163,44 @@ function init() {
 
     document.getElementById('btn-play').onclick = play;
 
-    initRightPanel();
     initDividers();
+
+    let deletingLayer = false;
+    const deleteSelectedLayer = async () => {
+        const id = player.timeline._selectedId;
+        if (!id || deletingLayer || player.loading || !player.root?.loaded) { return; }
+        deletingLayer = true;
+        try {
+            transform.cancel();
+            const config = JSON.parse(player.root.exportConfig());
+            const track = config.tracks.find(item => item.segments.some(segment => segment.id === id));
+            if (!track) { return; }
+            const index = track.segments.findIndex(segment => segment.id === id);
+            // A transition belongs to the pair. Removing its second clip breaks that pair.
+            if (index > 0) {
+                const transitions = new Set((config.materials.transitions || []).map(item => item.id));
+                const previous = track.segments[index - 1];
+                previous.extra_material_refs = (previous.extra_material_refs || []).filter(ref => !transitions.has(ref));
+            }
+            track.segments.splice(index, 1);
+            config.tracks = config.tracks.filter(item => item.segments.length > 0);
+            config.duration = Math.max(0, ...config.tracks.flatMap(item => item.segments.map(segment => segment.target_timerange.start + segment.target_timerange.duration)));
+            await player.mediaLibrary.apply(config, null, Math.min(player.video.currentTime, config.duration));
+        } finally {
+            deletingLayer = false;
+        }
+    };
 
     document.onkeydown = e => {
         if ((e.metaKey || e.ctrlKey) && e.code === 'KeyS') { e.preventDefault(); saveProject().catch(err => log(`保存失败：${err.message}`, 'err')); return; }
-        if (e.target.closest('input, textarea, [contenteditable="true"]')) { return; }
+        if (e.isComposing || e.target.isContentEditable || e.target.closest('input, textarea, select, [contenteditable="true"]')) { return; }
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+            if (player.timeline._selectedId) {
+                e.preventDefault();
+                if (!e.repeat) { deleteSelectedLayer().catch(error => log(`删除失败：${error.message}`, 'err')); }
+            }
+            return;
+        }
         if ((e.metaKey || e.ctrlKey) && e.code === 'KeyZ') { e.preventDefault(); history(e.shiftKey); }
         else if (e.code === 'Space') { e.preventDefault(); play(); }
         else if (e.code === 'Escape') { if (transform.drag) { transform.cancel(); } else { player.timeline._deselectSegment(); } }
@@ -198,22 +249,6 @@ function _saveCurrentProject() {
             fs.writeFileSync(absPath, configStr, 'utf-8');
         }
     }
-}
-
-function initRightPanel() {
-    const section = document.getElementById('right-section');
-    const fold = document.getElementById('panel-fold');
-    const expand = document.getElementById('panel-expand');
-    const divV = document.getElementById('divider-v');
-
-    function togglePanel() {
-        const collapsed = section.classList.toggle('collapsed');
-        document.body.classList.toggle('inspector-collapsed', collapsed);
-        expand.classList.toggle('visible', collapsed);
-    }
-
-    fold.onclick = togglePanel;
-    expand.onclick = togglePanel;
 }
 
 function initDividers() {

@@ -62,7 +62,7 @@ class MediaLibrary {
         panel.addEventListener('dragover', e => e.preventDefault());
         panel.addEventListener('drop', e => {
             e.preventDefault();
-            for (const file of e.dataTransfer.files) { if (file.path) { this.import(file.path); } }
+            this.importMany([...e.dataTransfer.files].map(file => file.path).filter(Boolean)).catch(error => log(error.message, 'err'));
         });
         const timeline = document.getElementById('timeline');
         const clearDropTarget = () => timeline.querySelectorAll('.tl-track').forEach(row => row.classList.remove('drop-target', 'drop-invalid'));
@@ -125,19 +125,32 @@ class MediaLibrary {
         }
         this.render();
     }
-    import(file) {
-        const info = player.addon.getVideoInfo(file);
-        if (!info.success) { log(`无法导入 ${path.basename(file)}：${info.error}`, 'err'); return null; }
-        const item = { ...info, path: file, duration: info.durationMs };
-        this.items.set(file, item);
+    async importMany(paths) {
+        const base = path.resolve(player.projectBase || process.cwd());
+        const files = [...new Set(paths.map(file => path.resolve(file)))];
+        const imported = [];
+        for (const file of files) {
+            const existing = this.items.get(file);
+            if (existing && player.mediaProxies?.[file]) { imported.push(existing); continue; }
+            const info = player.addon.getVideoInfo(file);
+            if (!info.success) { log(`无法导入 ${path.basename(file)}：${info.error}`, 'err'); continue; }
+            imported.push({ ...info, path: file, duration: info.durationMs });
+        }
+        const missing = imported.filter(item => !player.mediaProxies?.[item.path]);
+        if (missing.length) {
+            const proxies = await require('./media_cache')({ materials: { videos: missing } }, base);
+            if (path.resolve(player.projectBase || process.cwd()) !== base) { return []; }
+            player.mediaProxies = { ...player.mediaProxies, ...proxies };
+        }
+        for (const item of imported) { this.items.set(item.path, item); }
         this.render();
-        return item;
+        return imported;
     }
     async pick() {
         try {
             const { dialog } = require('@electron/remote');
             const result = await dialog.showOpenDialog({ title: '导入视频素材', properties: ['openFile', 'multiSelections'], filters: [{ name: '视频', extensions: ['mp4', 'mov'] }] });
-            for (const file of result.filePaths) { this.import(file); }
+            await this.importMany(result.filePaths);
         } catch (e) { log(e.message, 'err'); }
     }
     config() {
@@ -149,18 +162,20 @@ class MediaLibrary {
         player.timeline.selectLayer(id);
     }
     async addMany(paths, time, targetId) {
-        const config = this.config();
         let lastId;
-        for (const file of paths) {
-            const item = this.import(file);
-            if (!item) { continue; }
+        // External file drops import first; existing cards are already prepared.
+        const items = await this.importMany(paths);
+        if (!items.length) { return; }
+        const config = this.config();
+        for (const item of items) {
+            const file = item.path;
             const materialId = randomUUID(); lastId = randomUUID();
             config.materials.videos ||= [];
             config.materials.videos.push({ id: materialId, path: file, width: item.width, height: item.height, duration: item.duration });
             this.insertSegment(config, 'video', { id: lastId, material_id: materialId, source_timerange: { start: 0, duration: item.duration }, target_timerange: { start: time, duration: item.duration } }, targetId);
             config.duration = Math.max(config.duration, time + item.duration);
         }
-        if (lastId) { await this.apply(config, lastId, time, true); }
+        if (lastId) { await this.apply(config, lastId, time); }
     }
     insertSegment(config, type, segment, targetId) {
         const target = targetId ? config.tracks.find(t => t.id === targetId) : null;
@@ -263,7 +278,9 @@ class MediaLibrary {
                 const label = document.createElement('small'); label.textContent = item.type === 'audio' ? '本地音频' : '本地渲染资源'; preview.appendChild(label);
             }
             const duration = document.createElement('span'); duration.className = 'resource-duration'; preview.appendChild(duration);
-            const plus = document.createElement('button'); plus.className = 'resource-add'; plus.textContent = '+'; plus.title = `添加 ${item.name}`;
+            const plus = document.createElement('button'); plus.className = 'resource-add'; plus.title = `添加 ${item.name}`;
+            plus.setAttribute('aria-label', `添加 ${item.name}`);
+            plus.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 4v16M4 12h16" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
             const use = () => (item.resource ? this.useResource(item.resource) : this.addMany([item.path], Math.round(player.video.currentTime || 0))).catch(e => { log(e.message, 'err'); });
             plus.onclick = e => { e.stopPropagation(); use(); }; preview.appendChild(plus);
             const name = document.createElement('span'); name.className = 'resource-name'; name.textContent = item.name;

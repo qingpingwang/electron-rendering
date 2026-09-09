@@ -18,6 +18,7 @@ class Inspector {
         this._info = info;
         if (!info) { this.clear(); return; }
 
+        this._setTitle('画面 · 基础');
         const { layer, trackType, segName, segment, group } = info;
         this.el.innerHTML = '';
 
@@ -61,12 +62,6 @@ class Inspector {
             this._appendHTML(rowHTML('音量', `${(Math.max(0, volume) * 100).toFixed(0)}%`));
         }
 
-        this._appendHTML(sectionHTML('源片段'));
-        const srcStart = layer ? safeGet(() => layer.sourceStart, 0) : (segment?.srcStart || 0);
-        const srcDur = layer ? safeGet(() => layer.sourceDuration, 0) : (segment?.srcDuration || duration);
-        this._appendHTML(rowHTML('起始', formatTime(srcStart)));
-        this._appendHTML(rowHTML('时长', formatTime(srcDur)));
-
         if (!layer && trackType === 'audio') {
             this._appendHTML(rowHTML('提示', '音频轨道使用安全模式展示，避免原生层崩溃'));
             return;
@@ -76,7 +71,23 @@ class Inspector {
     clear() {
         this._destroyControls();
         this._info = null;
-        this.el.innerHTML = '<div class="insp-empty">未选择图层</div>';
+        this._setTitle('草稿参数');
+        const project = this.getProjectInfo?.();
+        if (!project) {
+            this.el.innerHTML = '<div class="insp-empty">未打开工程</div>';
+            return;
+        }
+        const rows = [
+            ['草稿名称', project.name], ['保存位置', project.location],
+            ['比例', project.ratio], ['分辨率', project.resolution],
+            ['草稿帧率', project.frameRate], ['导入方式', '保留在原有位置'],
+        ];
+        this.el.innerHTML = `<div class="draft-parameters">${rows.map(([label, value]) => `<div class="draft-parameter"><span>${esc(label)}：</span><span>${esc(value)}</span></div>`).join('')}</div>`;
+    }
+
+    _setTitle(title) {
+        const heading = this.el.closest('.inspector')?.querySelector('.inspector-header > span');
+        if (heading) { heading.textContent = title; }
     }
 
     /** 当前选中的图层上下文（供外部在数据被工具等修改后刷新面板） */

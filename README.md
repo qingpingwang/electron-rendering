@@ -1,5 +1,7 @@
 # Electron Video Rendering Engine
 
+仓库地址：[electron-rendering](https://github.com/qingpingwang/electron-rendering.git)
+
 **AI 原生的视频编排工作台**：在 Electron 中融合 **LangGraph 智能体**、**工程级持久化** 与 **C++/OpenGL/Skia 实时渲染管线**，让自然语言驱动时间轴、图层与素材——所见即所得，所聊即所改。
 
 ![产品界面](resources/image.png)
@@ -99,7 +101,7 @@ Agent 生成的着色器可直接使用以下内置变量，**无需在 `config.
 `src/` 仅保留 N-API 适配：对象生命周期、参数转换，以及双缓冲和下一帧异步预取的交接状态。
 本仓库不保留 `vendor/`、`playback/`、`test/` 或 `work/` 目录；核心单测在 nle-sdk 维护。
 macOS 构建并加载 `media_codec_apple`，其他平台使用 `media_codec_ffmpeg`。
-编解码插件产物位于 `build/<配置>/plugins`，需要与 `.node` 一起保留。
+编解码插件产物位于 `deploy/plugins`，需要与 `deploy/video_player.node`、`deploy/lib` 一起保留。
 
 
 ```
@@ -122,32 +124,46 @@ macOS 构建并加载 `media_codec_apple`，其他平台使用 `media_codec_ffmp
 
 ---
 
-## 构建与运行
+## 直接运行（不需要私有 SDK 源码）
+
+当前 `deploy` 预编译产物适用于 **macOS Apple Silicon（arm64）**。其他平台需要维护者提供对应产物，不能混用。
 
 ```bash
-# macOS 依赖
-brew install cmake ffmpeg pkg-config
-
-# 初始化完整 nle-sdk 及其嵌套依赖
-bash scripts/init_submodule.sh
-
-# 首次构建 SDK 的 Skia / ANGLE 依赖
-bash scripts/build_skia.sh
-
-# 安装依赖并构建 .node（macOS 使用 media_codec_apple）
+brew install git-lfs ffmpeg
+git clone https://github.com/qingpingwang/electron-rendering.git
+cd electron-rendering
+git lfs install --local
+git lfs pull
 npm install
-# 后续单独重编译：./build.sh [Debug|Release]，默认 Release
-
-# 启动
 npm start
 ```
+
+不要使用 `--recurse-submodules`；运行无需初始化 `third_party/nle-sdk`。`npm install` 仅检查预编译产物、构建聊天 CSS 并适配 Electron 的 SQLite 依赖，不编译 NLE。视频预处理直接使用系统 FFmpeg。
+
+`deploy/video_player.node` 为 N-API 8 入口，Skia、Lua、SoundTouch、NLE 核心静态链接到其中；`deploy/lib` 包含 ANGLE，`deploy/plugins` 包含解码插件。运行时通过相对 `.node` 的路径查找依赖，整个目录可随主仓库移动。`runtime.json` 记录平台/架构。缺少文件、尚未拉取 LFS 实体或平台不匹配时，启动前直接提示。
+
+`deploy` 二进制和 `resources` 的视频、音频、图片、字体等二进制由 Git LFS 管理；资源 JSON、着色器和脚本继续以文本存储。已有二进制资源转换为 LFS 指针，不重写历史。发布前需先推送 LFS 对象，普通 `git push` 的 LFS hook 会自动处理。
+
+## 从源码重建（SDK 维护者）
+
+```bash
+brew install cmake ffmpeg pkg-config
+bash scripts/init_submodule.sh
+npm install
+npm run build
+# 同一构建入口也可通过脚本调用
+./build.sh Release
+# Debug 构建：./build.sh Debug
+```
+
+`npm run build`（默认 Release，Debug 可用 `npm run build -- Debug`）与 `./build.sh` 均调用主仓库的 `scripts/build_native.js`，统一构建 Skia/ANGLE、SDK、解码插件、N-API 适配层，再将运行产物复制到 `deploy`，中间文件与静态库仍保留在 `build`。发布前使用 Release 构建并验证，提交相应 LFS 文件。仅直接运行不需要这些步骤。
 
 配置 **LLM**（如 `OPENAI_API_KEY`、方舟/兼容端点等）于项目根目录 `.env` 后，即可使用内置智能助手；数据库与 checkpoint 由应用自动维护。
 
 ### 渲染 API 示例
 
 ```javascript
-const { createRoot, getVideoInfo } = require('./build/Release/video_player');
+const { createRoot, getVideoInfo } = require('./deploy/video_player.node');
 
 const root = createRoot();
 root.init();

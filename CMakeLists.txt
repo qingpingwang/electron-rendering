@@ -29,7 +29,7 @@ add_library(video_player MODULE
     src/addon.cpp src/addon/root_wrap.cpp src/addon/layer_wrap.cpp src/addon/group_layer_wrap.cpp)
 target_include_directories(video_player PRIVATE "${NAPI_INCLUDE}" "${NODE_INCLUDE}")
 target_link_libraries(video_player PRIVATE nle_sdk::nle_sdk)
-target_compile_definitions(video_player PRIVATE NAPI_VERSION=8 NAPI_CPP_EXCEPTIONS NLE_PLUGIN_DIR="${NLE_SDK_PLUGIN_DIR}")
+target_compile_definitions(video_player PRIVATE NAPI_VERSION=8 NAPI_CPP_EXCEPTIONS)
 set_target_properties(video_player PROPERTIES PREFIX "" SUFFIX ".node" LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 if(APPLE)
     target_compile_definitions(video_player PRIVATE NLE_PLUGIN_NAME="media_codec_apple")
@@ -38,4 +38,12 @@ if(APPLE)
 else()
     target_compile_definitions(video_player PRIVATE NLE_PLUGIN_NAME="media_codec_ffmpeg")
     add_dependencies(video_player nle_media_codec_ffmpeg_plugin)
+endif()
+
+# Only runtime artifacts are published; intermediate objects/static libraries stay in build/.
+if(APPLE)
+    set_target_properties(video_player PROPERTIES BUILD_WITH_INSTALL_RPATH TRUE INSTALL_RPATH "@loader_path/lib")
+    set_target_properties(nle_media_codec_apple_plugin PROPERTIES
+        BUILD_WITH_INSTALL_RPATH TRUE INSTALL_RPATH "@loader_path/../../lib")
+
 endif()

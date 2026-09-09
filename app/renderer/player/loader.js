@@ -90,6 +90,7 @@ async function loadFromConfig(config, protocolPath = '', { editing = false, time
         } finally {
             player.loading = false;
             updateUI();
+            player.refreshProjectInspector?.();
         }
     });
 }
