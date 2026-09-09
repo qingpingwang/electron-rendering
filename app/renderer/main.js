@@ -65,6 +65,7 @@ function init() {
     });
     inspector.onChange = () => {
         undo.length = 0; redo.length = 0;
+        player.timeline.refresh();
         player.timeline.onRefresh?.();
     };
     player.mediaLibrary = new MediaLibrary();

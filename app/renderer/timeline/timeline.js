@@ -97,11 +97,13 @@ class Timeline {
         this.tracks = (config.tracks || []).map((track, idx) => ({
             id: track.id,
             type: track.type,
+            visible: track.visible !== false,
             group: this._groups[idx] || null,
             segments: (track.segments || []).map(seg => ({
                 id: seg.id || seg.material_id,
                 name: this._materials[seg.material_id]?.name || TRACK_STYLE[track.type]?.name || track.type,
                 materialId: seg.material_id,
+                visible: seg.visible !== false,
                 start: seg.target_timerange?.start || 0,
                 duration: seg.target_timerange?.duration || 0,
                 srcStart: seg.source_timerange?.start || 0,
@@ -394,6 +396,8 @@ class Timeline {
             label.appendChild(iconEl);
 
             const group = track.group;
+            row.classList.toggle('is-invisible', group ? !group.visible : !track.visible);
+            const layers = new Map((group?.layers || []).map(layer => [layer.id, layer]));
 
             if (track.type !== 'audio' && group) {
                 const eyeBtn = document.createElement('button');
@@ -405,8 +409,7 @@ class Timeline {
                 eyeBtn.addEventListener('click', () => {
                     group.visible = !group.visible;
                     eyeBtn.classList.toggle('off', !group.visible);
-                    const segs = row.querySelector('.tl-segments');
-                    if (segs) segs.style.opacity = group.visible ? '1' : '0.3';
+                    row.classList.toggle('is-invisible', !group.visible);
                     if (this.onRefresh) this.onRefresh();
                 });
                 label.appendChild(eyeBtn);
@@ -442,6 +445,8 @@ class Timeline {
                 const segEl = document.createElement('div');
                 segEl.className = `tl-segment tl-seg-${track.type}`;
                 segEl.classList.toggle('selected', seg.id === this._selectedId);
+                const layer = layers.get(seg.id);
+                segEl.classList.toggle('is-invisible', layer ? !layer.visible : !seg.visible);
                 segEl.dataset.trackIdx = trackIdx;
                 segEl.dataset.segIdx = segIdx;
                 segEl.style.left = `${leftPx}px`;
