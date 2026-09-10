@@ -16,6 +16,9 @@ function createResourcePreview(item, card) {
         video.loop = true;
         video.playsInline = true;
         video.preload = 'auto';
+        if (config.preview_image) {
+            video.poster = pathToFileURL(path.resolve(item.path, config.preview_image)).href;
+        }
         video.src = pathToFileURL(path.resolve(item.path, config.preview_video)).href;
         video.setAttribute('aria-label', `${item.name}预览`);
         preview.appendChild(video);

@@ -20,7 +20,7 @@ const preview = {
     video:   null,
     playing: false,
     _startWall: 0,
-    _startMs:   0,
+    _startUs:   0,
     _animId:    null,
 };
 
@@ -104,9 +104,9 @@ function escapeHtml(str) {
     return d.innerHTML;
 }
 
-function formatMs(ms) {
+function formatTimeUs(ms) {
     if (!ms || ms <= 0) return '0:00';
-    const s   = Math.floor(ms / 1000);
+    const s   = Math.floor(ms / 1000000);
     const min = Math.floor(s / 60);
     const sec = s % 60;
     return `${min}:${String(sec).padStart(2, '0')}`;
@@ -284,7 +284,7 @@ function loadCurrentProtocol() {
             return false;
         }
 
-        log(`✓ 加载成功 (${dt}ms) | ${preview.root.width}×${preview.root.height} | ${(preview.root.frameRate||0).toFixed(1)}fps | ${formatMs(preview.root.durationMs)}`, 'ok');
+        log(`✓ 加载成功 (${dt}ms) | ${preview.root.width}×${preview.root.height} | ${(preview.root.frameRate||0).toFixed(1)}fps | ${formatTimeUs(preview.root.durationUs)}`, 'ok');
 
         preview.video.load(preview.root);
         preview.video.render(0);
@@ -315,7 +315,7 @@ function updatePlaybackUI() {
     if (!preview.video) return;
     const dur = preview.video.duration || 0;
     const cur = preview.video.currentTime || 0;
-    if (timeDisplay) timeDisplay.textContent = `${formatMs(cur)} / ${formatMs(dur)}`;
+    if (timeDisplay) timeDisplay.textContent = `${formatTimeUs(cur)} / ${formatTimeUs(dur)}`;
     if (seekBar && dur > 0) seekBar.value = Math.round((cur / dur) * 1000);
 }
 
@@ -325,7 +325,7 @@ function startPlayback() {
 
     preview.playing    = true;
     preview._startWall = performance.now();
-    preview._startMs   = preview.video.currentTime || 0;
+    preview._startUs   = preview.video.currentTime || 0;
 
     if (playBtn) playBtn.querySelector('.material-symbols-rounded').textContent = 'pause';
     log('▶ 播放', 'info');
@@ -333,10 +333,10 @@ function startPlayback() {
     const tick = () => {
         if (!preview.playing) return;
         const elapsed = performance.now() - preview._startWall;
-        const timeMs  = preview._startMs + elapsed;
+        const timeUs  = preview._startUs + elapsed * 1000;
         const dur     = preview.video.duration || 0;
 
-        if (timeMs >= dur) {
+        if (timeUs >= dur) {
             preview.video.render(dur > 0 ? dur - 1 : 0);
             updatePlaybackUI();
             stopPlayback();
@@ -344,8 +344,8 @@ function startPlayback() {
             return;
         }
 
-        if (!preview.video.isSameFrame(timeMs)) {
-            preview.video.render(timeMs);
+        if (!preview.video.isSameFrame(timeUs)) {
+            preview.video.render(timeUs);
             updatePlaybackUI();
         }
         preview._animId = requestAnimationFrame(tick);
@@ -395,10 +395,10 @@ function scanSandbox() {
                     folder:   entry.name,
                     name:     (typeof cfg.name === 'string' && cfg.name.trim()) ? cfg.name.trim() : entry.name,
                     format:   cfg.format === 'transition' ? 'transition' : cfg.format === 'effect' ? 'effect' : null,
-                    duration: cfg.suggestionDuration || 1000,
+                    duration: cfg.suggestionDuration || 1000000,
                 });
             } catch {
-                result.push({ folder: entry.name, name: entry.name, format: null, duration: 1000 });
+                result.push({ folder: entry.name, name: entry.name, format: null, duration: 1000000 });
             }
         }
     } catch (e) {
@@ -502,7 +502,7 @@ function mountResource(item) {
         _applyMount(type, null, null);
         log(`卸载 ${type}: ${item.name}`, 'info');
     } else {
-        const extra = type === 'transition' ? { duration: item.duration || 1000 } : {};
+        const extra = type === 'transition' ? { duration: item.duration || 1000000 } : {};
         _applyMount(type, item.folder, { id: `${type}_res`, name: item.name, path: absPath, type, ...extra });
         log(`挂载 ${type}: ${item.name} (${item.folder})`, 'load');
     }
@@ -688,7 +688,7 @@ window.__onResourceWritten = function (absFilePath) {
             folder:   relDir,
             name:     (typeof cfg.name === 'string' && cfg.name.trim()) ? cfg.name.trim() : relDir,
             format:   cfg.format === 'transition' ? 'transition' : 'effect',
-            duration: cfg.suggestionDuration || 1000,
+            duration: cfg.suggestionDuration || 1000000,
         });
     } catch (e) {
         log(`自动挂载读取 config 失败: ${e.message}`, 'err');

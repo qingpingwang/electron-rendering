@@ -30,7 +30,7 @@ static Napi::Value GetVideoInfo(const Napi::CallbackInfo &info) {
     result.Set("success", Napi::Boolean::New(env, true));
     result.Set("width", Napi::Number::New(env, decoder.width()));
     result.Set("height", Napi::Number::New(env, decoder.height()));
-    result.Set("durationMs", Napi::Number::New(env, decoder.durationMs()));
+    result.Set("durationUs", Napi::Number::New(env, decoder.durationUs()));
     result.Set("frameRate", Napi::Number::New(env, decoder.frameRate()));
     result.Set("hasAlpha", Napi::Boolean::New(env, false));
 

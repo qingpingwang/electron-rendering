@@ -4,7 +4,7 @@ const { updateUI } = require('./renderer');
 const { stop } = require('./controls');
 const { log, formatTime } = require('../utils/logger');
 
-async function loadFromConfig(config, protocolPath = '', { editing = false, timeMs = 0, prepareCache = !editing } = {}) {
+async function loadFromConfig(config, protocolPath = '', { editing = false, timeUs = 0, prepareCache = !editing } = {}) {
     return player.scheduleProjectOp(async () => {
 
         try {
@@ -18,12 +18,26 @@ async function loadFromConfig(config, protocolPath = '', { editing = false, time
             player.loading = true;
             updateUI();
             protocolPath = path.resolve(protocolPath || player.projectBase || process.cwd());
+            if (!editing) {
+                require('../../project_files').ensure(protocolPath, config);
+            }
             if (prepareCache) {
                 const ready = editing && protocolPath === player.projectBase ? player.mediaProxies : {};
                 player.mediaProxies = await require('../editor/media_cache')(config, protocolPath, ready);
             }
 
-            const jsonStr = JSON.stringify(config);
+            // Text style fonts are nested JSON; resolve them against the project too.
+            const loadConfig = { ...config, materials: { ...config.materials } };
+            loadConfig.materials.texts = (config.materials?.texts || []).map(material => {
+                const content = JSON.parse(material.content);
+                for (const style of content.styles || []) {
+                    if (style.font?.path) {
+                        style.font.path = path.resolve(protocolPath, style.font.path);
+                    }
+                }
+                return { ...material, content: JSON.stringify(content) };
+            });
+            const jsonStr = JSON.stringify(loadConfig);
             log(`加载配置: ${config.tracks?.length || 0} 轨道`, 'info');
 
             const t0 = performance.now();
@@ -61,7 +75,7 @@ async function loadFromConfig(config, protocolPath = '', { editing = false, time
                 });
             });
 
-            player.video.render(Math.max(0, Math.min(timeMs, player.video.duration)), true, false);
+            player.video.render(Math.max(0, Math.min(timeUs, player.video.duration)), true, false);
             try {
                 const audioInfos = player.root.getAudioInfos();
                 const infoKeys = Object.keys(audioInfos);
@@ -130,7 +144,7 @@ async function loadVideo() {
 
     const config = {
         id: 'video_' + Date.now(),
-        duration: videoInfo.durationMs,
+        duration: videoInfo.durationUs,
         fps: videoInfo.frameRate,
         canvas_config: {
             width: videoInfo.width,
@@ -143,8 +157,8 @@ async function loadVideo() {
             segments: [{
                 id: 'segment_0',
                 material_id: 'mat_0',
-                target_timerange: { start: 0, duration: videoInfo.durationMs },
-                source_timerange: { start: 0, duration: videoInfo.durationMs }
+                target_timerange: { start: 0, duration: videoInfo.durationUs },
+                source_timerange: { start: 0, duration: videoInfo.durationUs }
             }]
         }],
         materials: {

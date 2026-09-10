@@ -28,7 +28,7 @@ class Inspector {
             ? safeGet(() => layer.startTime, 0)
             : (segment?.start || 0);
         const duration = layer
-            ? safeGet(() => layer.durationMs, 0)
+            ? safeGet(() => layer.durationUs, 0)
             : (segment?.duration || 0);
         this._appendHTML(rowHTML('名称', esc(layer ? (safeGet(() => layer.id, '') || segName) : (segName || '音频片段'))));
         this._appendHTML(rowHTML('时间', `${formatTime(startTime)} ~ ${formatTime(startTime + duration)}`));

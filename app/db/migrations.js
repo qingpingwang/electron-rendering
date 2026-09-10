@@ -13,7 +13,7 @@ module.exports = [
                     uuid        TEXT PRIMARY KEY,
                     config_path TEXT NOT NULL,
                     name        TEXT NOT NULL,
-                    duration    INTEGER DEFAULT 5000,
+                    duration    INTEGER DEFAULT 5000000,
                     updated_at  TEXT NOT NULL
                 );
 
@@ -45,7 +45,7 @@ module.exports = [
                     'INSERT OR IGNORE INTO projects (uuid, config_path, name, duration, updated_at) VALUES (?, ?, ?, ?, ?)'
                 );
                 for (const r of items) {
-                    insert.run(r.uuid, r.configPath, r.name, r.duration || 5000, r.updatedAt || new Date().toISOString());
+                    insert.run(r.uuid, r.configPath, r.name, r.duration || 5000000, r.updatedAt || new Date().toISOString());
                 }
                 console.log(`[DB] Migrated ${items.length} project(s) from history.json`);
             } catch (e) {

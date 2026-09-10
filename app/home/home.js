@@ -69,10 +69,10 @@ function openProject(item) {
 
 function createProject(width, height) {
     const uuid = crypto.randomUUID();
-    const configDir = path.resolve(ROOT_DIR, 'test_project');
+    const configDir = path.resolve(ROOT_DIR, '../resources/project', uuid);
     if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
 
-    const configPath = `test_project/${uuid}.json`;
+    const configPath = `../resources/project/${uuid}/protocol.json`;
     const absPath = path.resolve(ROOT_DIR, configPath);
 
     const orientLabel = width > height ? '横屏' : (height > width ? '竖屏' : '方形');
@@ -80,7 +80,7 @@ function createProject(width, height) {
 
     const config = {
         id: uuid,
-        duration: 5000,
+        duration: 5000000,
         fps: 30,
         canvas_config: {
             width,
@@ -92,6 +92,7 @@ function createProject(width, height) {
     };
 
     fs.writeFileSync(absPath, JSON.stringify(config, null, 4), 'utf-8');
+    require('../project_files').ensure(configDir, config, name);
 
     db.projects.create({
         uuid,
@@ -139,7 +140,7 @@ async function openProjectFromFile() {
 
         const uuid = crypto.randomUUID();
         const name = path.basename(absPath, path.extname(absPath)) || '导入项目';
-        const duration = Number(config.duration) > 0 ? Number(config.duration) : 5000;
+        const duration = Number(config.duration) > 0 ? Number(config.duration) : 5000000;
 
         db.projects.create({
             uuid,
@@ -238,7 +239,7 @@ function truncate(str, max = 52) {
 
 function formatDuration(ms) {
     if (!ms || ms <= 0) return '0s';
-    const totalSec = Math.round(ms / 1000);
+    const totalSec = Math.round(ms / 1000000);
     const m = Math.floor(totalSec / 60);
     const s = totalSec % 60;
     return m > 0 ? `${m}m${s}s` : `${s}s`;

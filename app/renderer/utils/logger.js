@@ -1,6 +1,6 @@
 /** 时:分:秒.毫秒（不展示帧） */
-function formatTimeHMS(ms) {
-    const t = Math.max(0, Math.floor(Number(ms) || 0));
+function formatTimeHMS(us) {
+    const t = Math.max(0, Math.floor((Number(us) || 0) / 1000));
     const h = Math.floor(t / 3600000);
     const m = Math.floor((t % 3600000) / 60000);
     const s = Math.floor((t % 60000) / 1000);
@@ -11,8 +11,8 @@ function formatTimeHMS(ms) {
 }
 
 /** 时:分:秒:帧（需要帧号时用） */
-function formatTimecode(ms, fps = 30) {
-    const totalSec = Math.max(0, ms) / 1000;
+function formatTimecode(us, fps = 30) {
+    const totalSec = Math.max(0, us) / 1000000;
     const h = Math.floor(totalSec / 3600);
     const m = Math.floor((totalSec % 3600) / 60);
     const s = Math.floor(totalSec % 60);
@@ -21,8 +21,8 @@ function formatTimecode(ms, fps = 30) {
     return `${p(h)}:${p(m)}:${p(s)}:${p(f)}`;
 }
 
-function formatTime(ms) {
-    return formatTimeHMS(ms);
+function formatTime(us) {
+    return formatTimeHMS(us);
 }
 
 function log(msg, type = 'info') {

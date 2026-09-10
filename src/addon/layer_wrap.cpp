@@ -13,7 +13,7 @@ Napi::Function LayerWrap::GetClass(Napi::Env env) {
                                              InstanceAccessor("type", &LayerWrap::GetType, nullptr),
                                              InstanceAccessor("startTime", &LayerWrap::GetStartTime, nullptr),
                                              InstanceAccessor("endTime", &LayerWrap::GetEndTime, nullptr),
-                                             InstanceAccessor("durationMs", &LayerWrap::GetDurationMs, nullptr),
+                                             InstanceAccessor("durationUs", &LayerWrap::GetDurationUs, nullptr),
                                              InstanceAccessor("active", &LayerWrap::GetActive, nullptr),
                                              InstanceAccessor("text", &LayerWrap::GetText, &LayerWrap::SetText),
                                              InstanceAccessor("alignment", &LayerWrap::GetAlignment, &LayerWrap::SetAlignment),
@@ -104,9 +104,9 @@ Napi::Value LayerWrap::GetEndTime(const Napi::CallbackInfo &info) {
     return l ? Napi::Number::New(info.Env(), static_cast<double>(l->getEndTime())) : info.Env().Undefined();
 }
 
-Napi::Value LayerWrap::GetDurationMs(const Napi::CallbackInfo &info) {
+Napi::Value LayerWrap::GetDurationUs(const Napi::CallbackInfo &info) {
     auto *l = getLayer(info.Env());
-    return l ? Napi::Number::New(info.Env(), static_cast<double>(l->getDurationMs())) : info.Env().Undefined();
+    return l ? Napi::Number::New(info.Env(), static_cast<double>(l->getDurationUs())) : info.Env().Undefined();
 }
 
 Napi::Value LayerWrap::GetActive(const Napi::CallbackInfo &info) {

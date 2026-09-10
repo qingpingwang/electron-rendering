@@ -104,7 +104,7 @@ function init() {
         if (!player.root?.loaded) { return; }
         if (!_currentConfigPath) {
             const { dialog } = require('@electron/remote');
-            const result = await dialog.showSaveDialog({ title: '保存项目', defaultPath: 'project.json', filters: [{ name: 'NLE 项目', extensions: ['json'] }] });
+            const result = await dialog.showSaveDialog({ title: '保存项目', defaultPath: path.resolve(ROOT_DIR, '../resources/project', player.root.id || 'untitled', 'protocol.json'), filters: [{ name: 'NLE 项目', extensions: ['json'] }] });
             if (result.canceled) { return; }
             _currentConfigPath = result.filePath;
         }
@@ -118,7 +118,7 @@ function init() {
         if (player.timeline) player.timeline.setCurrentTime(player.video.currentTime);
     };
 
-    player.timeline.onSeek = (timeMs) => seek(timeMs / player.video.duration);
+    player.timeline.onSeek = (timeUs) => seek(timeUs / player.video.duration);
     player.timeline.onTrackMute = (groupId, muted) => player.audio.muteGroup(groupId, muted);
     player.timeline.onRefresh = () => {
         if (!player.audio.playing) player.video.render(player.video.currentTime, true, false);
@@ -134,7 +134,7 @@ function init() {
             if (!segment) { throw new Error('片段不存在'); }
             const duration = segment.target_timerange.duration;
             const others = target.segments.filter(s => s.id !== id).sort((a, b) => a.target_timerange.start - b.target_timerange.start);
-            let start = Math.max(0, Math.round(time * config.fps / 1000) * 1000 / config.fps);
+            let start = Math.max(0, Math.round(time * config.fps / 1000000) * 1000000 / config.fps);
             start = Math.round(start);
             // 同一轨道的片段不覆盖；落点有冲突时顺延到可用空位。
             for (const other of others) {
@@ -237,8 +237,8 @@ function _setupProjectIPC() {
 
 function _saveCurrentProject() {
     const fields = { updatedAt: new Date().toISOString() };
-    if (player.root && player.root.loaded && player.root.durationMs) {
-        fields.duration = player.root.durationMs;
+    if (player.root && player.root.loaded && player.root.durationUs) {
+        fields.duration = player.root.durationUs;
     }
     if (_currentUUID) { db.projects.update(_currentUUID, fields); }
 
@@ -246,7 +246,9 @@ function _saveCurrentProject() {
         const configStr = player.root.exportConfig();
         if (configStr) {
             const absPath = path.resolve(ROOT_DIR, _currentConfigPath);
+            fs.mkdirSync(path.dirname(absPath), { recursive: true });
             fs.writeFileSync(absPath, configStr, 'utf-8');
+            require('../project_files').save(path.dirname(absPath), JSON.parse(configStr));
         }
     }
 }

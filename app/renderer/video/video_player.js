@@ -24,7 +24,7 @@ class VideoPlayer {
         this.root = root;
         this.width = root.width;
         this.height = root.height;
-        this.duration = root.durationMs;
+        this.duration = root.durationUs;
         this.frameRate = root.frameRate;
         this.currentTime = 0;
         this.frameCount = 0;
@@ -35,9 +35,9 @@ class VideoPlayer {
         }
     }
 
-    render(timeMs, force = false, prepareNext = true) {
+    render(timeUs, force = false, prepareNext = true) {
         if (!this.root) return;
-        if (timeMs !== undefined) this.currentTime = timeMs;
+        if (timeUs !== undefined) this.currentTime = timeUs;
 
         const t0 = performance.now();
 
@@ -77,23 +77,23 @@ class VideoPlayer {
         if (this.onRender) this.onRender();
     }
 
-    isSameFrame(timeMs) {
+    isSameFrame(timeUs) {
         if (!this.root) return false;
-        return this.root.isSameFrame(this._snapToFrame(timeMs));
+        return this.root.isSameFrame(this._snapToFrame(timeUs));
     }
 
-    startRenderLoop(getTimeMs) {
+    startRenderLoop(getTimeUs) {
         this.stopRenderLoop();
 
         const tick = () => {
-            const timeMs = getTimeMs();
-            if (timeMs === null) {
+            const timeUs = getTimeUs();
+            if (timeUs === null) {
                 this._animId = null;
                 return;
             }
 
-            const needStop = timeMs >= this.duration;
-            const t = needStop ? this.duration - 1 : timeMs;
+            const needStop = timeUs >= this.duration;
+            const t = needStop ? this.duration - 1 : timeUs;
 
             if (!this.isSameFrame(t)) {
                 this.render(t);
@@ -116,10 +116,10 @@ class VideoPlayer {
         }
     }
 
-    _snapToFrame(timeMs) {
-        if (this.frameRate <= 0) return Math.floor(timeMs);
-        const frameMs = 1000 / this.frameRate;
-        return Math.round(timeMs / frameMs) * frameMs;
+    _snapToFrame(timeUs) {
+        if (this.frameRate <= 0) return Math.floor(timeUs);
+        const frameUs = 1000000 / this.frameRate;
+        return Math.round(timeUs / frameUs) * frameUs;
     }
 }
 

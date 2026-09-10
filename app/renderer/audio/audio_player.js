@@ -16,16 +16,16 @@ class AudioPlayer {
         this.duration = 0;
     }
 
-    get currentTimeMs() {
+    get currentTimeUs() {
         if (!this.playing) return this._startOffset;
-        const elapsed = (this.ctx.currentTime - this._playStartCtxTime) * 1000;
+        const elapsed = (this.ctx.currentTime - this._playStartCtxTime) * 1000000;
         return Math.min(this._startOffset + elapsed, this.duration);
     }
 
     async load(root, proxies = {}) {
         this.stop();
         this.tracks.clear();
-        this.duration = root.durationMs;
+        this.duration = root.durationUs;
 
         const audioInfos = root.getAudioInfos();
         const loadPromises = [];
@@ -67,18 +67,18 @@ class AudioPlayer {
 
     pause() {
         if (!this.playing) return;
-        this._startOffset = this.currentTimeMs;
+        this._startOffset = this.currentTimeUs;
         this._stopSources();
         this.playing = false;
     }
 
-    seek(timeMs) {
+    seek(timeUs) {
         const wasPlaying = this.playing;
         if (this.playing) {
             this._stopSources();
             this.playing = false;
         }
-        this._startOffset = Math.max(0, Math.min(timeMs, this.duration));
+        this._startOffset = Math.max(0, Math.min(timeUs, this.duration));
         if (wasPlaying) this.play();
     }
 
@@ -117,7 +117,7 @@ class AudioPlayer {
         return this.ctx.decodeAudioData(ab);
     }
 
-    _startSources(fromMs) {
+    _startSources(fromUs) {
         this._stopSources();
         this._playStartCtxTime = this.ctx.currentTime;
 
@@ -127,7 +127,7 @@ class AudioPlayer {
             const tDur = info.targetRange.duration;
             const tEnd = tStart + tDur;
 
-            if (fromMs >= tEnd) continue;
+            if (fromUs >= tEnd) continue;
 
             const source = this.ctx.createBufferSource();
             source.buffer = buffer;
@@ -137,14 +137,14 @@ class AudioPlayer {
             source.connect(gain);
             gain.connect(this.masterGain);
 
-            const srcStartSec = info.sourceRange.start / 1000;
-            const srcDurSec = info.sourceRange.duration / 1000;
+            const srcStartSec = info.sourceRange.start / 1000000;
+            const srcDurSec = info.sourceRange.duration / 1000000;
 
-            if (fromMs <= tStart) {
-                const delaySec = (tStart - fromMs) / 1000;
+            if (fromUs <= tStart) {
+                const delaySec = (tStart - fromUs) / 1000000;
                 source.start(this.ctx.currentTime + delaySec, srcStartSec, srcDurSec);
             } else {
-                const progress = (fromMs - tStart) / tDur;
+                const progress = (fromUs - tStart) / tDur;
                 const offsetSec = srcStartSec + progress * srcDurSec;
                 const remainSec = srcDurSec * (1 - progress);
                 source.start(0, offsetSec, Math.max(0, remainSec));

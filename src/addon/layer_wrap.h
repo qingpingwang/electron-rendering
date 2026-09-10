@@ -26,7 +26,7 @@ private:
     Napi::Value GetType(const Napi::CallbackInfo &info);
     Napi::Value GetStartTime(const Napi::CallbackInfo &info);
     Napi::Value GetEndTime(const Napi::CallbackInfo &info);
-    Napi::Value GetDurationMs(const Napi::CallbackInfo &info);
+    Napi::Value GetDurationUs(const Napi::CallbackInfo &info);
     Napi::Value GetActive(const Napi::CallbackInfo &info);
 
     Napi::Value GetText(const Napi::CallbackInfo &info);

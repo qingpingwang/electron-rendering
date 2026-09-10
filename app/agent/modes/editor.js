@@ -108,12 +108,12 @@ function createTools() {
 
         new DynamicStructuredTool({
             name: 'set_current_time',
-            description: '跳转到指定时间点（毫秒）并刷新画面。',
+            description: '跳转到指定时间点（微秒）并刷新画面。',
             schema: z.object({
-                timeMs: z.number().describe('目标时间点，单位毫秒'),
+                timeUs: z.number().describe('目标时间点，单位微秒'),
             }),
-            func: async ({ timeMs }) => {
-                const result = await callEditor('setCurrentTime', { timeMs });
+            func: async ({ timeUs }) => {
+                const result = await callEditor('setCurrentTime', { timeUs });
                 return JSON.stringify(result);
             },
         }),

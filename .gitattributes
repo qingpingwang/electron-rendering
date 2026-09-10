@@ -1,22 +1,2 @@
-
-# Binary resource assets use LFS; editable resource definitions remain Git text.
-resources/**/*.mp4 filter=lfs diff=lfs merge=lfs -text
-resources/**/*.mov filter=lfs diff=lfs merge=lfs -text
-resources/**/*.webm filter=lfs diff=lfs merge=lfs -text
-resources/**/*.wav filter=lfs diff=lfs merge=lfs -text
-resources/**/*.mp3 filter=lfs diff=lfs merge=lfs -text
-resources/**/*.aac filter=lfs diff=lfs merge=lfs -text
-resources/**/*.m4a filter=lfs diff=lfs merge=lfs -text
-resources/**/*.png filter=lfs diff=lfs merge=lfs -text
-resources/**/*.jpg filter=lfs diff=lfs merge=lfs -text
-resources/**/*.jpeg filter=lfs diff=lfs merge=lfs -text
-resources/**/*.gif filter=lfs diff=lfs merge=lfs -text
-resources/**/*.webp filter=lfs diff=lfs merge=lfs -text
-resources/**/*.ttf filter=lfs diff=lfs merge=lfs -text
-resources/**/*.otf filter=lfs diff=lfs merge=lfs -text
-resources/**/*.woff filter=lfs diff=lfs merge=lfs -text
-resources/**/*.woff2 filter=lfs diff=lfs merge=lfs -text
-resources/**/*.zip filter=lfs diff=lfs merge=lfs -text
 deploy/** filter=lfs diff=lfs merge=lfs -text
-deploy/**/*.md -filter -diff -merge text
-deploy/runtime.json -filter -diff -merge text
+resources/** filter=lfs diff=lfs merge=lfs -text

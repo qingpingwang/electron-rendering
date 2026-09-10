@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const createResourcePreview = require('./resource_preview');
-const RESOURCE_ROOT = path.resolve(__dirname, '../../../resources');
+const RESOURCE_ROOT = path.resolve(__dirname, '../../../resources/system');
 const CATEGORIES = [
     ['media', '媒体', '▣'], ['audio', '音频', '♫'], ['texts', '文本', 'Tᴛ'],
     ['stickers', '贴纸', '◔'], ['effects', '特效', '☆'], ['transitions', '转场', '⋈'],
@@ -92,7 +92,7 @@ class MediaLibrary {
         timeline.addEventListener('drop', e => {
             e.preventDefault();
             const x = e.clientX - player.timeline._rulerScroll.getBoundingClientRect().left + player.timeline._rulerScroll.scrollLeft;
-            const time = player.timeline._pxPerMs ? Math.max(0, Math.round(x / player.timeline._pxPerMs)) : 0;
+            const time = player.timeline._pxPerUs ? Math.max(0, Math.round(x / player.timeline._pxPerUs)) : 0;
             const target = dropTrack(e);
             clearDropTarget();
             const type = this.draggedItem?.type || 'video';
@@ -116,11 +116,29 @@ class MediaLibrary {
         this.render();
     }
     sync(config, base) {
+        const projectBase = path.resolve(base || '');
+        if (this.projectBase !== projectBase) {
+            this.items.clear();
+            this.projectBase = projectBase;
+        }
+        const meta = require('../../project_files').ensure(projectBase, config);
+        for (const item of require('../../project_files').getMaterials(meta).filter(item => item.type === 'video')) {
+            const file = path.resolve(projectBase, item.path);
+            this.items.set(file, { ...item, path: file });
+        }
         this.projectItems = {};
         for (const [category, key, type] of [['media', 'videos', 'video'], ['audio', 'audios', 'audio'], ['effects', 'effects', 'effect'], ['transitions', 'transitions', 'transition']]) {
             this.projectItems[category] = (config.materials?.[key] || []).map(item => ({
                 ...item, type, path: path.resolve(base || '', item.path), name: item.name || path.basename(item.path),
             }));
+        }
+        for (const [category, type] of [['media', 'video'], ['audio', 'audio']]) {
+            const registered = require('../../project_files').getMaterials(meta).filter(item => item.type === type).map(item => ({
+                ...item, path: path.resolve(projectBase, item.path),
+            }));
+            const entries = new Map(registered.map(item => [item.path, item]));
+            for (const item of this.projectItems[category]) { entries.set(item.path, item); }
+            this.projectItems[category] = [...entries.values()];
         }
         for (const v of config.materials?.videos || []) {
             const file = path.resolve(base || '', v.path);
@@ -137,7 +155,7 @@ class MediaLibrary {
             if (existing && player.mediaProxies?.[file]) { imported.push(existing); continue; }
             const info = player.addon.getVideoInfo(file);
             if (!info.success) { log(`无法导入 ${path.basename(file)}：${info.error}`, 'err'); continue; }
-            imported.push({ ...info, path: file, duration: info.durationMs });
+            imported.push({ ...info, path: file, duration: info.durationUs });
         }
         const missing = imported.filter(item => !player.mediaProxies?.[item.path]);
         if (missing.length) {
@@ -145,6 +163,10 @@ class MediaLibrary {
             if (path.resolve(player.projectBase || process.cwd()) !== base) { return []; }
             player.mediaProxies = { ...player.mediaProxies, ...proxies };
         }
+        const meta = require('../../project_files').register(base, this.config(), imported);
+        this.projectItems.media = require('../../project_files').getMaterials(meta).filter(item => item.type === 'video').map(item => ({
+            ...item, path: path.resolve(base, item.path),
+        }));
         for (const item of imported) { this.items.set(item.path, item); }
         this.render();
         return imported;
@@ -158,10 +180,10 @@ class MediaLibrary {
     }
     config() {
         if (player.root.loaded) { return JSON.parse(player.root.exportConfig()); }
-        return { id: randomUUID(), duration: 5000, fps: 30, canvas_config: { width: 1920, height: 1080, ratio: '16:9' }, materials: { videos: [], texts: [] }, tracks: [] };
+        return { id: randomUUID(), duration: 5000000, fps: 30, canvas_config: { width: 1920, height: 1080, ratio: '16:9' }, materials: { videos: [], texts: [] }, tracks: [] };
     }
     async apply(config, id, time, prepareCache = false) {
-        await require('../player/loader').loadFromConfig(config, player.projectBase || '', { editing: true, timeMs: time, prepareCache });
+        await require('../player/loader').loadFromConfig(config, player.projectBase || '', { editing: true, timeUs: time, prepareCache });
         player.timeline.selectLayer(id);
     }
     async addMany(paths, time, targetId) {
@@ -198,7 +220,7 @@ class MediaLibrary {
     }
     async addText() {
         const config = this.config(), materialId = randomUUID(), id = randomUUID();
-        const start = Math.round(player.video.currentTime || 0), duration = 3000;
+        const start = Math.round(player.video.currentTime || 0), duration = 3000000;
         config.materials.texts ||= [];
         config.materials.texts.push({ id: materialId, alignment: 1, content: JSON.stringify({ text: '输入文字', styles: [{ range: [0, 4], size: 80, fill: { content: { solid: { color: [1, 1, 1], alpha: 1 } } } }] }) });
         config.tracks.push({ id: randomUUID(), type: 'text', segments: [{ id, material_id: materialId, target_timerange: { start, duration } }] });
@@ -214,7 +236,7 @@ class MediaLibrary {
         if (item.type === 'audio') {
             const bytes = fs.readFileSync(file);
             const decoded = await player.audio.ctx.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
-            const duration = Math.round(decoded.duration * 1000), id = randomUUID();
+            const duration = Math.round(decoded.duration * 1000000), id = randomUUID();
             config.materials.audios ||= [];
             config.materials.audios.push({ id: materialId, name: item.name, path: file });
             this.insertSegment(config, 'audio', { id, material_id: materialId, source_timerange: { start: 0, duration }, target_timerange: { start, duration } }, targetId);

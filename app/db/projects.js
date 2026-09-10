@@ -17,7 +17,7 @@ function get(uuid) {
 
 function create({ uuid, configPath, name, duration }) {
     const now = new Date().toISOString();
-    const dur = duration || 5000;
+    const dur = duration || 5000000;
     getDb().prepare(SQL.INSERT).run(uuid, configPath, name, dur, now);
     return { uuid, configPath, name, duration: dur, updatedAt: now };
 }

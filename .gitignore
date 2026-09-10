@@ -26,9 +26,6 @@ Thumbs.db
 *.node
 
 *.mp4
-# Checked-in render resource preview assets
-!resources/*/preview_video.mp4
-!resources/*/origin.mp4
 .cache/
 
 # Environment

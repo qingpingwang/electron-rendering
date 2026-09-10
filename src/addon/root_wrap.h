@@ -17,13 +17,13 @@ class NativeRootState {
     nle_sdk::RootNode sdk_;
     struct Frame {
         std::vector<uint8_t> bytes;
-        nle_sdk::TimeMs time = -1;
+        nle_sdk::TimeUs time = -1;
         bool ok = false;
     };
     std::array<Frame, 2> frames_;
     size_t write_ = 0;
     std::thread prepare_;
-    nle_sdk::TimeMs current_ = 0, displayed_ = -1;
+    nle_sdk::TimeUs current_ = 0, displayed_ = -1;
     std::string error_;
     bool initialized_ = false;
     void join() {
@@ -31,15 +31,15 @@ class NativeRootState {
             prepare_.join();
         }
     }
-    bool same(nle_sdk::TimeMs a, nle_sdk::TimeMs b) const {
-        return a >= 0 && b >= 0 && std::abs(a - b) < 500.0 / (sdk_.getFrameRate() > 0 ? sdk_.getFrameRate() : 30);
+    bool same(nle_sdk::TimeUs a, nle_sdk::TimeUs b) const {
+        return a >= 0 && b >= 0 && std::abs(a - b) < 500000.0 / (sdk_.getFrameRate() > 0 ? sdk_.getFrameRate() : 30);
     }
     void clearCache() {
         for (auto &f : frames_) {
             f.time = -1;
         }
     }
-    Frame &render(nle_sdk::TimeMs time) {
+    Frame &render(nle_sdk::TimeUs time) {
         auto &f = frames_[write_];
         write_ = (write_ + 1) % frames_.size();
         f.time = -1;
@@ -101,13 +101,13 @@ public:
         }
         clearCache();
     }
-    void setCurrentTime(nle_sdk::TimeMs t) {
+    void setCurrentTime(nle_sdk::TimeUs t) {
         current_ = t;
     }
-    nle_sdk::TimeMs getCurrentTime() const {
+    nle_sdk::TimeUs getCurrentTime() const {
         return current_;
     }
-    bool isSameFrame(nle_sdk::TimeMs t) const {
+    bool isSameFrame(nle_sdk::TimeUs t) const {
         return same(t, displayed_);
     }
     int draw(uint8_t *out, size_t size, bool force, bool next) {
@@ -138,8 +138,8 @@ public:
         // Release even after property access/cache hit, before moving context to another thread.
         sdk_.releaseCurrent();
         if (ok && next) {
-            const auto time = current_ + static_cast<nle_sdk::TimeMs>(std::llround(1000.0 / (getFrameRate() > 0 ? getFrameRate() : 30)));
-            if (time < getDurationMs()) {
+            const auto time = current_ + static_cast<nle_sdk::TimeUs>(std::llround(1000000.0 / (getFrameRate() > 0 ? getFrameRate() : 30)));
+            if (time < getDurationUs()) {
                 prepare_ = std::thread([this, time] { render(time); });
             }
         }
@@ -151,8 +151,8 @@ public:
     int getHeight() const {
         return sdk_.getHeight();
     }
-    nle_sdk::TimeMs getDurationMs() const {
-        return sdk_.getDurationMs();
+    nle_sdk::TimeUs getDurationUs() const {
+        return sdk_.getDurationUs();
     }
     double getFrameRate() const {
         return sdk_.getFrameRate();
@@ -259,7 +259,7 @@ private:
 
     Napi::Value GetWidth(const Napi::CallbackInfo &info);
     Napi::Value GetHeight(const Napi::CallbackInfo &info);
-    Napi::Value GetDurationMs(const Napi::CallbackInfo &info);
+    Napi::Value GetDurationUs(const Napi::CallbackInfo &info);
     Napi::Value GetFrameRate(const Napi::CallbackInfo &info);
     Napi::Value GetLoaded(const Napi::CallbackInfo &info);
     Napi::Value GetGpuInfo(const Napi::CallbackInfo &info);

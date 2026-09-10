@@ -33,7 +33,7 @@ class Timeline {
 
         this._materials = {};
         this._groups = [];
-        this._pxPerMs = 0;
+        this._pxPerUs = 0;
         this._rulerScroll = null;
         this._rulerInner = null;
         this._bodyWrap = null;
@@ -54,7 +54,7 @@ class Timeline {
     }
 
     get _totalPx() {
-        return this.duration * this._pxPerMs;
+        return this.duration * this._pxPerUs;
     }
 
     load(config, groups, basePath = '', proxies = {}) {
@@ -63,7 +63,7 @@ class Timeline {
         this.currentTime = 0;
 
         this._materials = {};
-        const previousScale = this._pxPerMs;
+        const previousScale = this._pxPerUs;
         for (const v of (config.materials?.videos || [])) {
             const file = proxies[path.resolve(basePath, v.path)]?.thumbnail || path.resolve(basePath, v.path);
             let version;
@@ -111,7 +111,7 @@ class Timeline {
             })),
         }));
 
-        this._pxPerMs = previousScale || this._calcFitScale();
+        this._pxPerUs = previousScale || this._calcFitScale();
         this._updateZoomInput();
         this._render();
         this._thumbGen++;
@@ -119,8 +119,8 @@ class Timeline {
         requestAnimationFrame(() => this._generateThumbnails(gen));
     }
 
-    setCurrentTime(timeMs) {
-        this.currentTime = timeMs;
+    setCurrentTime(timeUs) {
+        this.currentTime = timeUs;
         this._updatePlayhead();
     }
 
@@ -129,9 +129,9 @@ class Timeline {
         this._render();
     }
 
-    setZoom(pxPerMs) {
+    setZoom(pxPerUs) {
         const fit = this._calcFitScale();
-        this._pxPerMs = Math.max(fit * ZOOM_MIN, Math.min(fit * ZOOM_MAX, pxPerMs));
+        this._pxPerUs = Math.max(fit * ZOOM_MIN, Math.min(fit * ZOOM_MAX, pxPerUs));
         this._updateZoomInput();
         this._render();
         this._debouncedRefreshThumbs();
@@ -145,7 +145,7 @@ class Timeline {
         this.tracks = [];
         this.duration = 0;
         this.currentTime = 0;
-        this._pxPerMs = 0;
+        this._pxPerUs = 0;
         this._stripCache.clear();
         this._frameCache.clear();
         this._render();
@@ -223,13 +223,13 @@ class Timeline {
 
     _bindEvents() {
         const seek = (e) => {
-            if (!this.duration || !this._pxPerMs) return;
+            if (!this.duration || !this._pxPerUs) return;
             const rect = this._rulerScroll.getBoundingClientRect();
             const scrollX = this._bodyWrap.scrollLeft;
             const rawPx = (e.clientX - rect.left) + scrollX;
-            const timeMs = Math.max(0, Math.min(this.duration, rawPx / this._pxPerMs));
-            this.setCurrentTime(timeMs);
-            if (this.onSeek) this.onSeek(timeMs);
+            const timeUs = Math.max(0, Math.min(this.duration, rawPx / this._pxPerUs));
+            this.setCurrentTime(timeUs);
+            if (this.onSeek) this.onSeek(timeUs);
         };
 
         const startDrag = (e) => {
@@ -258,7 +258,7 @@ class Timeline {
             const fit = this._calcFitScale();
             const lo = fit * ZOOM_MIN;
             const hi = fit * ZOOM_MAX;
-            this._pxPerMs = lo * Math.pow(hi / lo, val / 100);
+            this._pxPerUs = lo * Math.pow(hi / lo, val / 100);
             this._render();
             this._debouncedRefreshThumbs();
         });
@@ -270,7 +270,7 @@ class Timeline {
             const lo = fit * ZOOM_MIN;
             const hi = fit * ZOOM_MAX;
             const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-            this._pxPerMs = Math.max(lo, Math.min(hi, this._pxPerMs * factor));
+            this._pxPerUs = Math.max(lo, Math.min(hi, this._pxPerUs * factor));
             this._updateZoomInput();
             this._render();
             this._debouncedRefreshThumbs();
@@ -302,8 +302,8 @@ class Timeline {
             if (Math.hypot(delta, e.clientY - drag.y) < 4 && !drag.moved) { return; }
             drag.moved = true;
             drag.el.classList.add('dragging');
-            drag.time = Math.max(0, drag.start + delta / this._pxPerMs);
-            if (!e.altKey && Math.abs(drag.time - this.currentTime) * this._pxPerMs < 8) { drag.time = this.currentTime; }
+            drag.time = Math.max(0, drag.start + delta / this._pxPerUs);
+            if (!e.altKey && Math.abs(drag.time - this.currentTime) * this._pxPerUs < 8) { drag.time = this.currentTime; }
             const rows = [...this._body.querySelectorAll('.tl-track')];
             rows.forEach(row => row.classList.remove('drop-target', 'drop-invalid'));
             const row = rows.find(row => { const r = row.getBoundingClientRect(); return e.clientY >= r.top && e.clientY <= r.bottom; });
@@ -311,7 +311,7 @@ class Timeline {
             const valid = drag.target !== null && this.tracks[drag.target].type === this.tracks[drag.ti].type;
             if (row) { row.classList.add(valid ? 'drop-target' : 'drop-invalid'); }
             drag.valid = valid;
-            drag.el.style.left = `${drag.time * this._pxPerMs}px`;
+            drag.el.style.left = `${drag.time * this._pxPerUs}px`;
             drag.el.style.transform = `translateY(${e.clientY - drag.y}px)`;
         });
         this._body.addEventListener('pointerup', e => {
@@ -336,10 +336,10 @@ class Timeline {
         const fit = this._calcFitScale();
         const lo = fit * ZOOM_MIN;
         const hi = fit * ZOOM_MAX;
-        if (lo >= hi || this._pxPerMs <= lo) {
+        if (lo >= hi || this._pxPerUs <= lo) {
             this._zoomInput.value = '0';
         } else {
-            const val = 100 * Math.log(this._pxPerMs / lo) / Math.log(hi / lo);
+            const val = 100 * Math.log(this._pxPerUs / lo) / Math.log(hi / lo);
             this._zoomInput.value = String(Math.round(Math.max(0, Math.min(100, val))));
         }
     }
@@ -356,13 +356,13 @@ class Timeline {
     _renderRuler() {
         const ticks = this._rulerInner.querySelectorAll('.tl-tick');
         ticks.forEach(el => el.remove());
-        if (!this.duration || !this._pxPerMs) return;
+        if (!this.duration || !this._pxPerUs) return;
 
         this._rulerInner.style.width = `${this._totalPx}px`;
 
         const step = this._calcTickStep();
         for (let t = 0; t <= this.duration; t += step) {
-            const px = t * this._pxPerMs;
+            const px = t * this._pxPerUs;
             const tick = document.createElement('span');
             tick.className = 'tl-tick';
             tick.style.left = `${px}px`;
@@ -439,8 +439,8 @@ class Timeline {
 
             for (let segIdx = 0; segIdx < track.segments.length; segIdx++) {
                 const seg = track.segments[segIdx];
-                const leftPx = seg.start * this._pxPerMs;
-                const widthPx = seg.duration * this._pxPerMs;
+                const leftPx = seg.start * this._pxPerUs;
+                const widthPx = seg.duration * this._pxPerUs;
 
                 const segEl = document.createElement('div');
                 segEl.className = `tl-segment tl-seg-${track.type}`;
@@ -532,7 +532,7 @@ class Timeline {
 
     _updatePlayhead() {
         if (!this._playhead || !this._bodyWrap) return;
-        const timePx = this.currentTime * this._pxPerMs;
+        const timePx = this.currentTime * this._pxPerUs;
         const scrollX = this._bodyWrap.scrollLeft;
         const offsetPx = timePx - scrollX;
         const viewW = this._bodyWrap.clientWidth;
@@ -545,22 +545,22 @@ class Timeline {
     }
 
     _calcTickStep() {
-        if (!this._pxPerMs) return 1000;
-        const rawMs = 120 / this._pxPerMs;
-        const nice = [100, 200, 500, 1000, 2000, 5000, 10000, 30000, 60000, 120000, 300000];
+        if (!this._pxPerUs) return 1000000;
+        const rawUs = 120 / this._pxPerUs;
+        const nice = [100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000, 30000000, 60000000, 120000000, 300000000];
         for (const step of nice) {
-            if (step >= rawMs * 0.7) return step;
+            if (step >= rawUs * 0.7) return step;
         }
         return 300000;
     }
 
     _rulerTime(ms, step) {
-        const totalSec = Math.floor(ms / 1000);
+        const totalSec = Math.floor(ms / 1000000);
         const min = Math.floor(totalSec / 60);
         const sec = totalSec % 60;
         const base = `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-        if (step < 1000) {
-            const frac = Math.floor((ms % 1000) / 100);
+        if (step < 1000000) {
+            const frac = Math.floor((ms % 1000000) / 100000);
             return `${base}.${frac}`;
         }
         return base;
@@ -775,8 +775,8 @@ class Timeline {
         if (!stripWrap) return;
 
         const videoPath = segEl.dataset.videoPath;
-        const srcStart = (parseFloat(segEl.dataset.srcStart) || 0) / 1000;
-        const srcDur = (parseFloat(segEl.dataset.srcDuration) || 0) / 1000;
+        const srcStart = (parseFloat(segEl.dataset.srcStart) || 0) / 1000000;
+        const srcDur = (parseFloat(segEl.dataset.srcDuration) || 0) / 1000000;
         const segW = stripWrap.offsetWidth;
         const segH = stripWrap.offsetHeight;
 

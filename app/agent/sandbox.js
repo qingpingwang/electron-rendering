@@ -30,7 +30,7 @@ function _readEnv() {
 function getSandboxRoot() {
     if (_sandboxRoot) return _sandboxRoot;
     const env = _readEnv();
-    const rel = env.RESOURCE_SANDBOX || './resources';
+    const rel = env.RESOURCE_SANDBOX || './resources/system';
     _sandboxRoot = path.resolve(PROJECT_ROOT, rel);
     if (!fs.existsSync(_sandboxRoot)) {
         fs.mkdirSync(_sandboxRoot, { recursive: true });

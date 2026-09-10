@@ -14,7 +14,7 @@ async function play() {
         await player.audio.play();
         player.video.startRenderLoop(() => {
             if (!player.audio.playing) return null;
-            const t = player.audio.currentTimeMs;
+            const t = player.audio.currentTimeUs;
             if (t >= player.video.duration) {
                 player.audio.stop();
                 player.video.render(player.video.duration - 1);
@@ -38,9 +38,9 @@ function stop() {
 
 function seek(ratio) {
     if (player.loading || !player.video || player.video.duration === 0) return;
-    const timeMs = player.video.duration * Math.max(0, Math.min(1, ratio));
-    player.audio.seek(timeMs);
-    player.video.render(timeMs, false, player.audio.playing);
+    const timeUs = player.video.duration * Math.max(0, Math.min(1, ratio));
+    player.audio.seek(timeUs);
+    player.video.render(timeUs, false, player.audio.playing);
 }
 
 module.exports = { play, stop, seek };

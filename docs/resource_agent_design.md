@@ -23,7 +23,7 @@ related_code:
   - resource_ui/resource_ui.js     # 左栏 + 预览播放器 + 挂载逻辑
   - resource_ui/preview_protocol.js  # PREVIEW_PROTOCOL 常量 + resolvePreviewPaths
 env:
-  RESOURCE_SANDBOX: "./test/resources"   # 资源写入根目录（.env）
+  RESOURCE_SANDBOX: "./resources/system"   # 资源写入根目录（.env）
   OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL_NAME
 modes:
   editor:   { label: 视频编辑, thread_prefix: "editor:" }
@@ -232,8 +232,8 @@ interface AgentModeDefinition {
 
 **预览媒体文件**：
 
-- 当前默认使用 `test/test.mp4`（开发阶段占位）；常量中以**相对应用根的路径**写死，`resolvePreviewPaths` 在传给 Native 前解析为绝对路径。
-- 正式发布时替换为 `resource_ui/assets/preview.mp4`（打包进 `extraResources`），只需修改 `PREVIEW_PROTOCOL.materials.videos[0].path`。
+- 当前默认使用 `resources/project/test/media/test.mp4`（开发阶段占位）；常量中以**相对应用根的路径**写死，`resolvePreviewPaths` 在传给 Native 前解析为绝对路径。
+- 正式发布时替换为 `resources/project/test/media/test.mp4`（打包进 `extraResources`），只需修改 `PREVIEW_PROTOCOL.materials.videos[0].path`。
 
 **结构约定**（已在 `resource_ui/preview_protocol.js` 实现）：
 
@@ -303,9 +303,9 @@ export function resolvePreviewPaths(protocol, appRoot) {
 
 **预览媒体文件**：
 
-- 与协议常量**同在前端侧约定**：例如 `resource_ui/assets/preview.mp4`（或打包进 `extraResources`）
+- 与协议常量**同在前端侧约定**：例如 `resources/project/test/media/test.mp4`（或打包进 `extraResources`）
 - `path` 字段在常量里用**相对路径**；`resolvePreviewPaths` 基于 `app.getAppPath()` / `__dirname` 解析后再 `loadProject`
-- 与 `test/test.mp4` **无耦合**；仓库 `test/` 目录仅作开发参考，**不得**被资源预览运行时依赖
+- 与 `resources/project/test/media/test.mp4` **无耦合**；仓库 `test/` 目录仅作开发参考，**不得**被资源预览运行时依赖
 
 ### 6.4 资源挂载规则
 
@@ -348,7 +348,7 @@ preview.video = new VideoPlayer(canvas);   // renderer/video/video_player.js
 // 加载协议
 preview.root.load(JSON.stringify(resolvedProtocol), appRoot)
 preview.video.load(preview.root)
-preview.video.render(timeMs)
+preview.video.render(timeUs)
 ```
 
 **挂载 effect/transition**：通过更新 PREVIEW_PROTOCOL 副本并重新调用 `root.load()` 实现，无需新增 C++ API。材质格式参照 `test/test.json`（已确认）：
@@ -369,7 +369,7 @@ preview.video.render(timeMs)
 
 ```bash
 # .env
-RESOURCE_SANDBOX=./test/resources
+RESOURCE_SANDBOX=./resources/system
 ```
 
 解析逻辑见 `agent/sandbox.js`：`resolveWritePath` 拒绝 `..` 越界；`resolveReadPath` 允许读任意路径（便于参考源码）。

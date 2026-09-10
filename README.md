@@ -4,7 +4,7 @@
 
 **AI 原生的视频编排工作台**：在 Electron 中融合 **LangGraph 智能体**、**工程级持久化** 与 **C++/OpenGL/Skia 实时渲染管线**，让自然语言驱动时间轴、图层与素材——所见即所得，所聊即所改。
 
-![产品界面](resources/image.png)
+![产品界面](resources/res/image.png)
 
 ---
 
@@ -21,7 +21,7 @@
 
 **用自然语言创作 GLSL Shader 特效与转场**——无需手写一行 OpenGL 代码，在对话中描述意图，AI 实时生成并预览。
 
-![渲染资源 Agent](resources/image1.png)
+![渲染资源 Agent](resources/res/image1.png)
 
 ### 工作流程
 
@@ -142,7 +142,7 @@ npm start
 
 `deploy/video_player.node` 为 N-API 8 入口，Skia、Lua、SoundTouch、NLE 核心静态链接到其中；`deploy/lib` 包含 ANGLE，`deploy/plugins` 包含解码插件。运行时通过相对 `.node` 的路径查找依赖，整个目录可随主仓库移动。`runtime.json` 记录平台/架构。缺少文件、尚未拉取 LFS 实体或平台不匹配时，启动前直接提示。
 
-`deploy` 二进制和 `resources` 的视频、音频、图片、字体等二进制由 Git LFS 管理；资源 JSON、着色器和脚本继续以文本存储。已有二进制资源转换为 LFS 指针，不重写历史。发布前需先推送 LFS 对象，普通 `git push` 的 LFS hook 会自动处理。
+`deploy/` 和 `resources/` 整个目录由 Git LFS 管理，包括 JSON、着色器和脚本；不按扩展名区分，不重写历史。发布前需先推送 LFS 对象，普通 `git push` 的 LFS hook 会自动处理。
 
 ## 从源码重建（SDK 维护者）
 
@@ -212,7 +212,7 @@ MIT
 
 ## 本地资源目录
 
-`resources/resources.json` 是编辑器素材库清单，路径相对于 `resources/`。分类为 `media`、`audio`、`texts`、`stickers`、`effects`、`transitions`、`captions`、`filters`、`adjustments`；没有资源的分类保持空数组。新增资源时填写唯一 `id`、`name`、`type` 和 `path`，特效与转场的路径指向包含 SDK `config.json` 的资源目录，转场 `duration` 单位为毫秒。
+`resources/system/resources.json` 是编辑器素材库清单，路径相对于 `resources/system/`。分类为 `media`、`audio`、`texts`、`stickers`、`effects`、`transitions`、`captions`、`filters`、`adjustments`；没有资源的分类保持空数组。新增资源时填写唯一 `id`、`name`、`type` 和 `path`，特效与转场的路径指向包含 SDK `config.json` 的资源目录，转场 `duration` 单位为微秒。
 
 当前收录 1 个视频、1 个音频、6 个特效、1 个转场。产品截图和特效内部依赖（例如蒙版视频）不作为独立素材收录；亮度资源遵循其 SDK 特效类型归入特效。特效与转场卡片使用配置中的 `preview_video`，预览区固定 88×88，下方显示名称（视频文件保持 200×200），鼠标悬浮静音循环播放，离开后暂停。
 
@@ -242,6 +242,30 @@ SDK 视频层的 `setProxyPath(path)` 硬切换解码来源，`setProxyPath('')`
 
 预处理采用单输入、多输出的 FFmpeg 命令，通过 `split/asplit` 共用解码帧；只连接缺失输出分支。素材任务并发数设为系统可用逻辑核数；每个任务的解码、滤镜、小视频及主视频编码线程数也均设为该核数。这些是各阶段线程配置，不是整个进程的线程总数。
 
-播放合成时，`RootNode::predecode(time_ms)` 先遍历可见轨道，为当前时间的活动视频图层启动独立异步解码任务（包括转场两侧的实际取帧时间），然后按图层顺序绘制。实际绘制等待对应任务完成，再在渲染线程上传纹理；换素材、换代理、变为 inactive 和销毁图层前会等待任务收尾。原生 Apple / FFmpeg 插件共用该调度，Web 保持原异步解码路径。
+播放合成时，`RootNode::predecode(time_us)` 先遍历可见轨道，为当前时间的活动视频图层启动独立异步解码任务（包括转场两侧的实际取帧时间），然后按图层顺序绘制。实际绘制等待对应任务完成，再在渲染线程上传纹理；换素材、换代理、变为 inactive 和销毁图层前会等待任务收尾。原生 Apple / FFmpeg 插件共用该调度，Web 保持原异步解码路径。
 
 缓存预处理仅在打开工程、导入视频时触发；普通编辑（移动片段、跨轨道移动、应用资源）直接使用当前工程的代理映射，不检查或构建缓存。导入时只处理未就绪的素材；缓存进度遮罩仅在 FFmpeg 实际转码时显示。
+
+### 资源目录
+
+- `resources/system/`：系统素材，按 `effect`、`transition`、`filter`、`sticker`、`font` 分类；素材清单位于 `resources/system/resources.json`。
+- `resources/project/<工程ID>/protocol.json`：工程文件，素材路径相对于工程文件所在目录；新建工程也保存到此目录。
+- `resources/res/`：README 引用图片等文档附件。
+
+示例工程：`resources/project/test/protocol.json`、`resources/project/render_test/protocol.json`。自动生成的 `.cache` 仍忽略，不纳入 LFS。
+
+工程的原视频、音频放在 `resources/project/<工程ID>/media/`，不登记到系统素材清单。每个工程包含三个文件：
+
+- `protocol.json`：SDK 渲染协议。
+- `draft_meta_info.json`：使用剪映字段 `draft_id`、`draft_name`、`tm_draft_create`、`tm_draft_modified`、`tm_duration`、`draft_materials`。`draft_materials` 的 `type: 0` 分组保存导入素材：`id`、`extra_info`（名称）、`metetype`、`file_Path`、`duration`、`width`、`height`、`import_time`。
+- `draft_virtual_store.json`：沿用剪映的 `draft_virtual_store` 分组，`type: 0` 保存文件夹的 `id`、`display_name`，`type: 1` 保存 `child_id`、`parent_id`。空 ID 表示根目录，素材 ID 对应元数据登记。
+
+两个附属文件由 `app/project_files.js` 在新建/打开工程时统一校正：补建缺失文件，协议中存在而元数据缺失的路径资源补入元数据并放到虚拟根目录，已有文件夹归属保留。导入素材登记到元数据并默认加入虚拟根目录，已有文件夹归属保留；保存时更新时长与修改时间，删除轨道片段不会删除已导入素材。只保留本地所需字段，不复制云端信息。`tm_*` 与素材 `duration` 使用微秒，`import_time` 使用秒；编辑器与 SDK 内部时间也统一使用微秒。`file_Path` 保存相对工程目录的路径，也可引用外部绝对路径，SDK 不读这两个文件。
+
+`stickers` 清单仅包含 ID、名称和资源目录路径。Electron 的 `app/sticker.js` 读取该目录的 `config.json`，根据序列图尺寸或图片类型生成第一帧卡片；该解析器只负责展示，不转换 SDK 素材。
+
+### 时间单位
+
+工程协议、素材时长、时间范围、特效关键帧、`suggestionDuration`、`uTime`、SDK 与 N-API 时间均为整数微秒（1 秒 = 1,000,000）。接口使用 `TimeUs`、`durationUs`、`getDurationUs()`、`timeUs`；不提供旧毫秒协议兼容或自动猜测。仓库内示例已迁移，外部旧协议需显式转换后再加载。
+
+WebAudio/HTMLVideoElement 仍按浏览器标准使用秒，WebCodecs 直接使用微秒，SkCodec 动图延迟从毫秒转为微秒；性能耗时、定时器等待保持各平台原生单位。解码插件 ABI 更新为 3，SDK 和插件需一起重新构建。

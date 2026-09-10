@@ -7,14 +7,14 @@
  *   - segment_1：extra_material_refs 挂 effect
  *   - materials.effects / transitions 运行时各最多 1 条
  *
- * 预览视频：默认使用仓库根目录的 resources/test.mp4（相对项目根解析）。
+ * 预览视频：默认使用仓库根目录的 resources/project/test/media/test.mp4（相对项目根解析）。
  * 如需替换，改此常量的 materials.videos[0].path 并重启 UI。
  */
 const path = require('path');
 
 const PREVIEW_PROTOCOL = {
     id: 'resource_preview',
-    duration: 4000,
+    duration: 4000000,
     fps: 30,
     canvas_config: { width: 720, height: 1280, ratio: '16:9' },
     materials: {
@@ -22,7 +22,7 @@ const PREVIEW_PROTOCOL = {
             {
                 id: 'material_video_0',
                 name: 'preview',
-                path: 'resources/test.mp4',  // 相对项目根；resolvePreviewPaths 会转为绝对路径
+                path: 'resources/project/test/media/test.mp4',  // 相对项目根；resolvePreviewPaths 会转为绝对路径
                 type: '',
             },
         ],
@@ -42,8 +42,8 @@ const PREVIEW_PROTOCOL = {
                     visible: true,
                     muted: false,
                     extra_material_refs: [],    // 运行时填入 transition material id
-                    source_timerange: { start: 0, duration: 2000 },
-                    target_timerange: { start: 0, duration: 2000 },
+                    source_timerange: { start: 0, duration: 2000000 },
+                    target_timerange: { start: 0, duration: 2000000 },
                 },
                 {
                     id: 'segment_1',
@@ -51,8 +51,8 @@ const PREVIEW_PROTOCOL = {
                     visible: true,
                     muted: false,
                     extra_material_refs: [],    // 运行时填入 effect material id
-                    source_timerange: { start: 0, duration: 2000 },
-                    target_timerange: { start: 2000, duration: 2000 },
+                    source_timerange: { start: 0, duration: 2000000 },
+                    target_timerange: { start: 2000000, duration: 2000000 },
                 },
             ],
         },

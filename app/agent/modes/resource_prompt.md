@@ -26,7 +26,7 @@
     "desc": "效果描述",
     "format": "effect",           // ⚠️ 必填："effect" 或 "transition"，不可省略
     "id": "effect_xxx",           // 可选，唯一标识
-    "suggestionDuration": 1000,   // 建议时长（ms）
+    "suggestionDuration": 1000000,   // 建议时长（us）
 
     "renderPass": [ /* 见下 */ ],
     "texture":    [ /* 见下 */ ],
@@ -165,7 +165,7 @@ out vec4 FragColor;
 // 【内置 uniform】引擎自动设置，不需要在 config.json 中声明任何条目，
 //               只需在 shader 里写 uniform 声明就可以直接使用。
 // ----------------------------------------------------------------
-// float uTime      — 当前帧绝对时间（毫秒）
+// float uTime      — 当前帧绝对时间（微秒）
 // float uProgress  — 归一化进度 0.0 → 1.0（随 segment 时间线性变化）
 //
 // 特效（effect）输入纹理：

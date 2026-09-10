@@ -1,6 +1,3 @@
-{
-  "platform": "darwin",
-  "arch": "arm64",
-  "napi": 8,
-  "configuration": "Release"
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:567f97f63f65ce1ee9f2f6bb9dbef3dd9c9b85582dd77be2c8e5be6d5cb847c3
+size 89

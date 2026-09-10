@@ -2,7 +2,11 @@ const fs = require('fs');
 const path = require('path');
 const root = path.resolve(__dirname, '../deploy');
 try {
-    const info = JSON.parse(fs.readFileSync(path.join(root, 'runtime.json'), 'utf8'));
+    const metadata = fs.readFileSync(path.join(root, 'runtime.json'), 'utf8');
+    if (metadata.startsWith('version https://git-lfs.github.com/spec/v1')) {
+        throw new Error('runtime.json 尚未下载，请执行 git lfs pull');
+    }
+    const info = JSON.parse(metadata);
     if (info.platform !== process.platform || info.arch !== process.arch) {
         throw new Error(`deploy 为 ${info.platform}/${info.arch}，当前系统为 ${process.platform}/${process.arch}；请使用对应平台的预编译产物`);
     }

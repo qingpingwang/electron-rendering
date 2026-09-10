@@ -80,7 +80,7 @@ function getProjectInfo() {
                 type: l.type,
                 startTime: l.startTime,
                 endTime: l.endTime,
-                durationMs: l.durationMs,
+                durationUs: l.durationUs,
                 visible: l.visible,
                 alpha: l.alpha,
             };
@@ -104,7 +104,7 @@ function getProjectInfo() {
         loaded: true,
         width: root.width,
         height: root.height,
-        durationMs: root.durationMs,
+        durationUs: root.durationUs,
         frameRate: root.frameRate,
         trackCount: tracks.length,
         tracks,
@@ -141,15 +141,15 @@ function setLayerProperty({ layerId, property, value }) {
     return { layerId, property, oldValue, newValue: value };
 }
 
-function setCurrentTime({ timeMs }) {
+function setCurrentTime({ timeUs }) {
     if (!player.root || !player.root.loaded) {
         throw new Error('项目未加载');
     }
-    player.video.render(timeMs, true, false);
+    player.video.render(timeUs, true, false);
     if (player.timeline) {
-        player.timeline.setCurrentTime(timeMs);
+        player.timeline.setCurrentTime(timeUs);
     }
-    return { timeMs };
+    return { timeUs };
 }
 
 function refreshCanvas() {

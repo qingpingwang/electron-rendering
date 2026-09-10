@@ -58,7 +58,7 @@ Napi::Function RootWrap::GetClass(Napi::Env env) {
 
                                             InstanceAccessor("width", &RootWrap::GetWidth, nullptr),
                                             InstanceAccessor("height", &RootWrap::GetHeight, nullptr),
-                                            InstanceAccessor("durationMs", &RootWrap::GetDurationMs, nullptr),
+                                            InstanceAccessor("durationUs", &RootWrap::GetDurationUs, nullptr),
                                             InstanceAccessor("frameRate", &RootWrap::GetFrameRate, nullptr),
                                             InstanceAccessor("loaded", &RootWrap::GetLoaded, nullptr),
                                             InstanceAccessor("gpuInfo", &RootWrap::GetGpuInfo, nullptr),
@@ -156,7 +156,7 @@ Napi::Value RootWrap::SetCurrentTime(const Napi::CallbackInfo &info) {
         Napi::TypeError::New(env, "expected time in ms").ThrowAsJavaScriptException();
         return env.Null();
     }
-    root_->setCurrentTime(static_cast<nle_sdk::TimeMs>(info[0].As<Napi::Number>().Int64Value()));
+    root_->setCurrentTime(static_cast<nle_sdk::TimeUs>(info[0].As<Napi::Number>().Int64Value()));
     return env.Undefined();
 }
 
@@ -166,8 +166,8 @@ Napi::Value RootWrap::IsSameFrame(const Napi::CallbackInfo &info) {
         Napi::TypeError::New(env, "expected time in ms").ThrowAsJavaScriptException();
         return env.Null();
     }
-    auto time_ms = static_cast<nle_sdk::TimeMs>(info[0].As<Napi::Number>().Int64Value());
-    return Napi::Boolean::New(env, root_->isSameFrame(time_ms));
+    auto time_us = static_cast<nle_sdk::TimeUs>(info[0].As<Napi::Number>().Int64Value());
+    return Napi::Boolean::New(env, root_->isSameFrame(time_us));
 }
 
 Napi::Value RootWrap::Draw(const Napi::CallbackInfo &info) {
@@ -351,8 +351,8 @@ Napi::Value RootWrap::GetHeight(const Napi::CallbackInfo &info) {
     return Napi::Number::New(info.Env(), root_->getHeight());
 }
 
-Napi::Value RootWrap::GetDurationMs(const Napi::CallbackInfo &info) {
-    return Napi::Number::New(info.Env(), static_cast<double>(root_->getDurationMs()));
+Napi::Value RootWrap::GetDurationUs(const Napi::CallbackInfo &info) {
+    return Napi::Number::New(info.Env(), static_cast<double>(root_->getDurationUs()));
 }
 
 Napi::Value RootWrap::GetFrameRate(const Napi::CallbackInfo &info) {
