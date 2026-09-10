@@ -28,6 +28,9 @@ class MediaLibrary {
         this.items = new Map();
         this.projectItems = {};
         this.catalog = JSON.parse(fs.readFileSync(path.join(RESOURCE_ROOT, 'resources.json'), 'utf8'));
+        this.catalog.stickers = this.catalog.stickers.map(item => ({
+            ...item, type: 'image',
+        }));
         this.category = 'media';
         this.source = 'local';
         this.sortAscending = true;
@@ -240,8 +243,9 @@ class MediaLibrary {
     }
     render() {
         this.list.querySelectorAll('video').forEach(video => video.pause());
+        this.list.querySelectorAll('canvas').forEach(canvas => canvas.disposeStickerPreview?.());
         this.list.replaceChildren();
-        this.list.classList.toggle('effect-preview-list', ['effects', 'transitions'].includes(this.category));
+        this.list.classList.toggle('effect-preview-list', ['effects', 'transitions', 'stickers', 'filters'].includes(this.category));
         const category = CATEGORIES.find(c => c[0] === this.category);
         document.querySelectorAll('[data-category]').forEach(b => { b.classList.toggle('active', b.dataset.category === this.category); b.setAttribute('aria-pressed', b.dataset.category === this.category); });
         document.querySelectorAll('[data-source]').forEach(b => b.classList.toggle('active', b.dataset.source === this.source));
@@ -255,7 +259,7 @@ class MediaLibrary {
         const project = (this.projectItems[this.category] || []).map(item => ({ ...item, resource: item }));
         const files = this.source === 'project' ? project : [...imported, ...project];
         const merged = new Map();
-        const catalogOnly = ['effects', 'transitions'].includes(this.category);
+        const catalogOnly = ['effects', 'transitions', 'stickers', 'filters'].includes(this.category);
         const visibleItems = catalogOnly ? library : [...(this.source !== 'project' ? library : []), ...(this.source !== 'library' ? files : [])];
         for (const item of visibleItems) { merged.set(item.path, item); }
         const search = document.getElementById('media-search').value.trim().toLowerCase();
@@ -273,6 +277,22 @@ class MediaLibrary {
                 const video = document.createElement('video'); video.src = pathToFileURL(player.mediaProxies?.[item.path]?.thumbnail || item.path).href; video.preload = 'metadata'; video.muted = true;
                 preview.appendChild(video);
                 video.onloadedmetadata = () => { if (Number.isFinite(video.duration)) { duration.textContent = `${Math.floor(video.duration / 60).toString().padStart(2, '0')}:${Math.floor(video.duration % 60).toString().padStart(2, '0')}`; } };
+            } else if (item.type === 'image') {
+                require('../../sticker').createPreview(item.path).then(canvas => {
+                    if (!card.isConnected) { canvas.disposeStickerPreview(); return; }
+                    card.addEventListener('mouseenter', canvas.playStickerPreview);
+                    card.addEventListener('mouseleave', canvas.pauseStickerPreview);
+                    card.addEventListener('dragstart', canvas.pauseStickerPreview);
+                    canvas.setAttribute('aria-label', item.name);
+                    preview.prepend(canvas);
+                    if (card.matches(':hover')) { canvas.playStickerPreview(); }
+                }).catch(error => {
+                    if (!card.isConnected) { return; }
+                    const message = document.createElement('small');
+                    message.textContent = '预览加载失败';
+                    preview.prepend(message);
+                    log(`贴纸预览失败：${item.name}：${error.message}`, 'err');
+                });
             } else if (!isRenderResource) {
                 const glyph = document.createElement('span'); glyph.className = 'resource-glyph'; glyph.textContent = item.type === 'audio' ? '♫' : item.type === 'transition' ? '⋈' : '✧'; preview.appendChild(glyph);
                 const label = document.createElement('small'); label.textContent = item.type === 'audio' ? '本地音频' : '本地渲染资源'; preview.appendChild(label);
