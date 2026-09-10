@@ -71,7 +71,7 @@ async function build(source, outputDir, report) {
         source, outputDir,
         thumbnail: path.join(outputDir, '1fps_200.mp4'),
         video: path.join(outputDir, '720p.mp4'),
-        audio: path.join(outputDir, 'audio.wav'),
+        audio: path.join(outputDir, 'audio.m4a'),
         skipped: true,
     };
     const ready = await Promise.all([result.thumbnail, result.video, result.audio].map(exists));
@@ -107,16 +107,16 @@ async function build(source, outputDir, report) {
         const input = videoStages.length === 2 ? (key === 'thumbnail' ? '[small_in]' : '[preview_in]') : '[0:v:0]';
         graph.push(`${input}${filters[key]}[${key}]`);
     }
-    // Share the decoded audio between AAC in the small video and the WAV output.
+    // Share the decoded audio between the small video and the standalone AAC output.
     const audioStages = hasAudio ? stages.filter(key => key !== 'video') : [];
     if (audioStages.length === 2) {
-        graph.push('[0:a:0]asplit=2[small_audio][wav_audio]');
+        graph.push('[0:a:0]asplit=2[small_audio][standalone_audio]');
     }
     if (graph.length) { args.push('-filter_complex', graph.join(';')); }
     const outputs = stages.map(key => ({ key, file: result[key], temp: path.join(outputDir, `${randomUUID()}.tmp${path.extname(result[key])}`) }));
     for (const { key, temp } of outputs) {
         if (key === 'audio') {
-            args.push('-map', audioStages.length === 2 ? '[wav_audio]' : '0:a:0', '-vn', '-c:a', 'pcm_s16le', '-ar', '44100', '-ac', '2', temp);
+            args.push('-map', audioStages.length === 2 ? '[standalone_audio]' : '0:a:0', '-vn', '-c:a', 'aac', '-b:a', '96k', '-ar', '44100', '-ac', '2', '-movflags', '+faststart', temp);
             continue;
         }
         args.push('-map', `[${key}]`);

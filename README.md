@@ -232,7 +232,7 @@ const { preprocess } = require('./app/preprocess/cache');
 const results = await preprocess(videoPaths, cacheDir, onProgress);
 ```
 
-`cacheDir` 为工程根目录下的 `.cache`。输出保存到 `.cache/{原视频绝对路径的 MD5}/`：`1fps_200.mp4`（长边最多 200、1fps、保留音频）、`720p.mp4`（横屏最多 1280×720，竖屏最多 720×1280，无音频）、`audio.wav`（PCM16、44.1kHz、双声道）。无音轨时 `audio` 返回 `null`。存在的文件直接跳过，不检查损坏或源文件更新；需要重建时删除对应缓存文件。新文件写入临时文件，成功后改名。
+`cacheDir` 为工程根目录下的 `.cache`。输出保存到 `.cache/{原视频绝对路径的 MD5}/`：`1fps_200.mp4`（长边最多 200、1fps、保留音频）、`720p.mp4`（横屏最多 1280×720，竖屏最多 720×1280，无音频）、`audio.m4a`（AAC、96kbps、44.1kHz、双声道）。无音轨时 `audio` 返回 `null`。存在的文件直接跳过，不检查损坏或源文件更新；需要重建时删除对应缓存文件。新文件写入临时文件，成功后改名。
 
 返回数组与输入顺序一致，每项包含 `{ source, outputDir, thumbnail, video, audio, skipped }`。重复路径只处理一次，返回数组仍与输入一一对应。`skipped` 表示此次没有生成任何文件。
 

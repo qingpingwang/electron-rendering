@@ -111,7 +111,10 @@ class Timeline {
             })),
         }));
 
-        this._pxPerUs = previousScale || this._calcFitScale();
+        const fitScale = this._calcFitScale();
+        this._pxPerUs = previousScale
+            ? Math.max(fitScale * ZOOM_MIN, Math.min(fitScale * ZOOM_MAX, previousScale))
+            : fitScale;
         this._updateZoomInput();
         this._render();
         this._thumbGen++;
@@ -156,7 +159,7 @@ class Timeline {
         const w = this._rulerScroll
             ? this._rulerScroll.offsetWidth
             : (this.el.offsetWidth - LABEL_W);
-        return Math.max(0.001, w / this.duration);
+        return Math.max(Number.EPSILON, w / this.duration);
     }
 
     // ---- DOM ----
@@ -551,16 +554,16 @@ class Timeline {
         for (const step of nice) {
             if (step >= rawUs * 0.7) return step;
         }
-        return 300000;
+        return Math.ceil(rawUs / 300000000) * 300000000;
     }
 
-    _rulerTime(ms, step) {
-        const totalSec = Math.floor(ms / 1000000);
+    _rulerTime(timeUs, step) {
+        const totalSec = Math.floor(timeUs / 1000000);
         const min = Math.floor(totalSec / 60);
         const sec = totalSec % 60;
         const base = `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
         if (step < 1000000) {
-            const frac = Math.floor((ms % 1000000) / 100000);
+            const frac = Math.floor((timeUs % 1000000) / 100000);
             return `${base}.${frac}`;
         }
         return base;
